@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#263238"></rect>
+
+  <g transform="translate(48,56)">
+    <rect x="16" y="48" width="128" height="80" rx="8" fill="white"></rect>
+    <polygon points="16,48 80,16 144,48 80,80" fill="#ECEFF1"></polygon>
+
+    <circle cx="80" cy="80" r="10" fill="#FFC107"></circle>
+
+    <line x1="80" y1="80" x2="40" y2="60" stroke="#1976D2" stroke-width="6"></line>
+    <line x1="80" y1="80" x2="120" y2="60" stroke="#1976D2" stroke-width="6"></line>
+    <line x1="80" y1="80" x2="80" y2="110" stroke="#1976D2" stroke-width="6"></line>
+  </g>
+
+  <text x="190" y="220" font-family="monospace" font-size="40" fill="white">&gt;_</text>
+</svg>

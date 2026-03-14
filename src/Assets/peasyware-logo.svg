@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200">
+
+<rect width="640" height="200" rx="24" fill="#0D1B2A"></rect>
+
+<g transform="translate(20,40) scale(0.6)">
+  <rect x="16" y="48" width="128" height="80" rx="8" fill="white"></rect>
+  <polygon points="16,48 80,16 144,48 80,80" fill="#E3F2FD"></polygon>
+  <circle cx="80" cy="80" r="10" fill="#FFC107"></circle>
+
+  <line x1="80" y1="80" x2="40" y2="60" stroke="#1976D2" stroke-width="6"></line>
+  <line x1="80" y1="80" x2="120" y2="60" stroke="#1976D2" stroke-width="6"></line>
+  <line x1="80" y1="80" x2="80" y2="110" stroke="#1976D2" stroke-width="6"></line>
+</g>
+
+<text x="200" y="120" font-family="Segoe UI, Arial" font-size="72" fill="#42A5F5">
+Peasy
+</text>
+
+<text x="400" y="120" font-family="Segoe UI, Arial" font-size="72" fill="#ECEFF1">
+Ware
+</text>
+
+</svg>
