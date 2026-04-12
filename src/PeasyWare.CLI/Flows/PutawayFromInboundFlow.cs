@@ -1,5 +1,7 @@
 ﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Bootstrap;
+using PeasyWare.Infrastructure.Settings;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +12,7 @@ namespace PeasyWare.CLI.Flows
     {
         private readonly AppRuntime _runtime;
         private readonly SessionContext _session;
+        private readonly ILogger? _logger;
 
         public PutawayFromInboundFlow(AppRuntime runtime, SessionContext session)
         {
@@ -63,14 +66,27 @@ namespace PeasyWare.CLI.Flows
                         continue;
                     }
 
-                    Console.WriteLine();
                     Console.WriteLine("------------------------------------------------------------");
                     Console.WriteLine("PUTAWAY TASK CREATED");
                     Console.WriteLine($"Pallet  : {sscc}");
                     Console.WriteLine($"Task ID : {result.TaskId}");
                     Console.WriteLine($"Bin     : {result.DestinationBinCode}");
+
+                    if (_runtime.Settings.ReceivingUiMode == ReceivingUiMode.Trace)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("---- TRACE DETAILS ----");
+                        Console.WriteLine($"Unit ID      : {result.InventoryUnitId}");
+                        Console.WriteLine($"Source Bin   : {result.SourceBinCode}");
+                        Console.WriteLine($"Stock State  : {result.StockStateCode}");
+                        Console.WriteLine($"Stock Status : {result.StockStatusCode}");
+                        Console.WriteLine($"Zone         : {result.ZoneCode ?? "N/A"}");
+                        if (result.ExpiresAt.HasValue)
+                            Console.WriteLine($"Task Expires : {result.ExpiresAt.Value:HH:mm:ss} UTC");
+                        Console.WriteLine("----");
+                    }
+
                     Console.WriteLine("------------------------------------------------------------");
-                    Console.WriteLine();
 
                     while (true)
                     {

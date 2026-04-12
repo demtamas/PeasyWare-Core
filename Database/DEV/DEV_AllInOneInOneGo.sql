@@ -5699,6 +5699,7 @@ BEGIN
         @expected_unit_qty        INT              = NULL,
         @line_expected_qty        INT              = NULL,
         @line_received_qty        INT              = NULL,
+        @arrival_status_code      VARCHAR(2)       = NULL,
         @batch_number             NVARCHAR(100)    = NULL,
         @best_before_date         DATE             = NULL,
         @received_inventory_id    INT              = NULL,
@@ -5760,7 +5761,8 @@ BEGIN
             @claimed_session_id       = eu.claimed_session_id,
             @claimed_by_user_id       = eu.claimed_by_user_id,
             @claim_expires_at         = eu.claim_expires_at,
-            @claim_token              = eu.claim_token
+            @claim_token              = eu.claim_token,
+            @arrival_status_code      = l.arrival_stock_status_code
         FROM deliveries.inbound_expected_units eu
         JOIN deliveries.inbound_lines l
             ON eu.inbound_line_id = l.inbound_line_id
@@ -5799,7 +5801,7 @@ BEGIN
                    (@line_expected_qty - @line_received_qty),
                    @batch_number,
                    @best_before_date,
-                   NULL,NULL,NULL,NULL;
+                   NULL,NULL,NULL,NULL, NULL;
             RETURN;
         END;
 
@@ -5823,7 +5825,7 @@ BEGIN
                    (@line_expected_qty - @line_received_qty),
                    @batch_number,
                    @best_before_date,
-                   NULL,NULL,NULL,NULL;
+                   NULL,NULL,NULL,NULL, NULL;
             RETURN;
         END;
 
@@ -5879,7 +5881,7 @@ BEGIN
                    (@line_expected_qty - @line_received_qty),
                    @batch_number,
                    @best_before_date,
-                   NULL,NULL,NULL,NULL;
+                   NULL,NULL,NULL,NULL, NULL;
             RETURN;
         END;
 
@@ -5919,7 +5921,7 @@ BEGIN
                    (@line_expected_qty - @line_received_qty),
                    @batch_number,
                    @best_before_date,
-                   NULL,NULL,NULL,NULL;
+                   NULL,NULL,NULL,NULL, NULL;
             RETURN;
         END;
 
@@ -5949,7 +5951,8 @@ BEGIN
             @session_id AS claimed_session_id,
             @user_id    AS claimed_by_user_id,
             @claim_expires_at,
-            @claim_token;
+            @claim_token,
+            @arrival_status_code;
 
     END TRY
     BEGIN CATCH
@@ -7496,7 +7499,10 @@ BEGIN
         @ttl_seconds INT,
         @expires_at DATETIME2(3),
         @sku_id INT,
-        @state_code VARCHAR(3);
+        @state_code VARCHAR(3),
+        @stock_status_code  VARCHAR(2),
+        @source_bin_code    NVARCHAR(100),
+        @zone_code          NVARCHAR(50);
 
     BEGIN TRY
         BEGIN TRAN;
@@ -7506,7 +7512,8 @@ BEGIN
     ------------------------------------------------------------
         SELECT
             @sku_id = sku_id,
-            @state_code = stock_state_code
+            @state_code = stock_state_code,
+            @stock_status_code = stock_status_code
         FROM inventory.inventory_units
         WHERE inventory_unit_id = @inventory_unit_id;
 
@@ -7540,6 +7547,17 @@ BEGIN
         END
 
     ------------------------------------------------------------
+    -- 2b. Resolve source bin code and zone
+    ------------------------------------------------------------
+        SELECT
+            @source_bin_code = b.bin_code,
+            @zone_code       = z.zone_code
+        FROM locations.bins b
+        LEFT JOIN locations.zones z
+            ON z.zone_id = b.zone_id
+        WHERE b.bin_id = @source_bin_id;
+
+    ------------------------------------------------------------
     -- 3. Detect existing open task (idempotency)
     ------------------------------------------------------------
         SELECT TOP (1)
@@ -7559,10 +7577,16 @@ BEGIN
             COMMIT;
 
             SELECT
-                CAST(1 AS BIT),
-                N'SUCTASK01',
-                @task_id,
-                @dest_bin_code;
+            CAST(1 AS BIT),
+            N'SUCTASK01',
+            @task_id,
+            @dest_bin_code,
+            @inventory_unit_id,     -- col 4
+            @source_bin_code,       -- col 5
+            @state_code,            -- col 6
+            @stock_status_code,     -- col 7
+            @expires_at,            -- col 8
+            @zone_code;             -- col 9
 
             RETURN;
         END
@@ -7653,7 +7677,13 @@ BEGIN
             CAST(1 AS BIT),
             N'SUCTASK01',
             @task_id,
-            @dest_bin_code;
+            @dest_bin_code,
+            @inventory_unit_id,     -- col 4
+            @source_bin_code,       -- col 5
+            @state_code,            -- col 6
+            @stock_status_code,     -- col 7
+            @expires_at,            -- col 8
+            @zone_code;             -- col 9
 
     END TRY
     BEGIN CATCH
@@ -7692,6 +7722,7 @@ BEGIN
         @bin_active         BIT,
         @current_placements INT,
         @active_reservations INT,
+        @current_status_code VARCHAR(2),
         @now                DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY

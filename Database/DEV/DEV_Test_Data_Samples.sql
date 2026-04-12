@@ -184,14 +184,8 @@ INSERT INTO deliveries.inbound_expected_units (inbound_line_id, expected_externa
    Both SSCC mode with pre-advised units
    ============================================================ */
 
-DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @SupplierId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_SUPPLIER');
-DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @Own          INT = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01');
-DECLARE @Shipto       INT = (SELECT address_id FROM core.party_addresses WHERE party_id = @Own AND address_type = 'WAREHOUSE');
-DECLARE @RackId       INT = (SELECT storage_type_id FROM locations.storage_types WHERE storage_type_code = 'RACK');
-DECLARE @FloorId      INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'FLOOR');
 DECLARE @Sku001       INT = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU001');
+
 
 INSERT INTO deliveries.inbound_deliveries
     (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id,
@@ -226,3 +220,4 @@ VALUES
     (@Line4BL, 'SSCC0000000000000017', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
     (@Line4BL, 'SSCC0000000000000018', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
     (@Line4BL, 'SSCC0000000000000019', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId);
+

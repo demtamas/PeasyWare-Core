@@ -88,6 +88,12 @@ public sealed class SqlWarehouseTaskCommandRepository
             ResultCode = code,
             TaskId = reader.GetInt32(2),
             DestinationBinCode = reader.GetString(3),
+            InventoryUnitId = reader.GetInt32(4),
+            SourceBinCode = reader.GetString(5),
+            StockStateCode = reader.GetString(6),
+            StockStatusCode = reader.GetString(7),
+            ExpiresAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+            ZoneCode = reader.IsDBNull(9) ? null : reader.GetString(9),
             FriendlyMessage = message
         };
 
