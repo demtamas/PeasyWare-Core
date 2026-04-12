@@ -41,18 +41,8 @@ namespace PeasyWare.Application.Flows
             if (string.IsNullOrWhiteSpace(inboundRef))
                 return;
 
-            var queryRepo = new SqlInboundQueryRepository(
-                _runtime.ConnectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _runtime.ErrorMessageResolver);
-
-            var commandRepo = new SqlInboundCommandRepository(
-                _runtime.ConnectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _runtime.ErrorMessageResolver,
-                _runtime.Logger);
+            var queryRepo = _runtime.Repositories.CreateInboundQuery(_session);
+            var commandRepo = _runtime.Repositories.CreateInboundCommand(_session);
 
             var service = new InboundReceivingService(
                 queryRepo,
@@ -138,8 +128,11 @@ namespace PeasyWare.Application.Flows
 
                 var validation = service.ValidateSscc(scanInput, bin);
 
-                Console.WriteLine($"DEBUG -> ExpectedUnitId: {validation.InboundExpectedUnitId}");
-                Console.WriteLine($"DEBUG -> ClaimToken: {validation.ClaimToken}");
+                if (_runtime.Settings.DiagnosticsEnabled)
+                {
+                    Console.WriteLine($"DEBUG -> ExpectedUnitId: {validation.InboundExpectedUnitId}");
+                    Console.WriteLine($"DEBUG -> ClaimToken: {validation.ClaimToken}");
+                }
 
                 if (!validation.Success)
                 {

@@ -1,24 +1,45 @@
-﻿using PeasyWare.Application.DTOs;
+﻿using Microsoft.Data.SqlClient;
+using PeasyWare.Application.Contexts;
+using PeasyWare.Application.DTOs;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Sql;
-using Microsoft.Data.SqlClient;
+using System;
+using System.Collections.Generic;
+using System.Data;
 
+namespace PeasyWare.Infrastructure.Repositories;
+
+/// <summary>
+/// QUERY repository for session-related reads.
+///
+/// Responsibilities:
+/// - Read-only access to session data
+/// - Uses SessionContext for DB tracing (SESSION_CONTEXT)
+/// - No session enforcement (UI handles expired session)
+/// </summary>
 public sealed class SqlSessionQueryRepository : ISessionQueryRepository
 {
     private readonly SqlConnectionFactory _factory;
+    private readonly SessionContext _session;
 
-    public SqlSessionQueryRepository(SqlConnectionFactory factory)
+    public SqlSessionQueryRepository(
+        SqlConnectionFactory factory,
+        SessionContext session)
     {
-        _factory = factory;
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
     }
+
+    // --------------------------------------------------
+    // Get active sessions
+    // --------------------------------------------------
 
     public IReadOnlyList<ActiveSessionDto> GetActiveSessions()
     {
-        using var conn = _factory.Create();
-        conn.Open();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
 
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
+        command.CommandText = """
             SELECT
                 session_id,
                 username,
@@ -27,25 +48,42 @@ public sealed class SqlSessionQueryRepository : ISessionQueryRepository
                 last_seen,
                 is_active
             FROM auth.v_active_sessions
-            ORDER BY last_seen DESC";
+            ORDER BY last_seen DESC
+        """;
 
-        using var reader = cmd.ExecuteReader();
+        using var reader = command.ExecuteReader();
 
-        var list = new List<ActiveSessionDto>();
+        var result = new List<ActiveSessionDto>();
 
         while (reader.Read())
         {
-            list.Add(new ActiveSessionDto
-            {
-                SessionId = reader.GetGuid(0),
-                Username = reader.GetString(1),
-                ClientApp = reader.GetString(2),
-                ClientInfo = reader.GetString(3),
-                LastSeen = reader.GetDateTime(4),
-                IsActive = reader.GetBoolean(5)
-            });
+            result.Add(MapActiveSession(reader));
         }
 
-        return list;
+        return result;
+    }
+
+    // --------------------------------------------------
+    // Mapping
+    // --------------------------------------------------
+
+    private static ActiveSessionDto MapActiveSession(SqlDataReader reader)
+    {
+        return new ActiveSessionDto
+        {
+            SessionId = reader.GetGuid(reader.GetOrdinal("session_id")),
+            Username = reader.GetString(reader.GetOrdinal("username")),
+
+            ClientApp = reader.IsDBNull(reader.GetOrdinal("client_app"))
+                ? string.Empty
+                : reader.GetString(reader.GetOrdinal("client_app")),
+
+            ClientInfo = reader.IsDBNull(reader.GetOrdinal("client_info"))
+                ? string.Empty
+                : reader.GetString(reader.GetOrdinal("client_info")),
+
+            LastSeen = reader.GetDateTime(reader.GetOrdinal("last_seen")),
+            IsActive = reader.GetBoolean(reader.GetOrdinal("is_active"))
+        };
     }
 }

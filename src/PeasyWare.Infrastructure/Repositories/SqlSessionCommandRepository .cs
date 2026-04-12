@@ -1,5 +1,6 @@
 ﻿using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Sql;
 using System;
@@ -7,111 +8,71 @@ using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
+/// <summary>
+/// Session command repository.
+/// Special case:
+/// - No SessionGuard
+/// - Used to detect expiry / logout
+/// - CreateForCommand already applies session + correlation context
+/// </summary>
 public sealed class SqlSessionCommandRepository : ISessionCommandRepository
 {
     private readonly SqlConnectionFactory _factory;
-    private readonly Guid _sessionId;
-    private readonly int _userId;
+    private readonly SessionContext _session;
     private readonly IErrorMessageResolver _messageResolver;
     private readonly ILogger _logger;
-    private SqlConnectionFactory connectionFactory;
-    private IErrorMessageResolver errorMessageResolver;
 
     public SqlSessionCommandRepository(
         SqlConnectionFactory factory,
-        Guid sessionId,
-        int userId,
+        SessionContext session,
         IErrorMessageResolver messageResolver,
         ILogger logger)
     {
         _factory = factory;
-        _sessionId = sessionId;
-        _userId = userId;
+        _session = session;
         _messageResolver = messageResolver;
         _logger = logger;
     }
 
-    public SqlSessionCommandRepository(SqlConnectionFactory connectionFactory, Guid sessionId, int userId, IErrorMessageResolver errorMessageResolver)
-    {
-        this.connectionFactory = connectionFactory;
-        _sessionId = sessionId;
-        _userId = userId;
-        this.errorMessageResolver = errorMessageResolver;
-    }
-
     // --------------------------------------------------
-    // Session keep-alive
+    // Touch session (heartbeat)
     // --------------------------------------------------
 
-    public SessionTouchResult TouchSession(Guid sessionId)
+    public SessionTouchResult TouchSession(
+        Guid sessionId,
+        string sourceApp,
+        string sourceClient,
+        string? sourceIp)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
-
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_session_touch";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.Add(
-            "@session_id",
-            SqlDbType.UniqueIdentifier).Value = sessionId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value = sessionId;
+        command.Parameters.Add("@source_app", SqlDbType.NVarChar, 50).Value = sourceApp;
+        command.Parameters.Add("@source_client", SqlDbType.NVarChar, 200).Value = sourceClient;
+        command.Parameters.Add("@source_ip", SqlDbType.NVarChar, 50).Value =
+            (object?)sourceIp ?? DBNull.Value;
 
-        var resultCode = command.Parameters.Add(
-            "@result_code",
-            SqlDbType.NVarChar,
-            20);
-        resultCode.Direction = ParameterDirection.Output;
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var friendlyMsg = command.Parameters.Add(
-            "@friendly_msg",
-            SqlDbType.NVarChar,
-            400);
-        friendlyMsg.Direction = ParameterDirection.Output;
+        var pMessage = command.Parameters.Add("@friendly_msg", SqlDbType.NVarChar, 400);
+        pMessage.Direction = ParameterDirection.Output;
 
-        var isAlive = command.Parameters.Add(
-            "@is_alive",
-            SqlDbType.Bit);
-        isAlive.Direction = ParameterDirection.Output;
+        var pIsAlive = command.Parameters.Add("@is_alive", SqlDbType.Bit);
+        pIsAlive.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = resultCode.Value?.ToString() ?? "ERRAUTH06";
-
-        var message =
-            friendlyMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
-
-        var alive = isAlive.Value is true;
-
-        var result = new SessionTouchResult
+        return new SessionTouchResult
         {
-            IsAlive = alive,
-            ResultCode = code,
-            FriendlyMessage = message
+            ResultCode = pCode.Value?.ToString() ?? "ERRAUTH06",
+            FriendlyMessage = pMessage.Value?.ToString() ?? string.Empty,
+            IsAlive = pIsAlive.Value != DBNull.Value && (bool)pIsAlive.Value
         };
-
-        if (alive)
-        {
-            _logger.Info("Session.Touch", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                ResultCode = code,
-                Success = true
-            });
-        }
-        else
-        {
-            _logger.Warn("Session.Touch", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                ResultCode = code,
-                Success = false
-            });
-        }
-
-        return result;
     }
 
     // --------------------------------------------------
@@ -124,48 +85,32 @@ public sealed class SqlSessionCommandRepository : ISessionCommandRepository
         string sourceClient,
         string? sourceIp = null)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
-
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_logout";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@session_id", sessionId);
-        command.Parameters.AddWithValue("@source_app", sourceApp);
-        command.Parameters.AddWithValue("@source_client", sourceClient);
-        command.Parameters.AddWithValue(
-            "@source_ip",
-            (object?)sourceIp ?? DBNull.Value);
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value = sessionId;
+        command.Parameters.Add("@source_app", SqlDbType.NVarChar, 50).Value = sourceApp;
+        command.Parameters.Add("@source_client", SqlDbType.NVarChar, 200).Value = sourceClient;
+        command.Parameters.Add("@source_ip", SqlDbType.NVarChar, 50).Value =
+            (object?)sourceIp ?? DBNull.Value;
 
-        SqlCorrelation.Add(command);
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var resultCode = command.Parameters.Add(
-            "@result_code",
-            SqlDbType.NVarChar,
-            20);
-        resultCode.Direction = ParameterDirection.Output;
+        var pMessage = command.Parameters.Add("@friendly_msg", SqlDbType.NVarChar, 400);
+        pMessage.Direction = ParameterDirection.Output;
 
-        var friendlyMsg = command.Parameters.Add(
-            "@friendly_msg",
-            SqlDbType.NVarChar,
-            400);
-        friendlyMsg.Direction = ParameterDirection.Output;
-
-        var successParam = command.Parameters.Add(
-            "@success",
-            SqlDbType.Bit);
-        successParam.Direction = ParameterDirection.Output;
+        var pSuccess = command.Parameters.Add("@success", SqlDbType.Bit);
+        pSuccess.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = resultCode.Value?.ToString() ?? "ERRAUTH06";
-
-        var message =
-            friendlyMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
-
-        var success = successParam.Value is true;
+        var code = pCode.Value?.ToString() ?? "ERRAUTH06";
+        var message = pMessage.Value?.ToString() ?? _messageResolver.Resolve(code);
+        var success = pSuccess.Value != DBNull.Value && (bool)pSuccess.Value;
 
         var result = OperationResult.Create(success, code, message);
 
@@ -173,8 +118,8 @@ public sealed class SqlSessionCommandRepository : ISessionCommandRepository
         {
             _logger.Info("Session.Logout", new
             {
-                UserId = _userId,
-                SessionId = _sessionId,
+                _session.UserId,
+                _session.SessionId,
                 SourceApp = sourceApp,
                 SourceClient = sourceClient,
                 ResultCode = code,
@@ -185,8 +130,8 @@ public sealed class SqlSessionCommandRepository : ISessionCommandRepository
         {
             _logger.Warn("Session.Logout", new
             {
-                UserId = _userId,
-                SessionId = _sessionId,
+                _session.UserId,
+                _session.SessionId,
                 SourceApp = sourceApp,
                 SourceClient = sourceClient,
                 ResultCode = code,

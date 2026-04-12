@@ -3,6 +3,7 @@ using PeasyWare.Application.Flows;
 using PeasyWare.Desktop.Forms;
 using PeasyWare.Infrastructure.Bootstrap;
 using PeasyWare.Infrastructure.Repositories;
+using PeasyWare.Desktop.Infrastructure;
 using System;
 using System.Windows.Forms;
 
@@ -25,6 +26,9 @@ var loginFlow = new LoginFlow(
     runtime.AuthService,
     runtime.UserSecurityRepository);
 
+// Create the UI view factory in the Desktop layer
+var viewFactory = new ViewFactory(runtime);
+
 try
 {
     while (true)
@@ -40,24 +44,22 @@ try
         }
 
         var session = new SessionContext(
-            loginForm.SessionId.Value,
-            loginForm.UserId.Value,
-            loginForm.Username   // or DisplayName if you prefer
+            sessionId: loginForm.SessionId.Value,
+            userId: loginForm.UserId.Value,
+            username: loginForm.Username,
+            displayName: loginForm.DisplayName,
+            sourceApp: "PeasyWare.Desktop",
+            sourceClient: Environment.MachineName,
+            sourceIp: IpResolver.GetLocalIPv4(),
+            correlationId: null,
+            osInfo: Environment.OSVersion.ToString(),
+            sessionTimeoutMinutes: loginForm.SessionTimeoutMinutes
         );
 
         using var mainForm = new MainForm(
             session,
-            runtime.ConnectionFactory,
-            runtime.ErrorMessageResolver,
-            runtime.SessionQueryRepository,
-            new SqlSessionCommandRepository(
-                runtime.ConnectionFactory,
-                session.SessionId,
-                session.UserId,
-                runtime.ErrorMessageResolver),
-            runtime.SessionDetailsRepository,
-            runtime.UserQueryRepository,
-            runtime.Logger
+            runtime,
+            viewFactory
         );
 
         var result = mainForm.ShowDialog();

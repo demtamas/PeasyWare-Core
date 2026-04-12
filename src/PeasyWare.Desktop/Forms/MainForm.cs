@@ -1,10 +1,8 @@
 ﻿using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Security;
 using PeasyWare.Desktop.Infrastructure;
-using PeasyWare.Desktop.Views.Sessions;
-using PeasyWare.Desktop.Views.Users;
-using PeasyWare.Infrastructure.Repositories;
-using PeasyWare.Infrastructure.Sql;
+using PeasyWare.Infrastructure.Bootstrap;
 using System;
 using System.Windows.Forms;
 
@@ -13,44 +11,206 @@ namespace PeasyWare.Desktop.Forms;
 public partial class MainForm : Form
 {
     private readonly SessionContext _session;
+    private readonly AppRuntime _runtime;
+    private readonly ViewFactory _views;
 
-    private readonly ISessionQueryRepository _sessionQueryRepo;
-    private readonly ISessionCommandRepository _commandRepo;
-    private readonly ISessionDetailsRepository _sessionDetailsRepo;
-
-    private readonly IUserQueryRepository _userQueryRepo;
-
+    private bool _sessionExpired;
     private bool _shutdownConfirmed;
-    private bool _restartRequested;
 
-    private readonly SqlConnectionFactory _connectionFactory;
-    private readonly IErrorMessageResolver _messageResolver;
-    private readonly ILogger _logger;
+    private DateTime _lastUserInteraction = DateTime.UtcNow;
+    private readonly TimeSpan _interactionGrace = TimeSpan.FromMinutes(2);
+
+    private readonly System.Windows.Forms.Timer _heartbeatTimer = new();
+    private bool isSessionExpired;
+
+    // 🔥 NEW: UI state
+    private string _currentViewName = "Home";
+
+    public bool GetIsSessionExpired()
+    {
+        return isSessionExpired;
+    }
+
+    internal void SetIsSessionExpired(bool value)
+    {
+        isSessionExpired = value;
+    }
 
     public MainForm(
-    SessionContext session,
-    SqlConnectionFactory connectionFactory,
-    IErrorMessageResolver messageResolver,
-    ISessionQueryRepository sessionQueryRepo,
-    ISessionCommandRepository sessionCommandRepo,
-    ISessionDetailsRepository sessionDetailsRepo,
-    IUserQueryRepository userQueryRepo,
-    ILogger logger)   // ← add this
+        SessionContext session,
+        AppRuntime runtime,
+        ViewFactory views)
     {
         InitializeComponent();
 
         _session = session;
-        _connectionFactory = connectionFactory;
-        _messageResolver = messageResolver;
+        _runtime = runtime;
+        _views = views;
 
-        _sessionQueryRepo = sessionQueryRepo;
-        _commandRepo = sessionCommandRepo;
-        _sessionDetailsRepo = sessionDetailsRepo;
-        _userQueryRepo = userQueryRepo;
+        Text = $"PeasyWare – {session.DisplayName} | Session {session.SessionId.ToString()[..8]}";
 
-        _logger = logger;   // ← assign
+        HookGlobalInteraction(this);
+        InitializeHeartbeat();
 
-        Text = $"PeasyWare – {session.Username} | Session {session.SessionId.ToString()[..8]}";
+        UpdateStatusBar();
+    }
+
+    // --------------------------------------------------
+    // Interaction tracking
+    // --------------------------------------------------
+
+    private void HookGlobalInteraction(Control parent)
+    {
+        parent.MouseDown += (_, _) => RegisterInteraction();
+        parent.KeyDown += (_, _) => RegisterInteraction();
+
+        foreach (Control child in parent.Controls)
+        {
+            HookGlobalInteraction(child);
+        }
+    }
+
+    private void RegisterInteraction()
+    {
+        if (_sessionExpired)
+            return;
+
+        _lastUserInteraction = DateTime.UtcNow;
+
+        UpdateStatusBar(); // 🔥 NEW
+    }
+
+    // --------------------------------------------------
+    // Heartbeat (safe, no resurrection)
+    // --------------------------------------------------
+
+    private void InitializeHeartbeat()
+    {
+        _heartbeatTimer.Interval = 60000;
+
+        _heartbeatTimer.Tick += (_, _) =>
+        {
+            if (_sessionExpired)
+                return;
+
+            try
+            {
+                var inactivity = DateTime.UtcNow - _lastUserInteraction;
+
+                // Do NOT extend session if user inactive
+                if (inactivity > _interactionGrace)
+                {
+                    UpdateStatusBar();
+                    return;
+                }
+
+                var repo = _runtime.Repositories.CreateSessionCommand(_session);
+
+                var result = repo.TouchSession(
+                    _session.SessionId,
+                    "PeasyWare.Desktop",
+                    Environment.MachineName,
+                    IpResolver.GetLocalIPv4());
+
+                if (!result.IsAlive)
+                {
+                    HandleSessionExpired(
+                        result.FriendlyMessage ?? "Session expired.");
+                }
+
+                UpdateStatusBar();
+            }
+            catch (SessionExpiredException ex)
+            {
+                HandleSessionExpired(ex.Message);
+            }
+        };
+
+        _heartbeatTimer.Start();
+    }
+
+    // --------------------------------------------------
+    // Status bar update
+    // --------------------------------------------------
+
+    private void UpdateStatusBar()
+    {
+        if (statusStrip1.Items.Count == 0)
+            return;
+
+        var inactivity = DateTime.UtcNow - _lastUserInteraction;
+
+        var status =
+            _sessionExpired
+                ? "Expired"
+                : inactivity > _interactionGrace
+                    ? "Idle"
+                    : "Active";
+
+        // Correct expiry calculation
+        var expiryTime = _lastUserInteraction.AddMinutes(_session.SessionTimeoutMinutes);
+        var remaining = expiryTime - DateTime.UtcNow;
+
+        var totalMinutes = Math.Max(0, (int)remaining.TotalMinutes);
+
+        // Format as hours + minutes
+        var hours = totalMinutes / 60;
+        var minutes = totalMinutes % 60;
+
+        string expiryText =
+            hours > 0
+                ? minutes > 0 ? $"{hours}h {minutes}m" : $"{hours}h"
+                : $"{minutes} min";
+
+        var text =
+            $"User: {_session.Username} | " +
+            $"Session: {_session.SessionId.ToString()[..8]} | " +
+            $"View: {_currentViewName} | " +
+            $"{status}";
+
+        if (!_sessionExpired)
+        {
+            text += $" | Expires in: {expiryText}";
+        }
+
+        statusStrip1.Items[0].Text = text;
+    }
+
+    // --------------------------------------------------
+    // Session validation (single source of truth)
+    // --------------------------------------------------
+
+    private bool EnsureSessionAlive()
+    {
+        Console.WriteLine($"TRACE.UI.Session: {_session.SessionId} / {_session.UserId}");
+
+        if (_sessionExpired)
+            return false;
+
+        try
+        {
+            var repo = _runtime.Repositories.CreateSessionCommand(_session);
+
+            var result = repo.TouchSession(
+                _session.SessionId,
+                "PeasyWare.Desktop",
+                Environment.MachineName,
+                IpResolver.GetLocalIPv4());
+
+            if (!result.IsAlive)
+            {
+                HandleSessionExpired(
+                    result.FriendlyMessage ?? "Session expired.");
+                return false;
+            }
+
+            return true;
+        }
+        catch (SessionExpiredException ex)
+        {
+            HandleSessionExpired(ex.Message);
+            return false;
+        }
     }
 
     // --------------------------------------------------
@@ -59,15 +219,34 @@ public partial class MainForm : Form
 
     private void ShowView(UserControl view)
     {
+        if (!EnsureSessionAlive())
+            return;
+
         pnlMain.SuspendLayout();
         pnlMain.Controls.Clear();
 
         view.Dock = DockStyle.Fill;
         pnlMain.Controls.Add(view);
 
+        HookGlobalInteraction( view );
+
         pnlMain.ResumeLayout();
 
         ConfigureToolbarFor(view);
+
+        // 🔥 NEW: track view name
+        _currentViewName = view.GetType().Name.Replace("View", "");
+
+        UpdateStatusBar(); // 🔥 NEW
+
+        // Force UI refresh (fix toolbar hover issue)
+        mainToolStrip.PerformLayout();
+        mainToolStrip.Refresh();
+
+        if (view is PeasyWare.Desktop.Views.Settings.SettingsView settingsView)
+        {
+            BeginInvoke(new Action(settingsView.ActivateView));
+        }
     }
 
     // --------------------------------------------------
@@ -90,39 +269,17 @@ public partial class MainForm : Form
 
     private void sessionsToolStripMenuItem_Click(object sender, EventArgs e)
     {
-        var sessionCommandRepo =
-            new SqlSessionCommandRepository(
-                _connectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _messageResolver,
-                _logger);
-
-        var view = new SessionsView(
-            _session.SessionId,
-            _sessionQueryRepo,
-            sessionCommandRepo,
-            _sessionDetailsRepo);
-
-        ShowView(view);
+        ShowView(_views.CreateSessionsView(_session));
     }
 
     private void usersToolStripMenuItem_Click(object sender, EventArgs e)
     {
-        var userCommandRepo =
-            new SqlUserCommandRepository(
-                _connectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _messageResolver,
-                _logger);
+        ShowView(_views.CreateUsersView(_session));
+    }
 
-        var view = new UsersView(
-            _session.SessionId,
-            _userQueryRepo,
-            userCommandRepo);
-
-        ShowView(view);
+    private void operationalSettingsToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateSettingsView(_session));
     }
 
     private void logoutToolStripMenuItem_Click(object sender, EventArgs e)
@@ -139,7 +296,8 @@ public partial class MainForm : Form
             return;
 
         _shutdownConfirmed = true;
-        _restartRequested = true;
+
+        _heartbeatTimer.Stop();
 
         TryLogout();
 
@@ -161,7 +319,8 @@ public partial class MainForm : Form
             return;
 
         _shutdownConfirmed = true;
-        _restartRequested = false;
+
+        _heartbeatTimer.Stop();
 
         TryLogout();
 
@@ -177,7 +336,7 @@ public partial class MainForm : Form
     {
         base.OnFormClosing(e);
 
-        if (_shutdownConfirmed)
+        if (_shutdownConfirmed || _sessionExpired)
             return;
 
         var confirm = MessageBox.Show(
@@ -195,9 +354,37 @@ public partial class MainForm : Form
         }
 
         _shutdownConfirmed = true;
-        _restartRequested = false;
+
+        _heartbeatTimer.Stop();
 
         TryLogout();
+    }
+
+    // --------------------------------------------------
+    // Session expired handling
+    // --------------------------------------------------
+
+    public void HandleSessionExpired(string message)
+    {
+        if (_sessionExpired)
+            return;
+
+        _sessionExpired = true;
+        _shutdownConfirmed = true;
+
+        _heartbeatTimer.Stop();
+
+        UpdateStatusBar(); // 🔥 NEW
+
+        MessageBox.Show(
+            this,
+            message,
+            "Session expired",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+
+        DialogResult = DialogResult.Abort;
+        Close();
     }
 
     // --------------------------------------------------
@@ -208,13 +395,8 @@ public partial class MainForm : Form
     {
         try
         {
-            // Always use a session-bound repo instance for logout
-            var sessionCommandRepo = new SqlSessionCommandRepository(
-                _connectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _messageResolver,
-                _logger);
+            var sessionCommandRepo =
+                _runtime.Repositories.CreateSessionCommand(_session);
 
             var result = sessionCommandRepo.LogoutSession(
                 _session.SessionId,
@@ -223,7 +405,6 @@ public partial class MainForm : Form
                 sourceIp: IpResolver.GetLocalIPv4() ?? "UNKNOWN"
             );
 
-            // If you want visibility during debugging:
             if (!result.Success)
             {
                 MessageBox.Show(
@@ -235,7 +416,6 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            // Don’t swallow during debug—this is how bugs become ghosts.
             MessageBox.Show(
                 ex.Message,
                 "Logout exception",
@@ -244,4 +424,30 @@ public partial class MainForm : Form
         }
     }
 
+    public void ExecuteWithSession(Action action)
+    {
+        if (_sessionExpired)
+            return;
+
+        try
+        {
+            if (!EnsureSessionAlive())
+                return;
+
+            action();
+        }
+        catch (SessionExpiredException ex)
+        {
+            HandleSessionExpired(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                ex.Message,
+                "Unexpected error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
 }

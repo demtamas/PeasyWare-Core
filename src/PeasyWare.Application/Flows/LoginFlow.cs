@@ -12,21 +12,28 @@ public sealed class LoginFlow
     }
 
     public LoginFlowResult Run(
-        string username,
-        string password,
-        LoginContext context,
-        bool diagnosticsEnabled)
+    string username,
+    string password,
+    LoginContext context,
+    bool diagnosticsEnabled)
     {
+        // 🔑 Guarantee correlation_id (defensive, not primary source)
+        var ctx = context.CorrelationId == Guid.Empty
+            ? context with { CorrelationId = Guid.NewGuid() }
+            : context;
+
         var loginResult = _authService.Login(
             username,
             password,
-            context);
+            ctx);
 
         return loginResult.ResultCode switch
         {
             "SUCAUTH01" => LoginFlowResult.Succeeded(
                 loginResult.SessionId!.Value,
-                loginResult.UserId!.Value),
+                loginResult.UserId!.Value,
+                loginResult.DisplayName,
+                loginResult.SessionTimeoutMinutes),
 
             "ERRAUTH09" => LoginFlowResult.PasswordChangeRequired(
                 loginResult.FriendlyMessage),

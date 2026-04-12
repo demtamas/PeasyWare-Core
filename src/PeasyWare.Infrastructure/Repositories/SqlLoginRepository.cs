@@ -7,13 +7,26 @@ using PeasyWare.Infrastructure.Sql;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
+/// <summary>
+/// LOGIN repository (pre-session).
+///
+/// Responsibilities:
+/// - Authenticates user
+/// - Creates session via DB
+/// - Does NOT require SessionContext
+/// - Entry point to session lifecycle
+/// </summary>
 public sealed class SqlLoginRepository : ILoginRepository
 {
     private readonly SqlConnectionFactory _factory;
+    private readonly IErrorMessageResolver _resolver;
 
-    public SqlLoginRepository(SqlConnectionFactory factory)
+    public SqlLoginRepository(
+        SqlConnectionFactory factory,
+        IErrorMessageResolver resolver)
     {
         _factory = factory;
+        _resolver = resolver;
     }
 
     public LoginResult Login(
@@ -21,9 +34,9 @@ public sealed class SqlLoginRepository : ILoginRepository
         string? password,
         LoginContext context)
     {
-        // -----------------------------
+        // --------------------------------------------------
         // HARD GUARDED DB BOUNDARY
-        // -----------------------------
+        // --------------------------------------------------
 
         var clientApp =
             string.IsNullOrWhiteSpace(context.ClientApp)
@@ -52,7 +65,7 @@ public sealed class SqlLoginRepository : ILoginRepository
         command.CommandText = "auth.usp_login";
         command.CommandType = CommandType.StoredProcedure;
 
-        // Inputs (NEVER NULL for identity columns)
+        // Inputs
         command.Parameters.Add("@username", SqlDbType.NVarChar, 200).Value = username;
         command.Parameters.Add("@password_plain", SqlDbType.NVarChar, 400)
             .Value = (object?)password ?? DBNull.Value;
@@ -64,8 +77,13 @@ public sealed class SqlLoginRepository : ILoginRepository
 
         command.Parameters.Add("@force_login", SqlDbType.Bit).Value = context.ForceLogin;
 
-        // Correlation (optional but safe)
-        SqlCorrelation.Add(command);
+        command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier)
+            .Value = context.CorrelationId == Guid.Empty
+                ? DBNull.Value
+                : context.CorrelationId;
+
+        // Correlation (still important for DB-side audit)
+        //SqlCorrelation.Add(command);
 
         // Outputs
         var resultCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 40);
@@ -94,17 +112,68 @@ public sealed class SqlLoginRepository : ILoginRepository
 
         command.ExecuteNonQuery();
 
+        // --------------------------------------------------
+        // Safe extraction
+        // --------------------------------------------------
+
+        var code = resultCode.Value?.ToString() ?? "ERRAUTH99";
+
+        var message =
+            friendlyMessage.Value?.ToString()
+            ?? _resolver.Resolve(code);
+
+        var success =
+            code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
+
+        var sessionTimeout = GetSessionTimeout(connection, clientApp);
+
         return new LoginResult
         {
-            ResultCode = (string)resultCode.Value,
-            FriendlyMessage = (string)friendlyMessage.Value,
-            Success = ((string)resultCode.Value).StartsWith("SUC"),
+            ResultCode = code,
+            FriendlyMessage = message,
+            Success = success,
+
             UserId = userId.Value == DBNull.Value ? null : (int?)userId.Value,
             SessionId = sessionId.Value == DBNull.Value ? null : (Guid?)sessionId.Value,
             DisplayName = displayName.Value as string,
             LastLoginTime = lastLogin.Value == DBNull.Value ? null : (DateTime?)lastLogin.Value,
             FailedAttempts = failedAttempts.Value == DBNull.Value ? 0 : (int)failedAttempts.Value,
-            LockoutUntil = lockoutUntil.Value == DBNull.Value ? null : (DateTime?)lockoutUntil.Value
+            LockoutUntil = lockoutUntil.Value == DBNull.Value ? null : (DateTime?)lockoutUntil.Value,
+
+            SessionTimeoutMinutes = sessionTimeout   // 👈 THIS LINE
         };
+    }
+    private int GetSessionTimeout(SqlConnection connection, string clientApp)
+    {
+        using var cmd = connection.CreateCommand();
+
+        cmd.CommandText = """
+        SELECT TOP (1) session_timeout_minutes
+        FROM
+        (
+            -- Client-specific value first
+            SELECT c.session_timeout_minutes, 1 AS priority
+            FROM auth.clients c
+            WHERE c.client_name = @client_app
+              AND c.session_timeout_minutes IS NOT NULL
+
+            UNION ALL
+
+            -- Fallback from global settings
+            SELECT TRY_CAST(s.setting_value AS int), 2 AS priority
+            FROM operations.settings s
+            WHERE s.setting_name = 'auth.session_timeout_minutes'
+              AND s.setting_value IS NOT NULL
+        ) x
+        ORDER BY priority;
+    """;
+
+        cmd.Parameters.Add("@client_app", SqlDbType.NVarChar, 100).Value = clientApp;
+
+        var result = cmd.ExecuteScalar();
+
+        return result != null && result != DBNull.Value
+            ? Convert.ToInt32(result)
+            : 480;
     }
 }

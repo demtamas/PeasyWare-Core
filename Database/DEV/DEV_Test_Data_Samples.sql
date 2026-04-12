@@ -11,6 +11,11 @@ PRINT '------------------------------------------------------------';
 DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
 DECLARE @OutputId INT;
 
+EXEC auth.usp_add_role 
+    @RoleName = 'admin', 
+    @Description = 'System administrator', 
+    @CreatedBy = @SystemUserId,
+    @NewRoleId = @OutputId OUTPUT;
 
 EXEC auth.usp_add_role 
     @RoleName = 'manager', 
@@ -130,8 +135,8 @@ INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_
 INSERT INTO inventory.skus (sku_code, sku_description, ean, uom_code, weight_per_unit, standard_hu_quantity, is_full_hu_required, preferred_storage_type_id, preferred_storage_section_id, is_hazardous, is_active, created_at, created_by)
 	VALUES
 	('SKU001', 'First test SKU', '01234567899', 'UNIT', 600, 1, 0, @RackId, @FloorId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('SKU002', 'Second test SKU', '11223344556',  'Each', 800, 120, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('SKU003', 'Third test SKU', '55568998745', 'Each', 700, 80, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
+	('SKU002', 'Second test SKU', '11223344556',  'Each', 800, 120, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
+	('SKU003', 'Third test SKU', '55568998745', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
 
 
 /* ============================================================
@@ -171,6 +176,53 @@ INSERT INTO deliveries.inbound_expected_units (inbound_line_id, expected_externa
 	(@Line22, 'SKU00300000000000010', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId);
 
 
+/* ============================================================
+   TESTINB004 — arrival status test
+   Two lines, same SKU, different arrival_stock_status_code
+   Line 10: 5 units AV  (normal stock)
+   Line 20: 5 units BL  (blocked — e.g. supplier quality hold)
+   Both SSCC mode with pre-advised units
+   ============================================================ */
 
-	
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @SupplierId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_SUPPLIER');
+DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @Own          INT = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01');
+DECLARE @Shipto       INT = (SELECT address_id FROM core.party_addresses WHERE party_id = @Own AND address_type = 'WAREHOUSE');
+DECLARE @RackId       INT = (SELECT storage_type_id FROM locations.storage_types WHERE storage_type_code = 'RACK');
+DECLARE @FloorId      INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'FLOOR');
+DECLARE @Sku001       INT = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU001');
 
+INSERT INTO deliveries.inbound_deliveries
+    (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id,
+     ship_to_address_id, expected_arrival_at, created_at, created_by)
+VALUES
+    ('TESTINB004', @SupplierId, @SupplierId, @HaulierId,
+     @Shipto, DATEADD(DAY, 1, SYSUTCDATETIME()), SYSUTCDATETIME(), @SystemUserId);
+
+DECLARE @Inb4 INT = (SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB004');
+
+INSERT INTO deliveries.inbound_lines
+    (inbound_id, line_no, sku_id, expected_qty, received_qty,
+     batch_number, best_before_date, arrival_stock_status_code, created_at, created_by)
+VALUES
+    (@Inb4, 10, @Sku001, 5, 0, 'SKU001BATCH_AV', '2027-03-31', 'AV', SYSUTCDATETIME(), @SystemUserId),
+    (@Inb4, 20, @Sku001, 5, 0, 'SKU001BATCH_BL', '2027-03-31', 'BL', SYSUTCDATETIME(), @SystemUserId);
+
+DECLARE @Line4AV INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = @Inb4 AND line_no = 10);
+DECLARE @Line4BL INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = @Inb4 AND line_no = 20);
+
+INSERT INTO deliveries.inbound_expected_units
+    (inbound_line_id, expected_external_ref, expected_quantity,
+     batch_number, best_before_date, created_at, created_by)
+VALUES
+    (@Line4AV, 'SSCC0000000000000010', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4AV, 'SSCC0000000000000011', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4AV, 'SSCC0000000000000012', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4AV, 'SSCC0000000000000013', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4AV, 'SSCC0000000000000014', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4BL, 'SSCC0000000000000015', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4BL, 'SSCC0000000000000016', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4BL, 'SSCC0000000000000017', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4BL, 'SSCC0000000000000018', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
+    (@Line4BL, 'SSCC0000000000000019', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId);

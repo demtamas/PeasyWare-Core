@@ -1,5 +1,4 @@
 ﻿using PeasyWare.Infrastructure.Settings;
-using PeasyWare.Infrastructure.Logging;
 
 namespace PeasyWare.CLI.UI;
 
@@ -32,7 +31,7 @@ public static class HeaderRenderer
         if (diagnosticsEnabled)
         {
             Console.WriteLine("[diag]");
-            Console.WriteLine($"Correlation ID : {CorrelationContext.Current}");
+            //Console.WriteLine($"Correlation ID : {CorrelationContext.Current}");
 
             if (sessionId.HasValue)
                 Console.WriteLine($"Session ID     : {sessionId}");

@@ -1,8 +1,8 @@
 ﻿using PeasyWare.Application.Contexts;
 using PeasyWare.Infrastructure.Bootstrap;
-using PeasyWare.Infrastructure.Repositories;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace PeasyWare.CLI.Flows
 {
@@ -19,18 +19,8 @@ namespace PeasyWare.CLI.Flows
 
         public async Task RunAsync()
         {
-            var queryRepo = new SqlInventoryQueryRepository(
-                _runtime.ConnectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _runtime.ErrorMessageResolver);
-
-            var commandRepo = new SqlWarehouseTaskCommandRepository(
-                _runtime.ConnectionFactory,
-                _session.SessionId,
-                _session.UserId,
-                _runtime.ErrorMessageResolver,
-                _runtime.Logger);
+            var queryRepo = _runtime.Repositories.CreateInventoryQuery(_session);
+            var commandRepo = _runtime.Repositories.CreateWarehouseTaskCommand(_session);
 
             while (true)
             {
@@ -40,7 +30,6 @@ namespace PeasyWare.CLI.Flows
                 Console.WriteLine("Putaway from inbound");
                 Console.WriteLine("──────────────────────────");
 
-                // TRACE mode visibility
                 if (_runtime.Settings.DiagnosticsEnabled)
                 {
                     var awaiting = queryRepo.GetUnitsAwaitingPutawayCount();
@@ -77,41 +66,51 @@ namespace PeasyWare.CLI.Flows
                     Console.WriteLine();
                     Console.WriteLine("------------------------------------------------------------");
                     Console.WriteLine("PUTAWAY TASK CREATED");
-                    Console.WriteLine($"Pallet: {sscc}");
-                    Console.WriteLine($"Task ID: {result.TaskId}");
-                    Console.WriteLine($"Suggested Bin: {result.DestinationBinCode}");
+                    Console.WriteLine($"Pallet  : {sscc}");
+                    Console.WriteLine($"Task ID : {result.TaskId}");
+                    Console.WriteLine($"Bin     : {result.DestinationBinCode}");
                     Console.WriteLine("------------------------------------------------------------");
-
                     Console.WriteLine();
-                    Console.Write("Scan destination bin (C=cancel): ");
-                    var destination = Console.ReadLine()?.Trim();
 
-                    if (string.IsNullOrWhiteSpace(destination))
-                        continue;
-
-                    if (destination.Equals("C", StringComparison.OrdinalIgnoreCase))
+                    while (true)
                     {
-                        Console.WriteLine("Putaway cancelled.");
-                        Thread.Sleep(2000);
-                        continue;
-                    }
+                        Console.Write("Scan destination bin (C=cancel): ");
+                        var destination = Console.ReadLine()?.Trim();
 
-                    var confirmResult = commandRepo.ConfirmPutawayTask(
-                        result.TaskId,
-                        destination
-                    );
+                        if (string.IsNullOrWhiteSpace(destination))
+                            continue;
 
-                    Console.WriteLine(confirmResult.FriendlyMessage);
+                        if (destination.Equals("C", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine("Putaway cancelled.");
+                            Thread.Sleep(2000);
+                            break;
+                        }
 
-                    if (confirmResult.Success)
-                    {
-                        Console.WriteLine("Putaway completed successfully.");
-                        Thread.Sleep(1000);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Press any key to continue...");
-                        Console.ReadKey(true);
+                        // Client-side pre-check — catches mistype before round trip
+                        if (!string.Equals(destination, result.DestinationBinCode,
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine($"Wrong location. Expected: {result.DestinationBinCode}");
+                            continue;
+                        }
+
+                        var confirmResult = commandRepo.ConfirmPutawayTask(
+                            result.TaskId,
+                            destination);
+
+                        Console.WriteLine(confirmResult.FriendlyMessage);
+
+                        if (confirmResult.Success)
+                        {
+                            Thread.Sleep(1000);
+                        }
+                        else
+                        {
+                            Console.ReadKey(true);
+                        }
+
+                        break;
                     }
                 }
                 catch (Exception ex)

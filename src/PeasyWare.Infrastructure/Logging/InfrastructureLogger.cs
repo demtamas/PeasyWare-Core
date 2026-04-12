@@ -1,172 +1,151 @@
-using Microsoft.Data.SqlClient;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Settings;
 using PeasyWare.Infrastructure.Sql;
 using System.Data;
 using System.Text.Json;
-
-namespace PeasyWare.Infrastructure.Logging;
+using System.Text.Json.Serialization;
 
 public sealed class InfrastructureLogger : ILogger
 {
     private readonly RuntimeSettings _settings;
-    private readonly SqlConnectionFactory _connectionFactory;
+    private readonly SqlConnectionFactory _factory;
+    private SessionContext? _session;
 
     public InfrastructureLogger(
         RuntimeSettings settings,
-        SqlConnectionFactory connectionFactory)
+        SqlConnectionFactory factory)
     {
         _settings = settings;
-        _connectionFactory = connectionFactory;
+        _factory = factory;
     }
 
-    public void Info(string message) => Write(LogLevel.Info, message, null);
-    public void Info(string message, object data) => Write(LogLevel.Info, message, data);
-
-    public void Warn(string message) => Write(LogLevel.Warn, message, null);
-    public void Warn(string message, object data) => Write(LogLevel.Warn, message, data);
-
-    public void Error(string message) => Write(LogLevel.Error, message, null);
-    public void Error(string message, object data) => Write(LogLevel.Error, message, data);
-
-    public void Error(string message, Exception exception)
-        => Write(LogLevel.Error, $"{message} | {exception}", null);
-
-    public void Error(string message, Exception exception, object data)
-        => Write(LogLevel.Error, $"{message} | {exception}", data);
-
-    private void Write(LogLevel level, string message, object? data)
+    public void SetSession(SessionContext session)
     {
-        //Console.WriteLine("[DEBUG] AuditEnabled = " + _settings.AuditEnabled);
+        _session = session;
+    }
 
+    // --------------------------------------------------------
+    // Interface-required methods (simple wrappers)
+    // --------------------------------------------------------
+
+    public void Info(string message)
+        => Log("INFO", message, null);
+
+    public void Warn(string message)
+        => Log("WARN", message, null);
+
+    public void Error(string message)
+        => Log("ERROR", message, null);
+
+    public void Error(string message, Exception ex)
+        => Log("ERROR", message, new
+        {
+            Exception = ex.Message,
+            ex.StackTrace
+        });
+
+    public void Error(string message, Exception ex, object context)
+        => Log("ERROR", message, new
+        {
+            Context = context,
+            Exception = ex.Message,
+            ex.StackTrace
+        });
+
+    // --------------------------------------------------------
+    // New structured methods (preferred usage)
+    // --------------------------------------------------------
+
+    public void Info(string action, object? data)
+        => Log("INFO", action, data);
+
+    public void Warn(string action, object? data)
+        => Log("WARN", action, data);
+
+    public void Error(string action, object? data)
+        => Log("ERROR", action, data);
+
+    // --------------------------------------------------------
+    // Core logging
+    // --------------------------------------------------------
+
+    private void Log(string level, string action, object? data)
+    {
         if (!_settings.LoggingEnabled)
             return;
 
-        if (level < _settings.MinimumLogLevel)
-            return;
-
-        if (_settings.ConsoleLoggingEnabled)
-            WriteToConsole(level, message, data);
-
-        if (_settings.AuditEnabled &&
-            message != "Auth.LoginAttempt" &&
-            message != "Session.Touch" &&
-            message != "Session.Logout" &&
-            message != "Auth.LoginSuccess" &&
-            message != "Auth.PasswordChangeSuccess" &&
-            message != "Auth.PasswordChangeFailed")
-        {
-            var resultCode = ExtractResultCode(data);
-            var success = ExtractSuccess(data);
-
-            WriteAudit(message, resultCode, success, data);
-        }
-    }
-    private static string ExtractResultCode(object? data)
-    {
-        if (data is null) return "UNKNOWN";
-
-        var prop = data.GetType().GetProperty("ResultCode");
-        return prop?.GetValue(data)?.ToString() ?? "UNKNOWN";
-    }
-
-    private static bool ExtractSuccess(object? data)
-    {
-        if (data is null) return false;
-
-        var prop = data.GetType().GetProperty("Success");
-        return prop?.GetValue(data) is bool b && b;
-    }
-
-    private static void WriteToConsole(LogLevel level, string message, object? data)
-    {
-        var prefix = level switch
-        {
-            LogLevel.Info => "[INFO]",
-            LogLevel.Warn => "[WARN]",
-            LogLevel.Error => "[ERROR]",
-            _ => "[LOG]"
-        };
-
-        var correlationPart = CorrelationContext.Current is not null
-            ? $" [corr:{CorrelationContext.Current}]"
-            : string.Empty;
-
-        var dataPart = data is null
-            ? string.Empty
-            : " " + JsonSerializer.Serialize(data);
-
-        Console.WriteLine($"{prefix}{correlationPart} {message}{dataPart}");
-    }
-    private void WriteAudit(
-    string eventName,
-    string resultCode,
-    bool success,
-    object? data)
-    {
         try
         {
-            using var connection = _connectionFactory.Create();
+            using var connection = _factory.Create();
             connection.Open();
 
             using var command = connection.CreateCommand();
-            command.CommandText = @"
-        INSERT INTO audit.audit_events
-        (
-            correlation_id,
-            user_id,
-            session_id,
-            event_name,
-            result_code,
-            success,
-            payload_json
-        )
-        VALUES
-        (
-            @corr,
-            @user_id,
-            @session_id,
-            @event_name,
-            @result_code,
-            @success,
-            @payload
-        );";
+            command.CommandText = "audit.usp_log_trace";
+            command.CommandType = CommandType.StoredProcedure;
 
-            command.Parameters.AddWithValue(
-                "@corr",
-                (object?)CorrelationContext.Current ?? DBNull.Value);
+            var payload = new
+            {
+                Timestamp = DateTime.UtcNow,
+                Level = level,
+                Action = action,
+                Session = _session == null ? null : new
+                {
+                    _session.UserId,
+                    _session.SessionId,
+                    _session.CorrelationId,
+                    _session.SourceApp,
+                    _session.SourceClient
+                },
+                Data = data
+            };
 
-            command.Parameters.AddWithValue(
-                "@user_id",
-                ExtractValue(data, "UserId") ?? (object)DBNull.Value);
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
 
-            command.Parameters.AddWithValue(
-                "@session_id",
-                ExtractValue(data, "SessionId") ?? (object)DBNull.Value);
+            command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier)
+                .Value = ExtractCorrelationId(data)
+                     ?? (object?)_session?.CorrelationId
+                     ?? DBNull.Value;
 
-            command.Parameters.AddWithValue("@event_name", eventName);
-            command.Parameters.AddWithValue("@result_code", resultCode);
-            command.Parameters.AddWithValue("@success", success);
+            command.Parameters.Add("@user_id", SqlDbType.Int)
+                .Value = _session is null ? DBNull.Value : _session.UserId;
 
-            command.Parameters.AddWithValue(
-                "@payload",
-                data is null
-                    ? DBNull.Value
-                    : JsonSerializer.Serialize(data));
+            command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier)
+                .Value = (object?)_session?.SessionId ?? DBNull.Value;
+
+            command.Parameters.Add("@level", SqlDbType.NVarChar, 10)
+                .Value = level;
+
+            command.Parameters.Add("@action", SqlDbType.NVarChar, 200)
+                .Value = action;
+
+            command.Parameters.Add("@payload_json", SqlDbType.NVarChar, -1)
+                .Value = json;
 
             command.ExecuteNonQuery();
         }
         catch (Exception ex)
         {
-            Console.WriteLine("[AUDIT ERROR] " + ex.Message);
+            Console.WriteLine("TRACE LOGGING FAILED: " + ex.Message);
         }
     }
 
-    private static object? ExtractValue(object? data, string propertyName)
+    private static Guid? ExtractCorrelationId(object? data)
     {
-        if (data is null) return null;
+        if (data == null)
+            return null;
 
-        var prop = data.GetType().GetProperty(propertyName);
-        return prop?.GetValue(data);
+        var prop = data.GetType().GetProperty("CorrelationId");
+        if (prop == null)
+            return null;
+
+        var value = prop.GetValue(data);
+
+        return value is Guid g && g != Guid.Empty
+            ? g
+            : null;
     }
 }

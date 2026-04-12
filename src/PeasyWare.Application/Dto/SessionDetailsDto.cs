@@ -19,8 +19,6 @@ namespace PeasyWare.Application.Dto
         public string? ClientInfo { get; init; }
         public string? IpAddress { get; init; }
         public string? OsInfo { get; init; }
-
-        public string? CorrelationId { get; init; }
+        public Guid? CorrelationId { get; init; }
     }
-
 }

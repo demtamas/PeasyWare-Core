@@ -50,6 +50,8 @@
             customersToolStripMenuItem = new ToolStripMenuItem();
             systemToolStripMenuItem = new ToolStripMenuItem();
             sToolStripMenuItem = new ToolStripMenuItem();
+            operationalSettingsToolStripMenuItem = new ToolStripMenuItem();
+            clientSettingsToolStripMenuItem = new ToolStripMenuItem();
             logsToolStripMenuItem = new ToolStripMenuItem();
             loginAttemptsToolStripMenuItem = new ToolStripMenuItem();
             userChangesToolStripMenuItem = new ToolStripMenuItem();
@@ -61,10 +63,14 @@
             pnlToolStrip = new Panel();
             mainToolStrip = new ToolStrip();
             pnlStatusStrip = new Panel();
+            statusStrip1 = new StatusStrip();
+            toolStripStatusLabel1 = new ToolStripStatusLabel();
             pnlMain = new Panel();
             pnlMenuStrip.SuspendLayout();
             menuStrip1.SuspendLayout();
             pnlToolStrip.SuspendLayout();
+            pnlStatusStrip.SuspendLayout();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // pnlMenuStrip
@@ -208,9 +214,23 @@
             // 
             // sToolStripMenuItem
             // 
+            sToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { operationalSettingsToolStripMenuItem, clientSettingsToolStripMenuItem });
             sToolStripMenuItem.Name = "sToolStripMenuItem";
             sToolStripMenuItem.Size = new Size(116, 22);
             sToolStripMenuItem.Text = "S&ettings";
+            // 
+            // operationalSettingsToolStripMenuItem
+            // 
+            operationalSettingsToolStripMenuItem.Name = "operationalSettingsToolStripMenuItem";
+            operationalSettingsToolStripMenuItem.Size = new Size(180, 22);
+            operationalSettingsToolStripMenuItem.Text = "&Operational settings";
+            operationalSettingsToolStripMenuItem.Click += operationalSettingsToolStripMenuItem_Click;
+            // 
+            // clientSettingsToolStripMenuItem
+            // 
+            clientSettingsToolStripMenuItem.Name = "clientSettingsToolStripMenuItem";
+            clientSettingsToolStripMenuItem.Size = new Size(180, 22);
+            clientSettingsToolStripMenuItem.Text = "Client settin&gs";
             // 
             // logsToolStripMenuItem
             // 
@@ -222,13 +242,13 @@
             // loginAttemptsToolStripMenuItem
             // 
             loginAttemptsToolStripMenuItem.Name = "loginAttemptsToolStripMenuItem";
-            loginAttemptsToolStripMenuItem.Size = new Size(180, 22);
+            loginAttemptsToolStripMenuItem.Size = new Size(156, 22);
             loginAttemptsToolStripMenuItem.Text = "Login &Attempts";
             // 
             // userChangesToolStripMenuItem
             // 
             userChangesToolStripMenuItem.Name = "userChangesToolStripMenuItem";
-            userChangesToolStripMenuItem.Size = new Size(180, 22);
+            userChangesToolStripMenuItem.Size = new Size(156, 22);
             userChangesToolStripMenuItem.Text = "&User changes";
             // 
             // helpToolStripMenuItem
@@ -282,11 +302,28 @@
             // 
             // pnlStatusStrip
             // 
+            pnlStatusStrip.Controls.Add(statusStrip1);
             pnlStatusStrip.Dock = DockStyle.Bottom;
             pnlStatusStrip.Location = new Point(0, 737);
             pnlStatusStrip.Name = "pnlStatusStrip";
             pnlStatusStrip.Size = new Size(1384, 24);
             pnlStatusStrip.TabIndex = 2;
+            // 
+            // statusStrip1
+            // 
+            statusStrip1.Dock = DockStyle.Fill;
+            statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripStatusLabel1 });
+            statusStrip1.Location = new Point(0, 0);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(1384, 24);
+            statusStrip1.TabIndex = 0;
+            statusStrip1.Text = "statusStrip1";
+            // 
+            // toolStripStatusLabel1
+            // 
+            toolStripStatusLabel1.Name = "toolStripStatusLabel1";
+            toolStripStatusLabel1.Size = new Size(139, 19);
+            toolStripStatusLabel1.Text = "toolStripStatusLabelMain";
             // 
             // pnlMain
             // 
@@ -310,12 +347,17 @@
             MainMenuStrip = menuStrip1;
             Name = "MainForm";
             Text = "PeasyWare";
+            WindowState = FormWindowState.Maximized;
             pnlMenuStrip.ResumeLayout(false);
             pnlMenuStrip.PerformLayout();
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
             pnlToolStrip.ResumeLayout(false);
             pnlToolStrip.PerformLayout();
+            pnlStatusStrip.ResumeLayout(false);
+            pnlStatusStrip.PerformLayout();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
         }
 
@@ -355,5 +397,9 @@
         private ToolStripMenuItem logsToolStripMenuItem;
         private ToolStripMenuItem loginAttemptsToolStripMenuItem;
         private ToolStripMenuItem userChangesToolStripMenuItem;
+        private ToolStripMenuItem operationalSettingsToolStripMenuItem;
+        private ToolStripMenuItem clientSettingsToolStripMenuItem;
+        private StatusStrip statusStrip1;
+        private ToolStripStatusLabel toolStripStatusLabel1;
     }
 }

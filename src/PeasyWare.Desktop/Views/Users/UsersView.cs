@@ -1,7 +1,9 @@
 ﻿using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Security;
 using PeasyWare.Desktop.Forms;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -10,7 +12,7 @@ using System.Windows.Forms;
 
 namespace PeasyWare.Desktop.Views.Users;
 
-public partial class UsersView : UserControl, IToolbarAware
+public partial class UsersView : BaseView, IToolbarAware
 {
     private readonly Guid _currentSessionId;
     private readonly IUserQueryRepository _repo;
@@ -32,16 +34,20 @@ public partial class UsersView : UserControl, IToolbarAware
 
     private List<UserSummaryDto> _users = new();
 
+    private readonly ISessionCommandRepository _sessionRepo;
+
     public UsersView(
-        Guid currentSessionId,
-        IUserQueryRepository repo,
-        IUserCommandRepository commandRepo)
+    Guid currentSessionId,
+    IUserQueryRepository repo,
+    IUserCommandRepository commandRepo,
+    ISessionCommandRepository sessionRepo)
     {
         InitializeComponent();
 
         _currentSessionId = currentSessionId;
         _repo = repo;
         _commandRepo = commandRepo;
+        _sessionRepo = sessionRepo;
 
         ConfigureGrid(dgvUsers);
         EnableDoubleBuffering(dgvUsers);
@@ -59,29 +65,63 @@ public partial class UsersView : UserControl, IToolbarAware
     public void ConfigureToolbar(ToolStrip toolStrip)
     {
         toolStrip.Items.Clear();
+        toolStrip.ImageScalingSize = new Size(16, 16);
 
-        _btnRefresh = new ToolStripButton("Refresh");
-        _btnRefresh.Click += (_, _) => LoadUsers();
+        _btnRefresh = new ToolStripButton("Refresh")
+        {
+            Image = Icons.Refresh,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnRefresh.Click += Wrap(RefreshUsers);
 
-        _btnAdd = new ToolStripButton("Add");
-        _btnAdd.Click += (_, _) => AddNewUser();
+        _btnAdd = new ToolStripButton("Add")
+        {
+            //Image = Icons.Add,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnAdd.Click += Wrap(AddNewUser);
 
-        _btnEnable = new ToolStripButton("Enable") { Enabled = false };
-        _btnEnable.Click += (_, _) => EnableSelectedUser();
+        _btnEnable = new ToolStripButton("Enable")
+        {
+            //Image = Icons.Enable,
+            Enabled = false,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnEnable.Click += Wrap(EnableSelectedUser);
 
-        _btnDisable = new ToolStripButton("Disable") { Enabled = false };
-        _btnDisable.Click += (_, _) => DisableSelectedUser();
+        _btnDisable = new ToolStripButton("Disable")
+        {
+            //Image = Icons.Disable,
+            Enabled = false,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnDisable.Click += Wrap(DisableSelectedUser);
 
-        _btnLogoutAll = new ToolStripButton("Logout All") { Enabled = false };
-        _btnLogoutAll.Click += (_, _) => LogoutSelectedUserEverywhere();
+        _btnLogoutAll = new ToolStripButton("Logout All")
+        {
+            Image = Icons.Terminate, // reuse terminate icon
+            Enabled = false,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnLogoutAll.Click += Wrap(LogoutSelectedUserEverywhere);
 
-        _btnUnlock = new ToolStripButton("Unlock / Reset") { Enabled = true };
-        _btnUnlock.Click += (_, _) => UnlockSelectedUser();
+        _btnUnlock = new ToolStripButton("Unlock / Reset")
+        {
+            //Image = Icons.Unlock,
+            Enabled = true,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnUnlock.Click += Wrap(UnlockSelectedUser);
 
-        _btnDetails = new ToolStripButton("Details") { Enabled = false };
-        _btnDetails.Click += (_, _) => ShowUserDetails();
+        _btnDetails = new ToolStripButton("Details")
+        {
+            Image = Icons.Details,
+            Enabled = false,
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+        };
+        _btnDetails.Click += Wrap(ShowUserDetails);
 
-        // 🔹 NEW: Online-only toggle
+        // 🔹 Online-only toggle (NO session needed)
         _btnOnlineFilter = new ToolStripButton("Online only")
         {
             CheckOnClick = true
@@ -93,6 +133,7 @@ public partial class UsersView : UserControl, IToolbarAware
             ApplyClientSideFilter();
         };
 
+        // 🔹 Search (NO session needed)
         _txtSearch = new TextBox { Width = 220 };
         _txtSearch.PlaceholderText = "Search username / display name…";
         _txtSearch.TextChanged += (_, _) => ApplyClientSideFilter();
@@ -105,6 +146,7 @@ public partial class UsersView : UserControl, IToolbarAware
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
+
         toolStrip.Items.Add(_btnAdd);
         toolStrip.Items.Add(new ToolStripSeparator());
 
@@ -121,6 +163,17 @@ public partial class UsersView : UserControl, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
 
         toolStrip.Items.Add(_searchHost);
+    }
+
+    private void RefreshUsers()
+    {
+        if (FindForm() is not MainForm main)
+            return;
+
+        main.ExecuteWithSession(() =>
+        {
+            LoadUsers();
+        });
     }
 
     private void UpdateToolbarState()

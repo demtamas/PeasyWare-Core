@@ -63,7 +63,7 @@ public sealed class SqlUserSecurityRepository : IUserSecurityRepository
 
         if (success)
         {
-            _logger.Info("User.ChangePassword", new
+            _logger.Info("user.password.changed", new
             {
                 Username = username,
                 ResultCode = code,
@@ -72,7 +72,7 @@ public sealed class SqlUserSecurityRepository : IUserSecurityRepository
         }
         else
         {
-            _logger.Warn("User.ChangePassword", new
+            _logger.Warn("user.password.changed", new
             {
                 Username = username,
                 ResultCode = code,

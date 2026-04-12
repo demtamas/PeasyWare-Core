@@ -92,6 +92,7 @@ namespace PeasyWare.CLI.UI
                     Console.WriteLine($"Batch: {dto.BatchNumber}");
                     Console.WriteLine($"BBE: {dto.BestBeforeDate:dd-MM-yyyy}");
                     Console.WriteLine($"Staging Bin: {stagingBin}");
+                    Console.WriteLine($"Arrival Stock Status: {dto.ArrivalStockStatusCode}");
 
                     if (uiMode == ReceivingUiMode.Trace)
                     {

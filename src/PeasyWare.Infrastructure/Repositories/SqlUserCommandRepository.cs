@@ -1,31 +1,42 @@
 ﻿using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Security;
 using PeasyWare.Infrastructure.Sql;
 using System;
 using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
-public sealed class SqlUserCommandRepository : IUserCommandRepository
+/// <summary>
+/// Command repository for user-related operations.
+/// 
+/// GOLD STANDARD:
+/// - One DB call → one audit event
+/// - Logging ONLY after DB execution
+/// - No duplicate / trace noise
+/// - Clean, business-level actions
+/// </summary>
+public sealed class SqlUserCommandRepository
+    : RepositoryBase, IUserCommandRepository
 {
     private readonly SqlConnectionFactory _factory;
-    private readonly Guid _sessionId;
-    private readonly int _userId;
-    private readonly IErrorMessageResolver _messageResolver;
+    private readonly SessionContext _session;
+    private readonly IErrorMessageResolver _resolver;
     private readonly ILogger _logger;
 
     public SqlUserCommandRepository(
         SqlConnectionFactory factory,
-        Guid sessionId,
-        int userId,
-        IErrorMessageResolver messageResolver,
-        ILogger logger)
+        SessionContext session,
+        IErrorMessageResolver resolver,
+        ILogger logger,
+        SessionGuard sessionGuard)
+        : base(sessionGuard, session.SessionId)
     {
         _factory = factory;
-        _sessionId = sessionId;
-        _userId = userId;
-        _messageResolver = messageResolver;
+        _session = session;
+        _resolver = resolver;
         _logger = logger;
     }
 
@@ -41,67 +52,35 @@ public sealed class SqlUserCommandRepository : IUserCommandRepository
 
     private OperationResult SetUserActive(int targetUserId, bool isActive)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_set_user_active";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@user_id", targetUserId);
-        command.Parameters.AddWithValue("@is_active", isActive);
+        command.Parameters.Add("@user_id", SqlDbType.Int).Value = targetUserId;
+        command.Parameters.Add("@is_active", SqlDbType.Bit).Value = isActive;
 
-        var resultCode = command.Parameters.Add(
-            "@result_code",
-            SqlDbType.NVarChar,
-            20);
-        resultCode.Direction = ParameterDirection.Output;
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var friendlyMsg = command.Parameters.Add(
-            "@friendly_msg",
-            SqlDbType.NVarChar,
-            400);
-        friendlyMsg.Direction = ParameterDirection.Output;
+        var pMsg = command.Parameters.Add("@friendly_msg", SqlDbType.NVarChar, 400);
+        pMsg.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = resultCode.Value?.ToString() ?? "ERRPROC02";
-
-        var message =
-            friendlyMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
-
-        var success =
-            code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
-
-        var result = OperationResult.Create(success, code, message);
-
-        if (success)
-        {
-            _logger.Info("User.SetActive", new
+        return BuildResult(
+            action: "user.status.updated",
+            resultCodeObj: pCode.Value,
+            messageObj: pMsg.Value,
+            operation: new
             {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
+                PerformedBy = _session.UserId,
                 TargetUserId = targetUserId,
-                IsActive = isActive,
-                ResultCode = code,
-                Success = true
+                IsActive = isActive
             });
-        }
-        else
-        {
-            _logger.Warn("User.SetActive", new
-            {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
-                TargetUserId = targetUserId,
-                IsActive = isActive,
-                ResultCode = code,
-                Success = false
-            });
-        }
-
-        return result;
     }
 
     // --------------------------------------------------
@@ -114,73 +93,39 @@ public sealed class SqlUserCommandRepository : IUserCommandRepository
         string sourceClient,
         string? sourceIp = null)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_logout_user_everywhere";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@user_id", targetUserId);
-        command.Parameters.AddWithValue("@source_app", sourceApp);
-        command.Parameters.AddWithValue("@source_client", sourceClient);
-        command.Parameters.AddWithValue(
-            "@source_ip",
-            (object?)sourceIp ?? DBNull.Value);
+        command.Parameters.Add("@user_id", SqlDbType.Int).Value = targetUserId;
+        command.Parameters.Add("@source_app", SqlDbType.NVarChar, 50).Value = sourceApp;
+        command.Parameters.Add("@source_client", SqlDbType.NVarChar, 200).Value = sourceClient;
+        command.Parameters.Add("@source_ip", SqlDbType.NVarChar, 50).Value =
+            (object?)sourceIp ?? DBNull.Value;
 
-        var resultCode = command.Parameters.Add(
-            "@result_code",
-            SqlDbType.NVarChar,
-            20);
-        resultCode.Direction = ParameterDirection.Output;
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var friendlyMsg = command.Parameters.Add(
-            "@friendly_msg",
-            SqlDbType.NVarChar,
-            400);
-        friendlyMsg.Direction = ParameterDirection.Output;
+        var pMsg = command.Parameters.Add("@friendly_msg", SqlDbType.NVarChar, 400);
+        pMsg.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = resultCode.Value?.ToString() ?? "ERRPROC02";
-
-        var message =
-            friendlyMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
-
-        var success =
-            code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
-
-        var result = OperationResult.Create(success, code, message);
-
-        if (success)
-        {
-            _logger.Info("User.LogoutEverywhere", new
+        return BuildResult(
+            action: "user.session.terminated",
+            resultCodeObj: pCode.Value,
+            messageObj: pMsg.Value,
+            operation: new
             {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
+                PerformedBy = _session.UserId,
                 TargetUserId = targetUserId,
                 SourceApp = sourceApp,
-                SourceClient = sourceClient,
-                ResultCode = code,
-                Success = true
+                SourceClient = sourceClient
             });
-        }
-        else
-        {
-            _logger.Warn("User.LogoutEverywhere", new
-            {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
-                TargetUserId = targetUserId,
-                SourceApp = sourceApp,
-                SourceClient = sourceClient,
-                ResultCode = code,
-                Success = false
-            });
-        }
-
-        return result;
     }
 
     // --------------------------------------------------
@@ -194,70 +139,38 @@ public sealed class SqlUserCommandRepository : IUserCommandRepository
         string email,
         string password)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_create_user";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@username", username);
-        command.Parameters.AddWithValue("@display_name", displayName);
-        command.Parameters.AddWithValue("@role_name", roleName);
-        command.Parameters.AddWithValue("@email", email);
-        command.Parameters.AddWithValue("@password", password);
+        command.Parameters.Add("@username", SqlDbType.NVarChar, 200).Value = username;
+        command.Parameters.Add("@display_name", SqlDbType.NVarChar, 200).Value = displayName;
+        command.Parameters.Add("@role_name", SqlDbType.NVarChar, 100).Value = roleName;
+        command.Parameters.Add("@email", SqlDbType.NVarChar, 200).Value = email;
+        command.Parameters.Add("@password", SqlDbType.NVarChar, 400).Value = password;
 
-        var resultCode = command.Parameters.Add(
-            "@result_code",
-            SqlDbType.NVarChar,
-            20);
-        resultCode.Direction = ParameterDirection.Output;
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var friendlyMsg = command.Parameters.Add(
-            "@friendly_msg",
-            SqlDbType.NVarChar,
-            400);
-        friendlyMsg.Direction = ParameterDirection.Output;
+        var pMsg = command.Parameters.Add("@friendly_msg", SqlDbType.NVarChar, 400);
+        pMsg.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = resultCode.Value?.ToString() ?? "ERRAUTH03";
-
-        var message =
-            friendlyMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
-
-        var success =
-            code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
-
-        var result = OperationResult.Create(success, code, message);
-
-        if (success)
-        {
-            _logger.Info("User.Create", new
+        return BuildResult(
+            action: "user.created",
+            resultCodeObj: pCode.Value,
+            messageObj: pMsg.Value,
+            operation: new
             {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
+                PerformedBy = _session.UserId,
                 Username = username,
-                Role = roleName,
-                ResultCode = code,
-                Success = true
+                Role = roleName
             });
-        }
-        else
-        {
-            _logger.Warn("User.Create", new
-            {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
-                Username = username,
-                Role = roleName,
-                ResultCode = code,
-                Success = false
-            });
-        }
-
-        return result;
     }
 
     // --------------------------------------------------
@@ -268,69 +181,65 @@ public sealed class SqlUserCommandRepository : IUserCommandRepository
         int targetUserId,
         string newPassword)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_admin_reset_password";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.Add(
-            new SqlParameter("@target_user_id", SqlDbType.Int)
-            { Value = targetUserId });
+        command.Parameters.Add("@target_user_id", SqlDbType.Int).Value = targetUserId;
+        command.Parameters.Add("@new_password", SqlDbType.NVarChar, 200).Value = newPassword;
 
-        command.Parameters.Add(
-            new SqlParameter("@new_password", SqlDbType.NVarChar, 200)
-            { Value = newPassword });
+        var pCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
 
-        var pCode = new SqlParameter("@result_code", SqlDbType.NVarChar, 20)
-        {
-            Direction = ParameterDirection.Output
-        };
-
-        var pMsg = new SqlParameter("@friendly_message", SqlDbType.NVarChar, 400)
-        {
-            Direction = ParameterDirection.Output
-        };
-
-        command.Parameters.Add(pCode);
-        command.Parameters.Add(pMsg);
+        var pMsg = command.Parameters.Add("@friendly_message", SqlDbType.NVarChar, 400);
+        pMsg.Direction = ParameterDirection.Output;
 
         command.ExecuteNonQuery();
 
-        var code = pCode.Value?.ToString() ?? "ERRAUTH99";
+        return BuildResult(
+            action: "user.password.reset",
+            resultCodeObj: pCode.Value,
+            messageObj: pMsg.Value,
+            operation: new
+            {
+                PerformedBy = _session.UserId,
+                TargetUserId = targetUserId
+            });
+    }
+
+    // --------------------------------------------------
+    // Shared result builder (GOLD STANDARD)
+    // --------------------------------------------------
+
+    private OperationResult BuildResult(
+    string action,
+    object? resultCodeObj,
+    object? messageObj,
+    object operation)
+    {
+        var code = resultCodeObj?.ToString() ?? "ERRPROC02";
 
         var message =
-            pMsg.Value?.ToString()
-            ?? _messageResolver.Resolve(code);
+            messageObj?.ToString()
+            ?? _resolver.Resolve(code);
 
         var success =
-            code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
+            string.Equals(code, "SUCCESS", StringComparison.OrdinalIgnoreCase)
+            || code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
 
         var result = OperationResult.Create(success, code, message);
 
-        if (success)
+        // TRACE ONLY (post execution)
+        _logger.Info(action, new
         {
-            _logger.Info("User.ResetPassword", new
-            {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
-                TargetUserId = targetUserId,
-                ResultCode = code,
-                Success = true
-            });
-        }
-        else
-        {
-            _logger.Warn("User.ResetPassword", new
-            {
-                PerformedBy = _userId,
-                SessionId = _sessionId,
-                TargetUserId = targetUserId,
-                ResultCode = code,
-                Success = false
-            });
-        }
+            ResultCode = code,
+            Success = success,
+            Operation = operation
+        });
 
         return result;
     }

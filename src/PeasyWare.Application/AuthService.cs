@@ -19,7 +19,7 @@ public sealed class AuthService
     }
 
     // --------------------------------------------------
-    // Authoritative login entry point (context REQUIRED)
+    // Authoritative login entry point
     // --------------------------------------------------
 
     public LoginResult Login(
@@ -27,105 +27,60 @@ public sealed class AuthService
         string? password,
         LoginContext context)
     {
-        // 🚨 HARD GUARD — fail fast if client identity is missing
+        // 🚨 HARD GUARD
         if (string.IsNullOrWhiteSpace(context.ClientApp))
         {
             throw new InvalidOperationException(
                 "LoginContext.ClientApp must be supplied by the client.");
         }
 
-        // Audit: attempt (no UserId yet, no SessionId yet)
-        _logger.Info(
-            "Auth.LoginAttempt",
-            new
-            {
-                Username = username,
-                ClientApp = context.ClientApp,
-                ClientInfo = context.ClientInfo,
-                OsInfo = context.OsInfo,
-                IpAddress = context.IpAddress,
-                ForceLogin = context.ForceLogin,
-                ResultCode = "ATTEMPT",
-                Success = true
-            });
+        // 🔍 TRACE (not domain event)
+        _logger.Info("AuthService.Login.Start", new
+        {
+            Username = username,
+            context.ClientApp,
+            context.ClientInfo,
+            context.IpAddress,
+            context.CorrelationId
+        });
 
         var result = _login.Login(username, password, context);
 
-        if (!result.Success)
+        // 🔍 TRACE outcome (not domain event)
+        _logger.Info("AuthService.Login.Result", new
         {
-            _logger.Warn(
-                "Auth.LoginFailed",
-                new
-                {
-                    Username = username,
-                    ClientApp = context.ClientApp,
-                    IpAddress = context.IpAddress,
-                    ResultCode = result.ResultCode,
-                    Success = false,
-                    FailedAttempts = result.FailedAttempts,
-                    LockoutUntil = result.LockoutUntil
-                });
-
-            return result;
-        }
-
-        _logger.Info(
-            "Auth.LoginSuccess",
-            new
-            {
-                UserId = result.UserId,
-                SessionId = result.SessionId,
-                Username = username,
-                ClientApp = context.ClientApp,
-                IpAddress = context.IpAddress,
-                ResultCode = result.ResultCode,
-                Success = true
-            });
+            Username = username,
+            result.ResultCode,
+            result.Success,
+            result.FailedAttempts,
+            result.LockoutUntil,
+            context.CorrelationId
+        });
 
         return result;
     }
 
     // --------------------------------------------------
-    // Password change (authoritative auth action)
+    // Password change
     // --------------------------------------------------
 
     public OperationResult ChangePassword(
         string username,
         string newPassword)
     {
-        _logger.Info(
-            "Auth.PasswordChangeAttempt",
-            new
-            {
-                Username = username,
-                ResultCode = "ATTEMPT",
-                Success = true
-            });
+        _logger.Info("AuthService.PasswordChange.Start", new
+        {
+            Username = username
+        });
 
         var result = _security.ChangePassword(username, newPassword);
 
-        if (!result.Success)
+        _logger.Info("AuthService.PasswordChange.Result", new
         {
-            _logger.Warn(
-                "Auth.PasswordChangeFailed",
-                new
-                {
-                    Username = username,
-                    ResultCode = result.ResultCode,
-                    Success = false
-                });
-
-            return result;
-        }
-
-        _logger.Info(
-            "Auth.PasswordChangeSuccess",
-            new
-            {
-                Username = username,
-                ResultCode = result.ResultCode,
-                Success = true
-            });
+            Username = username,
+            result.ResultCode,
+            result.Success
+        });
 
         return result;
     }

@@ -18,6 +18,7 @@ public sealed class SsccValidationDto
     public int ExpectedUnitQty { get; set; }
     public int LineExpectedQty { get; set; }
     public int LineReceivedQty { get; set; }
+    public string ArrivalStockStatusCode { get; set; } = "AV";
 
     public int OutstandingBefore { get; set; }
     public int OutstandingAfter { get; set; }

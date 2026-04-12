@@ -1,33 +1,43 @@
 ﻿using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
-using PeasyWare.Application.Dto;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
-using PeasyWare.Infrastructure.Errors;
+using PeasyWare.Application.Security;
 using PeasyWare.Infrastructure.Sql;
+using System;
 using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
-public sealed class SqlInboundCommandRepository : IInboundCommandRepository
+/// <summary>
+/// Command repository for inbound operations.
+///
+/// Responsibilities:
+/// - Executes inbound-related commands
+/// - Enforces session validity
+/// - Uses session context for audit and traceability
+/// - Produces structured, flat, queryable logs (NO nested context)
+/// </summary>
+public sealed class SqlInboundCommandRepository
+    : RepositoryBase, IInboundCommandRepository
 {
     private readonly SqlConnectionFactory _factory;
-    private readonly Guid _sessionId;
-    private readonly int _userId;
-    private readonly IErrorMessageResolver _messageResolver;
+    private readonly SessionContext _session;
+    private readonly IErrorMessageResolver _resolver;
     private readonly ILogger _logger;
 
     public SqlInboundCommandRepository(
         SqlConnectionFactory factory,
-        Guid sessionId,
-        int userId,
-        IErrorMessageResolver messageResolver,
-        ILogger logger)
+        SessionContext session,
+        IErrorMessageResolver resolver,
+        ILogger logger,
+        SessionGuard sessionGuard)
+        : base(sessionGuard, session.SessionId)
     {
-        _factory = factory;
-        _sessionId = sessionId;
-        _userId = userId;
-        _messageResolver = messageResolver;
-        _logger = logger;
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
+        _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     // --------------------------------------------------
@@ -36,60 +46,33 @@ public sealed class SqlInboundCommandRepository : IInboundCommandRepository
 
     public OperationResult ActivateInbound(int inboundId)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "deliveries.usp_activate_inbound";
         command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@inbound_id", inboundId);
+        command.Parameters.AddWithValue("@user_id", _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
 
-        command.Parameters.AddWithValue("@inbound_Id", inboundId);
+        using var reader = command.ExecuteReader();
 
-        SqlCorrelation.Add(command);
-
-        var pSuccess = command.Parameters.Add(
-            "@success",
-            SqlDbType.Bit);
-        pSuccess.Direction = ParameterDirection.Output;
-
-        var pCode = command.Parameters.Add(
-            "@error_code",
-            SqlDbType.NVarChar,
-            20);
-        pCode.Direction = ParameterDirection.Output;
-
-        command.ExecuteNonQuery();
-
-        var success = pSuccess.Value is bool b && b;
-        var code = pCode.Value?.ToString() ?? "ERRINB99";
-        var message = _messageResolver.Resolve(code);
-
-        var result = OperationResult.Create(success, code, message);
-
-        if (success)
+        if (!reader.Read())
         {
-            _logger.Info("Inbound.Activate", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                InboundId = inboundId,
-                ResultCode = code,
-                Success = true
-            });
-        }
-        else
-        {
-            _logger.Warn("Inbound.Activate", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                InboundId = inboundId,
-                ResultCode = code,
-                Success = false
-            });
+            return BuildResult(
+                action: "Inbound.Activate",
+                resultCode: "ERRINB99",
+                data: new { InboundId = inboundId });
         }
 
-        return result;
+        var code = reader.GetString(1);
+
+        return BuildResult(
+            action: "Inbound.Activate",
+            resultCode: code,
+            data: new { InboundId = inboundId });
     }
 
     // --------------------------------------------------
@@ -98,179 +81,236 @@ public sealed class SqlInboundCommandRepository : IInboundCommandRepository
 
     public OperationResult ActivateInboundByRef(string inboundRef)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
-        using var command = connection.CreateCommand();
-        command.CommandText = "deliveries.usp_activate_inbound";
-        command.CommandType = CommandType.StoredProcedure;
+        using var connection = _factory.CreateForCommand(_session);
 
         var inboundId = ResolveInboundId(connection, inboundRef);
 
-        command.Parameters.AddWithValue("@inbound_id", inboundId);
-        command.Parameters.AddWithValue("@user_id", _userId);
-        command.Parameters.AddWithValue("@session_id", _sessionId);
-
-        bool success;
-        string code;
-
-        using (var reader = command.ExecuteReader())
+        if (inboundId <= 0)
         {
-            if (!reader.Read())
-            {
-                code = "ERRINBL99";
-                var message = _messageResolver.Resolve(code);
-                var result = OperationResult.Create(false, code, message);
-
-                _logger.Warn("Inbound.ActivateByRef", new
-                {
-                    UserId = _userId,
-                    SessionId = _sessionId,
-                    InboundRef = inboundRef,
-                    ResultCode = code,
-                    Success = false
-                });
-
-                return result;
-            }
-
-            success = reader.GetBoolean(0);
-            code = reader.GetString(1);
+            return BuildResult(
+                action: "Inbound.ActivateByRef",
+                resultCode: "ERRINB01",
+                data: new { InboundRef = inboundRef });
         }
 
-        var resolvedMessage = _messageResolver.Resolve(code);
-        var finalResult = OperationResult.Create(success, code, resolvedMessage);
-
-        if (success)
-        {
-            _logger.Info("Inbound.ActivateByRef", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                InboundRef = inboundRef,
-                ResultCode = code,
-                Success = true
-            });
-        }
-        else
-        {
-            _logger.Warn("Inbound.ActivateByRef", new
-            {
-                UserId = _userId,
-                SessionId = _sessionId,
-                InboundRef = inboundRef,
-                ResultCode = code,
-                Success = false
-            });
-        }
-
-        return finalResult;
+        return ActivateInbound(inboundId);
     }
 
     // --------------------------------------------------
-    // Resolve inbound ID from reference
-    // --------------------------------------------------
-
-    private int ResolveInboundId(SqlConnection connection, string inboundRef)
-    {
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"
-            SELECT inbound_id
-            FROM deliveries.inbound_deliveries
-            WHERE inbound_ref = @ref";
-
-        cmd.Parameters.AddWithValue("@ref", inboundRef);
-
-        var result = cmd.ExecuteScalar();
-
-        if (result == null)
-            return -1;
-
-        return (int)result;
-    }
-
-    // --------------------------------------------------
-    // Receive inbound line (SSCC / manual)
+    // Receive inbound line
     // --------------------------------------------------
 
     public OperationResult ReceiveInboundLine(
-    int inboundLineId,
-    int receivedQty,
-    string stagingBinCode,
-    int? inboundExpectedUnitId = null,   // NEW
-    string? externalRef = null,
-    string? batchNumber = null,
-    DateTime? bestBeforeDate = null,
-    Guid? claimToken = null)
+        int inboundLineId,
+        int receivedQty,
+        string stagingBinCode,
+        int? inboundExpectedUnitId = null,
+        string? externalRef = null,
+        string? batchNumber = null,
+        DateTime? bestBeforeDate = null,
+        Guid? claimToken = null)
     {
-        using var connection =
-            _factory.CreateForCommand(_sessionId, _userId);
+        EnsureSession();
 
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "deliveries.usp_receive_inbound_line";
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.AddWithValue("@inbound_line_id", inboundLineId);
         command.Parameters.AddWithValue("@received_qty", receivedQty);
         command.Parameters.AddWithValue("@staging_bin_code", stagingBinCode);
-        command.Parameters.AddWithValue("@external_ref",
-            (object?)externalRef ?? DBNull.Value);
-        command.Parameters.AddWithValue("@batch_number",
-            (object?)batchNumber ?? DBNull.Value);
-        command.Parameters.AddWithValue("@best_before_date",
-            (object?)bestBeforeDate ?? DBNull.Value);
-        command.Parameters.AddWithValue("@inbound_expected_unit_id",
-            (object?)inboundExpectedUnitId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@external_ref", (object?)externalRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("@batch_number", (object?)batchNumber ?? DBNull.Value);
+        command.Parameters.AddWithValue("@best_before_date", (object?)bestBeforeDate ?? DBNull.Value);
+        command.Parameters.AddWithValue("@inbound_expected_unit_id", (object?)inboundExpectedUnitId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@claim_token", (object?)claimToken ?? DBNull.Value);
+        command.Parameters.AddWithValue("@user_id", _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
 
-        // NEW: claim token
-        command.Parameters.AddWithValue("@claim_token",
-            (object?)claimToken ?? DBNull.Value);
+        using var reader = command.ExecuteReader();
 
-        command.Parameters.AddWithValue("@user_id", _userId);
-        command.Parameters.AddWithValue("@session_id", _sessionId);
-
-        bool success;
-        string code;
-
-        using (var reader = command.ExecuteReader())
+        if (!reader.Read())
         {
-            if (!reader.Read())
-            {
-                code = "ERRINBL99";
-                var message = _messageResolver.Resolve(code);
-                var result = OperationResult.Create(false, code, message);
-
-                _logger.Warn("Inbound.ReceiveLine", new
+            return BuildResult(
+                action: "Inbound.ReceiveLine",
+                resultCode: "ERRINBL99",
+                data: new
                 {
-                    UserId = _userId,
-                    SessionId = _sessionId,
                     InboundLineId = inboundLineId,
                     ExternalRef = externalRef,
-                    Bin = stagingBinCode,
-                    ResultCode = code,
-                    Success = false
+                    BinCode = stagingBinCode
                 });
-
-                return result;
-            }
-
-            success = reader.GetBoolean(0);
-            code = reader.GetString(1);
         }
 
-        var friendlyMessage = _messageResolver.Resolve(code);
+        var code = reader.GetString(1);
 
-        _logger.Info("Inbound.ReceiveLine", new
+        int resolvedLineId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+        int inboundId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+        bool isClosed = !reader.IsDBNull(4) && reader.GetBoolean(4);
+
+        var result = BuildResult(
+            action: "Inbound.ReceiveLine",
+            resultCode: code,
+            data: new
+            {
+                InboundId = inboundId,
+                InboundLineId = resolvedLineId,
+                InboundExpectedUnitId = inboundExpectedUnitId,
+                ExternalRef = externalRef,
+                BinCode = stagingBinCode
+            });
+
+        if (result.Success && isClosed)
         {
-            UserId = _userId,
-            SessionId = _sessionId,
-            InboundLineId = inboundLineId,
-            ExternalRef = externalRef,
-            Bin = stagingBinCode,
-            ResultCode = code,
-            Success = success
-        });
+            _logger.Info("Inbound.Closed", new
+            {
+                _session.UserId,
+                _session.SessionId,
+                _session.CorrelationId,
+                ResultCode = "SUCINBCLS01",
+                Success = true,
+                Data = new
+                {
+                    InboundId = inboundId,
+                    FinalStatus = "CLS"
+                }
+            });
+        }
 
-        return OperationResult.Create(success, code, friendlyMessage);
+        return result;
+    }
+
+    // --------------------------------------------------
+    // 🔥 Reverse inbound receipt
+    // --------------------------------------------------
+
+    public OperationResult ReverseInboundReceipt(
+        int receiptId,
+        string? reasonCode = null,
+        string? reasonText = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
+
+        command.CommandText = "deliveries.usp_reverse_inbound_receipt";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@receipt_id", receiptId);
+        command.Parameters.AddWithValue("@reason_code", (object?)reasonCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("@reason_text", (object?)reasonText ?? DBNull.Value);
+        command.Parameters.AddWithValue("@user_id", _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+        {
+            return BuildResult(
+                action: "Inbound.ReceiveLine.Reversed",
+                resultCode: "ERRINBREV99",
+                data: new { ReceiptId = receiptId });
+        }
+
+        var code = reader.GetString(1);
+
+        int inboundId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+        int inboundLineId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+        int originalReceiptId = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+        int reversalReceiptId = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+        int inventoryUnitId = reader.IsDBNull(6) ? 0 : reader.GetInt32(6);
+        bool headerReopened = !reader.IsDBNull(7) && reader.GetBoolean(7);
+
+        var result = BuildResult(
+            action: "Inbound.ReceiveLine.Reversed",
+            resultCode: code,
+            data: new
+            {
+                InboundId = inboundId,
+                InboundLineId = inboundLineId,
+                ReceiptId = originalReceiptId,
+                ReversalReceiptId = reversalReceiptId,
+                InventoryUnitId = inventoryUnitId,
+                ReasonCode = reasonCode
+            });
+
+        if (result.Success && headerReopened)
+        {
+            _logger.Info("Inbound.Reopened", new
+            {
+                _session.UserId,
+                _session.SessionId,
+                _session.CorrelationId,
+                ResultCode = "SUCINBREOPEN01",
+                Success = true,
+                Data = new
+                {
+                    InboundId = inboundId,
+                    PreviousStatus = "CLS",
+                    NewStatus = "RCV",
+                    TriggerReceiptId = originalReceiptId
+                }
+            });
+        }
+
+        return result;
+    }
+
+    // --------------------------------------------------
+    // Resolve inbound ID
+    // --------------------------------------------------
+
+    private static int ResolveInboundId(SqlConnection connection, string inboundRef)
+    {
+        using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT inbound_id
+            FROM deliveries.inbound_deliveries
+            WHERE inbound_ref = @ref
+        """;
+
+        command.Parameters.AddWithValue("@ref", inboundRef);
+
+        var result = command.ExecuteScalar();
+
+        return result is int inboundId ? inboundId : -1;
+    }
+
+    // --------------------------------------------------
+    // Shared result builder (FLAT + STANDARDISED)
+    // --------------------------------------------------
+
+    private OperationResult BuildResult(
+        string action,
+        string resultCode,
+        object data)
+    {
+        var success = resultCode.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
+        var message = _resolver.Resolve(resultCode);
+
+        var result = OperationResult.Create(success, resultCode, message);
+
+        var payload = new
+        {
+            _session.UserId,
+            _session.SessionId,
+            _session.CorrelationId,
+            ResultCode = resultCode,
+            Success = success,
+            Data = data
+        };
+
+        if (success)
+            _logger.Info(action, payload);
+        else
+            _logger.Warn(action, payload);
+
+        return result;
     }
 }

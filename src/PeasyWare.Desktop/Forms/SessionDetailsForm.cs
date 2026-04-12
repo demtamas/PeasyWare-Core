@@ -48,7 +48,7 @@ namespace PeasyWare.Desktop.Forms
 
             AddSpacer(16);
 
-            AddRow("Correlation ID", d.CorrelationId ?? "(none)");
+            AddRow("Correlation ID",d.CorrelationId?.ToString() ?? "(none)");
 
 
             tableLayoutPanel1.ResumeLayout();

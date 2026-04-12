@@ -46,7 +46,9 @@ public sealed class SqlSessionDetailsRepository : ISessionDetailsRepository
             IpAddress = reader["ip_address"] as string,
             OsInfo = reader["os_info"] as string,
 
-            CorrelationId = reader["correlation_id"] as string
+            CorrelationId = reader.IsDBNull(reader.GetOrdinal("correlation_id"))
+                ? null
+                : reader.GetGuid(reader.GetOrdinal("correlation_id")),
         };
     }
 }

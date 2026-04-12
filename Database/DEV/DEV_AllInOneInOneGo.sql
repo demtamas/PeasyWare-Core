@@ -119,29 +119,117 @@ GO
 ********************************************************************************************/
 
 -------------------------------------------
--- 3.1 Settings table
--- Stores configuration values (environment, toggles, etc.)
+-- 3.1 Settings categories table
+-- Central runtime configuration registry
+-------------------------------------------
+CREATE TABLE operations.setting_categories
+(
+    category        sysname        NOT NULL PRIMARY KEY,
+    display_name    nvarchar(100)  NOT NULL,
+    display_order   int            NOT NULL
+);
+
+INSERT INTO operations.setting_categories (category, display_name, display_order)
+VALUES
+('core','Core',10),
+('auth','Authentication',20),
+('inbound','Inbound',30),
+('warehouse','Warehouse',40),
+('logging','Logging',50),
+('audit','Audit',60),
+('client','Client',70);
+
+-------------------------------------------
+-- 3.2 Settings table
+-- Central runtime configuration registry
 -------------------------------------------
 IF OBJECT_ID('operations.settings', 'U') IS NULL
 BEGIN
     CREATE TABLE operations.settings
     (
-        setting_name    sysname          NOT NULL PRIMARY KEY,
-        setting_value   nvarchar(4000)   NULL,
-        data_type       nvarchar(50)     NOT NULL DEFAULT ('string'), -- string/int/bool/json/etc.
-        description     nvarchar(500)    NULL,
-        is_sensitive    bit              NOT NULL DEFAULT (0),
+        --------------------------------------------------
+        -- Identity
+        --------------------------------------------------
 
-        created_at      datetime2(3)     NOT NULL CONSTRAINT DF_operations_settings_created_at DEFAULT (sysutcdatetime()),
-        created_by      int              NULL     CONSTRAINT DF_operations_settings_created_by DEFAULT (CONVERT(int, SESSION_CONTEXT(N'user_id'))),
-        updated_at      datetime2(3)     NULL,
-        updated_by      int              NULL
+        setting_name        sysname            NOT NULL
+            CONSTRAINT PK_operations_settings PRIMARY KEY,
+        -- Internal key used by the application
+
+        display_name        nvarchar(200)      NOT NULL,
+        -- Human-readable label used in UI
+
+        category            varchar(50)        NOT NULL
+            CONSTRAINT DF_operations_settings_category DEFAULT ('general'),
+        -- Logical grouping (auth, logging, inbound, pw, etc.)
+
+        display_order       int                NOT NULL
+            CONSTRAINT DF_operations_settings_display_order DEFAULT (100),
+        -- Determines ordering within category in the UI
+
+        --------------------------------------------------
+        -- Value
+        --------------------------------------------------
+
+        setting_value       nvarchar(4000)     NULL,
+
+        data_type           varchar(20)        NOT NULL
+            CONSTRAINT CK_operations_settings_data_type
+            CHECK (data_type IN ('string','int','bool','decimal','json')),
+
+        --------------------------------------------------
+        -- Validation rules (JSON metadata)
+        --------------------------------------------------
+
+        validation_rule     nvarchar(max)      NULL,
+        /*
+            JSON rule describing allowed values.
+
+            Examples:
+
+            {"type":"bool"}
+
+            {"type":"enum","values":["TRACE","DEBUG","INFO","WARN","ERROR"]}
+
+            {"type":"range","min":5,"max":240}
+
+            {"type":"regex","pattern":"^[A-Z]{3}$"}
+        */
+
+        --------------------------------------------------
+        -- Metadata
+        --------------------------------------------------
+
+        description         nvarchar(500)      NULL,
+
+        is_sensitive        bit                NOT NULL
+            CONSTRAINT DF_operations_settings_is_sensitive DEFAULT (0),
+        -- Prevents displaying actual values in UI
+
+        requires_restart    bit                NOT NULL
+            CONSTRAINT DF_operations_settings_requires_restart DEFAULT (0),
+        -- Indicates application restart is required
+
+        --------------------------------------------------
+        -- Audit fields
+        --------------------------------------------------
+
+        created_at          datetime2(3)       NOT NULL
+            CONSTRAINT DF_operations_settings_created_at
+            DEFAULT sysutcdatetime(),
+
+        created_by          int                NULL
+            CONSTRAINT DF_operations_settings_created_by
+            DEFAULT CONVERT(int, SESSION_CONTEXT(N'user_id')),
+
+        updated_at          datetime2(3)       NULL,
+
+        updated_by          int                NULL
     );
 END;
 GO
 
 -------------------------------------------
--- 3.2 EVENTS TABLE
+-- 3.3 EVENTS TABLE
 -- Audit trail.
 -------------------------------------------
 CREATE TABLE audit.audit_events
@@ -151,17 +239,35 @@ CREATE TABLE audit.audit_events
     correlation_id  UNIQUEIDENTIFIER NULL,
     user_id         INT NULL,
     session_id      UNIQUEIDENTIFIER NULL,
-    event_name      NVARCHAR(1000) NOT NULL,
-    result_code     NVARCHAR(20) NOT NULL,
+    event_name      NVARCHAR(200) NOT NULL,
+    result_code     NVARCHAR(50) NOT NULL,
     success         BIT NOT NULL,
     payload_json    NVARCHAR(MAX) NULL
 );
 
-CREATE NONCLUSTERED INDEX IX_audit_events_correlation
-ON audit.audit_events (correlation_id);
+-- JSON integrity
+ALTER TABLE audit.audit_events
+ADD CONSTRAINT CK_audit_events_payload_json_valid
+CHECK (payload_json IS NULL OR ISJSON(payload_json) = 1);
 
-CREATE NONCLUSTERED INDEX IX_audit_events_session
-ON audit.audit_events (session_id);
+-- Prevent blanks
+ALTER TABLE audit.audit_events
+ADD CONSTRAINT CK_audit_events_event_name_not_blank
+CHECK (LTRIM(RTRIM(event_name)) <> '');
+
+ALTER TABLE audit.audit_events
+ADD CONSTRAINT CK_audit_events_result_code_not_blank
+CHECK (LTRIM(RTRIM(result_code)) <> '');
+
+-- Indexes
+CREATE NONCLUSTERED INDEX IX_audit_events_occurred_at
+ON audit.audit_events (occurred_at DESC);
+
+CREATE NONCLUSTERED INDEX IX_audit_events_correlation_time
+ON audit.audit_events (correlation_id, occurred_at ASC);
+
+CREATE NONCLUSTERED INDEX IX_audit_events_session_time
+ON audit.audit_events (session_id, occurred_at ASC);
 
 CREATE NONCLUSTERED INDEX IX_audit_events_user_time
 ON audit.audit_events (user_id, occurred_at DESC);
@@ -169,277 +275,457 @@ ON audit.audit_events (user_id, occurred_at DESC);
 CREATE NONCLUSTERED INDEX IX_audit_events_event_time
 ON audit.audit_events (event_name, occurred_at DESC);
 
+
+
 -- Helper macro style: Update if exists, otherwise insert.
 -- Pattern used across all settings.
 
--------------------------------------------
+INSERT INTO operations.settings
+(
+    setting_name,
+    display_name,
+    category,
+    display_order,
+    setting_value,
+    data_type,
+    validation_rule,
+    description
+)
+VALUES
+
+--------------------------------------------------
 -- CORE
--------------------------------------------
+--------------------------------------------------
 
--- core.version
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'core.version')
-    UPDATE operations.settings SET setting_value = '1.0.0' 
-    WHERE setting_name = 'core.version';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('core.version', '1.0.0', 'string', 'PeasyWare Core DB schema version');
+('core.version','Core schema version','core',10,'1.0.0','string',
+ NULL,
+ 'PeasyWare Core DB schema version'),
 
--- core.environment
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'core.environment')
-    UPDATE operations.settings SET setting_value = 'dev' 
-    WHERE setting_name = 'core.environment';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('core.environment', 'dev', 'string', 'Environment (dev/test/prod)');
+('core.environment','Environment','core',20,'dev','string',
+ '{"type":"enum","values":["dev","test","prod"]}',
+ 'Environment type'),
 
--- inbound.auto_complete_on_full_receipt
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'inbound.auto_complete_on_full_receipt')
-    UPDATE operations.settings SET setting_value = 'false'
-    WHERE setting_name = 'inbound.auto_complete_on_full_receipt';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('inbound.auto_complete_on_full_receipt', 'false', 'bool',
-            'Auto-complete inbound header when all rows fully received');
+('inbound.auto_complete_on_full_receipt','Auto-complete inbound','inbound',10,'false','bool',
+ '{"type":"bool"}',
+ 'Auto-complete inbound header when all rows fully received'),
 
+--------------------------------------------------
+-- AUTHENTICATION
+--------------------------------------------------
 
--------------------------------------------
--- AUTHENTICATION SETTINGS
--------------------------------------------
+('auth.login_enabled','Login enabled','auth',10,'true','bool',
+ '{"type":"bool"}',
+ 'Master switch to disable all user logins'),
 
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.login_enabled')
-    UPDATE operations.settings
-    SET setting_value = 'true', data_type = 'bool',
-        description = 'Master switch to disable all user logins',
-        updated_at = SYSUTCDATETIME(),
-        updated_by = CONVERT(int, SESSION_CONTEXT(N'user_id'))
-    WHERE setting_name = 'auth.login_enabled';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.login_enabled', 'true', 'bool',
-            'Master switch to disable all user logins');
+('auth.session_timeout_minutes','Session timeout (minutes)','auth',20,'30','int',
+ '{"type":"range","min":5,"max":240}',
+ 'Minutes before a session is force-closed by server inactivity'),
 
--- Hard session expiry (server-side)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.session_timeout_minutes')
-    UPDATE operations.settings SET setting_value = '30'
-    WHERE setting_name = 'auth.session_timeout_minutes';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.session_timeout_minutes', '30', 'int',
-            'Minutes before a session is force-closed by server inactivity');
+('auth.app_lock_minutes','Application lock timeout (minutes)','auth',30,'15','int',
+ '{"type":"range","min":1,"max":120}',
+ 'Minutes of UI inactivity before client lockscreen'),
 
--- Client-side inactivity lock
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.app_lock_minutes')
-    UPDATE operations.settings SET setting_value = '15'
-    WHERE setting_name = 'auth.app_lock_minutes';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.app_lock_minutes', '15', 'int',
-            'Minutes of UI inactivity before client lockscreen');
+('auth.max_login_attempts','Maximum login attempts','auth',40,'5','int',
+ '{"type":"range","min":3,"max":20}',
+ 'Maximum failed attempts before lockout escalation'),
 
--- Max failed login attempts before lockout
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.max_login_attempts')
-    UPDATE operations.settings SET setting_value = '5'
-    WHERE setting_name = 'auth.max_login_attempts';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.max_login_attempts', '5', 'int',
-            'Maximum failed attempts before lockout escalation');
+('auth.password_min_length','Minimum password length','auth',50,'8','int',
+ '{"type":"range","min":6,"max":64}',
+ 'Minimum password length enforced by policy'),
 
--- Password minimum length
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.password_min_length')
-    UPDATE operations.settings SET setting_value = '8'
-    WHERE setting_name = 'auth.password_min_length';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.password_min_length', '8', 'int',
-            'Minimum password length enforced by policy');
+('auth.password_expiry_days','Password expiry (days)','auth',60,'90','int',
+ '{"type":"range","min":30,"max":365}',
+ 'Password validity duration before required rotation'),
 
--- Password expiry (days)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.password_expiry_days')
-    UPDATE operations.settings SET setting_value = '90'
-    WHERE setting_name = 'auth.password_expiry_days';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.password_expiry_days', '90', 'int',
-            'Password validity duration before required rotation');
+('auth.password_history_depth','Password history depth','auth',70,'3','int',
+ '{"type":"range","min":0,"max":20}',
+ 'How many previous passwords are blocked from reuse'),
 
--- Password history depth
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.password_history_depth')
-    UPDATE operations.settings SET setting_value = '3'
-    WHERE setting_name = 'auth.password_history_depth';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.password_history_depth', '3', 'int',
-            'How many previous passwords are blocked from reuse');
+('auth.enable_login','Enable login','auth',80,'true','bool',
+ '{"type":"bool"}',
+ 'Master switch to disable all user logins'),
 
--- Global login on/off
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'auth.enable_login')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'auth.enable_login';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('auth.enable_login', 'true', 'bool',
-            'Master switch to disable all user logins');
+('EnableAutoLogin','Enable auto login','auth',90,'true','bool',
+ '{"type":"bool"}',
+ 'Allow client-side auto-login based on stored token'),
 
--- Auto-login enable
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'EnableAutoLogin')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'EnableAutoLogin';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('EnableAutoLogin', 'true', 'bool',
-            'Allow client-side auto-login based on stored token');
+('SessionExpiryMinutes','Legacy session expiry (minutes)','auth',100,'60','int',
+ '{"type":"range","min":10,"max":240}',
+ 'Legacy session timeout (deprecated)'),
 
--- Legacy session expiry (kept for compatibility)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'SessionExpiryMinutes')
-    UPDATE operations.settings SET setting_value = '60'
-    WHERE setting_name = 'SessionExpiryMinutes';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('SessionExpiryMinutes', '60', 'int',
-            'Legacy session timeout (deprecated)');
+--------------------------------------------------
+-- INBOUND / WAREHOUSE
+--------------------------------------------------
 
--- SSCC claim TTL (seconds) for inbound receiving double-scan window
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'inbound.sscc_claim_ttl_seconds')
-    UPDATE operations.settings 
-    SET setting_value = '60'
-    WHERE setting_name = 'inbound.sscc_claim_ttl_seconds';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES (
-        'inbound.sscc_claim_ttl_seconds',
-        '60',
-        'int',
-        'Time-to-live (seconds) for SSCC claim during inbound receive confirmation window.'
+('inbound.sscc_claim_ttl_seconds','SSCC claim TTL (seconds)','inbound',20,'60','int',
+ '{"type":"range","min":10,"max":300}',
+ 'Time-to-live (seconds) for SSCC claim during inbound receive confirmation window'),
+
+('warehouse.putaway_task_ttl_seconds','Putaway task TTL (seconds)','warehouse',10,'600','int',
+ '{"type":"range","min":60,"max":3600}',
+ 'Time-to-live (seconds) for putaway task reservations before they expire'),
+
+--------------------------------------------------
+-- LOGGING
+--------------------------------------------------
+
+('logging.enabled','Logging enabled','logging',10,'true','bool',
+ '{"type":"bool"}',
+ 'Global master switch for all logging'),
+
+('logging.console.enabled','Console logging enabled','logging',20,'true','bool',
+ '{"type":"bool"}',
+ 'When enabled, logs are written to console output'),
+
+('logging.min_level','Minimum log level','logging',30,'INFO','string',
+ '{"type":"enum","values":["INFO","WARN","ERROR"]}',
+ 'Minimum log level to emit'),
+
+('logging.db.enabled','Database logging enabled','logging',40,'true','bool',
+ '{"type":"bool"}',
+ 'When enabled, logs are persisted to database'),
+
+('logging.include_sensitive','Log sensitive fields','logging',50,'false','bool',
+ '{"type":"bool"}',
+ 'Allows sensitive fields to be logged (DEV ONLY)'),
+
+('receiving.ui_mode','Receiving UI mode','inbound',30,'TRACE','string',
+ '{"type":"enum","values":["MINIMAL","TRACE"]}',
+ 'Receiving UI mode'),
+
+--------------------------------------------------
+-- AUDIT
+--------------------------------------------------
+
+('audit.enabled','Audit logging enabled','audit',10,'true','bool',
+ '{"type":"bool"}',
+ 'When enabled, critical state transitions are persisted to audit.audit_events'),
+
+--------------------------------------------------
+-- CLIENT SETTINGS
+--------------------------------------------------
+
+('pw.warehouse_code','Warehouse code','client',10,'MAIN','string',
+ NULL,
+ 'Warehouse code used by client runtime'),
+
+('pw.site_code','Site code','client',20,'RUGBY','string',
+ NULL,
+ 'Logical site identifier'),
+
+('pw.site_name','Site name','client',30,'Test Warehouse 001','string',
+ NULL,
+ 'Human-readable site name');
+
+---------------------------------------------------------------
+-- AUDIT: SETTINGS CHANGE LOG
+---------------------------------------------------------------
+IF OBJECT_ID('audit.setting_changes', 'U') IS NULL
+BEGIN
+    CREATE TABLE audit.setting_changes
+    (
+        change_id      BIGINT IDENTITY(1,1)
+            CONSTRAINT PK_audit_setting_changes PRIMARY KEY,
+
+        setting_name   NVARCHAR(200) NOT NULL,
+
+        old_value      NVARCHAR(MAX) NULL,
+        new_value      NVARCHAR(MAX) NULL,
+
+        changed_at     DATETIME2(3) NOT NULL
+            CONSTRAINT DF_audit_setting_changes_changed_at DEFAULT SYSUTCDATETIME(),
+
+        changed_by     INT NULL,
+
+        source_app     NVARCHAR(100) NULL,
+        source_client  NVARCHAR(200) NULL,
+        source_ip      NVARCHAR(50) NULL,
+
+        correlation_id uniqueidentifier NULL,
+
+        details        NVARCHAR(4000) NULL
     );
 
--- Putaway task TTL (seconds) for reserved putaway task lifetime
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'warehouse.putaway_task_ttl_seconds')
-    UPDATE operations.settings 
-    SET setting_value = '600'
-    WHERE setting_name = 'warehouse.putaway_task_ttl_seconds';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES (
-        'warehouse.putaway_task_ttl_seconds',
-        '600',
-        'int',
-        'Time-to-live (seconds) for putaway task reservations before they expire and become available again.'
+    CREATE INDEX IX_audit_setting_changes_setting_name
+        ON audit.setting_changes(setting_name, changed_at DESC);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE audit.usp_log_event
+(
+    @correlation_id UNIQUEIDENTIFIER = NULL,
+    @user_id        INT = NULL,
+    @session_id     UNIQUEIDENTIFIER = NULL,
+    @event_name     NVARCHAR(200),
+    @result_code    NVARCHAR(50),
+    @success        BIT,
+    @payload_json   NVARCHAR(MAX) = NULL
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    --------------------------------------------------------
+    -- Normalize input (trim only, no magic)
+    --------------------------------------------------------
+
+    SET @event_name  = LTRIM(RTRIM(@event_name));
+    SET @result_code = LTRIM(RTRIM(@result_code));
+
+    --------------------------------------------------------
+    -- Validation
+    --------------------------------------------------------
+
+    IF @event_name IS NULL OR @event_name = ''
+        THROW 50001, 'audit.usp_log_event: @event_name is required.', 1;
+
+    IF @result_code IS NULL OR @result_code = ''
+        THROW 50002, 'audit.usp_log_event: @result_code is required.', 1;
+
+    IF @payload_json IS NOT NULL AND ISJSON(@payload_json) <> 1
+        THROW 50003, 'audit.usp_log_event: @payload_json must be valid JSON.', 1;
+
+    --------------------------------------------------------
+    -- Insert (constraints enforce correctness)
+    --------------------------------------------------------
+
+    INSERT INTO audit.audit_events
+    (
+        occurred_at,
+        correlation_id,
+        user_id,
+        session_id,
+        event_name,
+        result_code,
+        success,
+        payload_json
+    )
+    VALUES
+    (
+        SYSUTCDATETIME(),
+        @correlation_id,
+        @user_id,
+        @session_id,
+        @event_name,
+        @result_code,
+        @success,
+        @payload_json
     );
+END;
+GO
 
--------------------------------------------
--- LOGGING SETTINGS
--------------------------------------------
+CREATE OR ALTER PROCEDURE operations.usp_setting_update
+(
+    @setting_name  sysname,
+    @setting_value nvarchar(4000),
 
--- Master logging enable switch
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.enabled')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'logging.enabled';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('logging.enabled', 'true', 'bool',
-            'Global master switch for all logging');
+    @result_code   nvarchar(20) OUTPUT,
+    @friendly_msg  nvarchar(400) OUTPUT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
--- Console logging (runtime visibility)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.console.enabled')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'logging.console.enabled';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('logging.console.enabled', 'true', 'bool',
-            'When enabled, logs are written to console output');
+    DECLARE
+        @data_type nvarchar(50),
+        @validation_rule nvarchar(max),
 
--- Minimum log level
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.min_level')
-    UPDATE operations.settings SET setting_value = 'INFO'
-    WHERE setting_name = 'logging.min_level';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('logging.min_level', 'INFO', 'string',
-            'Minimum log level to emit (INFO/WARN/ERROR)');
+        -- audit
+        @old_value nvarchar(4000),
+        @user_id int,
+        @session_id uniqueidentifier,
+        @correlation_id uniqueidentifier,
+        @source_app nvarchar(100),
+        @source_client nvarchar(200),
+        @source_ip nvarchar(50),
 
--- Persist logs to database
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.db.enabled')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'logging.db.enabled';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('logging.db.enabled', 'true', 'bool',
-            'When enabled, logs are persisted to database');
+        -- raw context (defensive parsing)
+        @session_id_raw nvarchar(100),
+        @correlation_id_raw nvarchar(100);
 
--- Include sensitive data in logs (never enable in prod)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.include_sensitive')
-    UPDATE operations.settings SET setting_value = 'false'
-    WHERE setting_name = 'logging.include_sensitive';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('logging.include_sensitive', 'false', 'bool',
-            'Allows sensitive fields to be logged (DEV ONLY)');
+    BEGIN TRY
+        BEGIN TRANSACTION;
 
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'receiving.ui_mode')
-    UPDATE operations.settings 
-    SET setting_value = 'TRACEL',
-        data_type = 'string',
-        description = 'Receiving UI mode (MINIMAL / TRACE)',
-        updated_at = SYSUTCDATETIME(),
-        updated_by = CONVERT(int, SESSION_CONTEXT(N'user_id'))
-    WHERE setting_name = 'receiving.ui_mode';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('receiving.ui_mode', 'TRACE', 'string',
-            'Receiving UI mode (MINIMAL / TRACE)');
+        --------------------------------------------------------
+        -- Resolve metadata
+        --------------------------------------------------------
+
+        SELECT
+            @data_type = data_type,
+            @validation_rule = validation_rule,
+            @old_value = setting_value
+        FROM operations.settings
+        WHERE setting_name = @setting_name;
+
+        IF @data_type IS NULL
+        BEGIN
+            SET @result_code = 'ERRSET01';
+            SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+            ROLLBACK;
+            RETURN;
+        END;
+
+        --------------------------------------------------------
+        -- Validation
+        --------------------------------------------------------
+
+        IF @data_type = 'int'
+           AND TRY_CONVERT(int, @setting_value) IS NULL
+        BEGIN
+            SET @result_code = 'ERRSET02';
+            SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+            ROLLBACK;
+            RETURN;
+        END;
+
+        --------------------------------------------------------
+        -- SAFE session context resolution
+        --------------------------------------------------------
+
+        SELECT
+            @session_id_raw =
+                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'session_id')),
+
+            @correlation_id_raw =
+                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'correlation_id')),
+
+            @user_id =
+                TRY_CONVERT(int, SESSION_CONTEXT(N'user_id')),
+
+            @source_app =
+                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'source_app')),
+
+            @source_client =
+                TRY_CONVERT(nvarchar(200), SESSION_CONTEXT(N'source_client')),
+
+            @source_ip =
+                TRY_CONVERT(nvarchar(50), SESSION_CONTEXT(N'source_ip'));
+
+        SET @session_id =
+            TRY_CONVERT(uniqueidentifier, @session_id_raw);
+
+        SET @correlation_id =
+            TRY_CONVERT(uniqueidentifier, @correlation_id_raw);
+
+        --------------------------------------------------------
+        -- HARD GUARD
+        --------------------------------------------------------
+
+        IF @session_id IS NULL OR @user_id IS NULL
+        BEGIN
+            SET @result_code = 'ERRCTX01';
+            SET @friendly_msg = 'Invalid or missing session context';
+            ROLLBACK;
+            RETURN;
+        END;
+
+        --------------------------------------------------------
+        -- Update
+        --------------------------------------------------------
+
+        UPDATE operations.settings
+        SET
+            setting_value = @setting_value,
+            updated_at = SYSUTCDATETIME(),
+            updated_by = @user_id
+        WHERE setting_name = @setting_name;
+
+        --------------------------------------------------------
+        -- Structured audit
+        --------------------------------------------------------
+
+        INSERT INTO audit.setting_changes
+        (
+            setting_name,
+            old_value,
+            new_value,
+            changed_at,
+            changed_by,
+            source_app,
+            source_client,
+            source_ip,
+            correlation_id
+        )
+        VALUES
+        (
+            @setting_name,
+            @old_value,
+            @setting_value,
+            SYSUTCDATETIME(),
+            @user_id,
+            @source_app,
+            @source_client,
+            @source_ip,
+            @correlation_id
+        );
+
+        --------------------------------------------------------
+        -- Event audit
+        --------------------------------------------------------
+
+        DECLARE @payload_json NVARCHAR(MAX);
+
+        SET @payload_json = (
+            SELECT
+                @setting_name  AS SettingName,
+                @old_value     AS OldValue,
+                @setting_value AS NewValue
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @user_id,
+            @session_id     = @session_id,
+            @event_name     = 'system.setting.updated',
+            @result_code    = 'SUCCESS',
+            @success        = 1,
+            @payload_json   = @payload_json;
+
+        COMMIT;
+
+        SET @result_code = 'SUCSET01';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK;
+
+        --------------------------------------------------------
+        -- Capture error FIRST (this was missing)
+        --------------------------------------------------------
+
+        DECLARE @error nvarchar(4000) = ERROR_MESSAGE();
+
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @error AS ErrorMessage,
+                ERROR_NUMBER() AS ErrorNumber,
+                ERROR_LINE() AS ErrorLine
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @user_id,
+            @session_id     = @session_id,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code = 'ERRSET99';
+        SET @friendly_msg = 'Unexpected error occurred while updating setting.';
+    END CATCH
+END
 GO
 
 -------------------------------------------
--- AUDIT SETTINGS
--------------------------------------------
-
--- Master audit enable switch (persistent state transition tracking)
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'audit.enabled')
-    UPDATE operations.settings SET setting_value = 'true'
-    WHERE setting_name = 'audit.enabled';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('audit.enabled', 'true', 'bool',
-            'When enabled, critical state transitions are persisted to audit.audit_events');
-
--------------------------------------------
--- PW CLIENT SETTINGS
--------------------------------------------
-
--- Warehouse code
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'pw.warehouse_code')
-    UPDATE operations.settings SET setting_value = 'MAIN'
-    WHERE setting_name = 'pw.warehouse_code';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('pw.warehouse_code', 'MAIN', 'string',
-            'Warehouse code used by client runtime');
-
--- Site code
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'pw.site_code')
-    UPDATE operations.settings SET setting_value = 'RUGBY'
-    WHERE setting_name = 'pw.site_code';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('pw.site_code', 'RUGBY', 'string',
-            'Logical site identifier');
-
--- Site name
-IF EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'pw.site_name')
-    UPDATE operations.settings SET setting_value = 'Test Warehouse 001'
-    WHERE setting_name = 'pw.site_name';
-ELSE
-    INSERT INTO operations.settings (setting_name, setting_value, data_type, description)
-    VALUES ('pw.site_name', 'Test Warehouse 001', 'string',
-            'Human-readable site name');
-
-GO
-
-
-
--------------------------------------------
--- 3.2 Error messages (friendly messages)
+-- 3.4 Error messages (friendly messages)
 -- Core place for human-friendly messages by error_code & module
 -------------------------------------------
 IF OBJECT_ID('operations.error_messages', 'U') IS NULL
@@ -744,8 +1030,39 @@ BEGIN
 
         (N'SUCTASK02', N'TASK', N'SUCCESS',
             N'Putaway completed successfully.',
-            N'Task.Confirm: putaway confirmed')
-;
+            N'Task.Confirm: putaway confirmed'),
+
+        (N'ERRSET01', N'SET', N'ERROR',
+            N'Setting not found.',
+            N'Settings.Update: requested setting does not exist'),
+
+        (N'ERRSET02', N'SET', N'ERROR',
+            N'The provided value is not valid for this setting type.',
+            N'Settings.Update: data type validation failed'),
+
+        (N'ERRSET03', N'SET', N'ERROR',
+            N'The value is not allowed for this setting.',
+            N'Settings.Update: value not in allowed_values list'),
+
+        (N'ERRSET04', N'SET', N'ERROR',
+            N'The value is outside the permitted range.',
+            N'Settings.Update: numeric range validation failed'),
+
+        (N'SUCSET01', N'SET', N'SUCCESS',
+            N'Setting updated successfully.',
+            N'Settings.Update: value persisted'),
+
+        (N'SUCTASK01', N'TASK', N'SUCCESS',
+        N'Putaway task created. Please move stock to the suggested location.',
+        N'Task.Create: task created and destination bin reserved'),
+
+        (N'ERRTASK08', N'TASK', N'ERROR',
+            N'Wrong location. Please move the stock to {0}.',
+            N'Task.Confirm: scanned bin does not match reserved destination'),
+
+        (N'ERRTASK09', N'TASK', N'ERROR',
+            N'The suggested location is no longer available. Please request a new suggestion.',
+            N'Task.Confirm: destination bin capacity exceeded or bin inactive at confirm time');
 
 END;
 GO
@@ -986,13 +1303,14 @@ BEGIN
         is_active   BIT              NOT NULL DEFAULT 1,
         client_info NVARCHAR(200)    NULL,
         client_app  NVARCHAR(50)     NOT NULL,
-        correlation_id VARCHAR(32)   NULL,
-        created_at  DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME()
-    );
+        correlation_id uniqueidentifier NULL,
+        session_status NVARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+        created_at  DATETIME2(3)     NOT NULL DEFAULT SYSUTCDATETIME(),
+        updated_at  DATETIME2(3)     
 
-    ALTER TABLE auth.user_sessions
-        ADD CONSTRAINT FK_user_sessions_user
-        FOREIGN KEY (user_id) REFERENCES auth.users(id);
+        CONSTRAINT FK_user_sessions_user
+        FOREIGN KEY (user_id) REFERENCES auth.users(id)
+    );
 END;
 GO
 
@@ -1009,7 +1327,7 @@ BEGIN
         result_code  NVARCHAR(20)   NULL,
         success      BIT            NOT NULL DEFAULT 0,
         session_id   UNIQUEIDENTIFIER NULL,
-        correlation_id VARCHAR(32)  NULL,
+        correlation_id uniqueidentifier NULL,
         ip_address   NVARCHAR(50)   NULL,
         client_info  NVARCHAR(200)  NULL,
         client_app   NVARCHAR(50)   NULL,
@@ -1084,6 +1402,440 @@ BEGIN
 END;
 GO
 
+---------------------------------------------------------------
+-- 1.7.1 SESSION STATUS MASTER
+---------------------------------------------------------------
+IF OBJECT_ID('auth.session_statuses', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.session_statuses
+    (
+        status_code NVARCHAR(20) NOT NULL
+            CONSTRAINT PK_auth_session_statuses PRIMARY KEY,
+
+        description NVARCHAR(200) NOT NULL,
+
+        is_terminal BIT NOT NULL DEFAULT 0,
+        -- 1 = cannot transition out (EXPIRED, LOGGED_OUT, REVOKED)
+
+        created_at DATETIME2(3) NOT NULL
+            CONSTRAINT DF_auth_session_statuses_created_at DEFAULT SYSUTCDATETIME()
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- SEED SESSION STATUSES
+---------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'ACTIVE')
+INSERT INTO auth.session_statuses VALUES ('ACTIVE', 'Session is active', 0, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'IDLE')
+INSERT INTO auth.session_statuses VALUES ('IDLE', 'Session is idle', 0, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'EXPIRED')
+INSERT INTO auth.session_statuses VALUES ('EXPIRED', 'Session expired due to timeout', 1, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'LOGGED_OUT')
+INSERT INTO auth.session_statuses VALUES ('LOGGED_OUT', 'User logged out', 1, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'REVOKED')
+INSERT INTO auth.session_statuses VALUES ('REVOKED', 'Session revoked by system/admin', 1, SYSUTCDATETIME());
+GO
+
+---------------------------------------------------------------
+-- 1.7.1 SESSION STATUS MASTER
+---------------------------------------------------------------
+IF OBJECT_ID('auth.session_statuses', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.session_statuses
+    (
+        status_code NVARCHAR(20) NOT NULL
+            CONSTRAINT PK_auth_session_statuses PRIMARY KEY,
+
+        description NVARCHAR(200) NOT NULL,
+
+        is_terminal BIT NOT NULL DEFAULT 0,
+        -- 1 = cannot transition out (EXPIRED, LOGGED_OUT, REVOKED)
+
+        created_at DATETIME2(3) NOT NULL
+            CONSTRAINT DF_auth_session_statuses_created_at DEFAULT SYSUTCDATETIME()
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- SEED SESSION STATUSES
+---------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'ACTIVE')
+INSERT INTO auth.session_statuses VALUES ('ACTIVE', 'Session is active', 0, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'IDLE')
+INSERT INTO auth.session_statuses VALUES ('IDLE', 'Session is idle', 0, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'EXPIRED')
+INSERT INTO auth.session_statuses VALUES ('EXPIRED', 'Session expired due to timeout', 1, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'LOGGED_OUT')
+INSERT INTO auth.session_statuses VALUES ('LOGGED_OUT', 'User logged out', 1, SYSUTCDATETIME());
+
+IF NOT EXISTS (SELECT 1 FROM auth.session_statuses WHERE status_code = 'REVOKED')
+INSERT INTO auth.session_statuses VALUES ('REVOKED', 'Session revoked by system/admin', 1, SYSUTCDATETIME());
+GO
+
+---------------------------------------------------------------
+-- 1.7.2 SESSION STATUS TRANSITIONS
+---------------------------------------------------------------
+IF OBJECT_ID('auth.session_status_transitions', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.session_status_transitions
+    (
+        from_status NVARCHAR(20) NOT NULL,
+        to_status   NVARCHAR(20) NOT NULL,
+
+        CONSTRAINT PK_auth_session_status_transitions
+            PRIMARY KEY (from_status, to_status),
+
+        CONSTRAINT FK_auth_sst_from
+            FOREIGN KEY (from_status)
+            REFERENCES auth.session_statuses(status_code),
+
+        CONSTRAINT FK_auth_sst_to
+            FOREIGN KEY (to_status)
+            REFERENCES auth.session_statuses(status_code)
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- ALLOWED TRANSITIONS
+---------------------------------------------------------------
+
+-- ACTIVE transitions
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'ACTIVE', 'IDLE'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='ACTIVE' AND to_status='IDLE');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'ACTIVE', 'EXPIRED'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='ACTIVE' AND to_status='EXPIRED');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'ACTIVE', 'LOGGED_OUT'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='ACTIVE' AND to_status='LOGGED_OUT');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'ACTIVE', 'REVOKED'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='ACTIVE' AND to_status='REVOKED');
+
+
+-- IDLE transitions
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'IDLE', 'ACTIVE'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='IDLE' AND to_status='ACTIVE');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'IDLE', 'EXPIRED'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='IDLE' AND to_status='EXPIRED');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'IDLE', 'LOGGED_OUT'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='IDLE' AND to_status='LOGGED_OUT');
+
+INSERT INTO auth.session_status_transitions (from_status, to_status)
+SELECT 'IDLE', 'REVOKED'
+WHERE NOT EXISTS (SELECT 1 FROM auth.session_status_transitions WHERE from_status='IDLE' AND to_status='REVOKED');
+
+GO
+
+---------------------------------------------------------------
+-- 1.7.3 ADD STATUS TO USER SESSIONS
+---------------------------------------------------------------
+IF COL_LENGTH('auth.user_sessions', 'session_status') IS NULL
+BEGIN
+    ALTER TABLE auth.user_sessions
+    ADD session_status NVARCHAR(20) NOT NULL
+        CONSTRAINT DF_auth_user_sessions_status DEFAULT 'ACTIVE';
+END;
+GO
+
+---------------------------------------------------------------
+-- ADD FK TO STATUS MASTER
+---------------------------------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys
+    WHERE name = 'FK_auth_user_sessions_status'
+)
+BEGIN
+    ALTER TABLE auth.user_sessions
+    ADD CONSTRAINT FK_auth_user_sessions_status
+        FOREIGN KEY (session_status)
+        REFERENCES auth.session_statuses(status_code);
+END;
+GO
+
+---------------------------------------------------------------
+-- ADD FK TO SESSION
+---------------------------------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys
+    WHERE name = 'FK_auth_session_events_session'
+)
+BEGIN
+    ALTER TABLE auth.session_events
+    ADD CONSTRAINT FK_auth_session_events_session
+        FOREIGN KEY (session_id)
+        REFERENCES auth.user_sessions(session_id);
+END;
+GO
+
+---------------------------------------------------------------
+-- ADD FK TO USER
+---------------------------------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys
+    WHERE name = 'FK_auth_session_events_user'
+)
+BEGIN
+    ALTER TABLE auth.session_events
+    ADD CONSTRAINT FK_auth_session_events_user
+        FOREIGN KEY (user_id)
+        REFERENCES auth.users(id);
+END;
+GO
+
+---------------------------------------------------------------
+-- 1.7.4 SESSION STATUS TRANSITION PROCEDURE
+---------------------------------------------------------------
+CREATE OR ALTER PROCEDURE auth.usp_session_set_status
+(
+    @session_id        UNIQUEIDENTIFIER,
+    @to_status         NVARCHAR(20),
+    @source_app        NVARCHAR(100) = NULL,
+    @source_client     NVARCHAR(200) = NULL,
+    @source_ip         NVARCHAR(50)  = NULL,
+    @details           NVARCHAR(4000) = NULL,
+
+    @result_code       NVARCHAR(20)  OUTPUT,
+    @friendly_msg      NVARCHAR(400) OUTPUT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE
+        @from_status NVARCHAR(20),
+        @user_id INT,
+        @system_user_id INT,
+        @event_type NVARCHAR(30);
+
+    --------------------------------------------------
+    -- Lock row (prevents race conditions)
+    --------------------------------------------------
+
+    SELECT
+        @from_status = s.session_status,
+        @user_id = s.user_id
+    FROM auth.user_sessions s WITH (UPDLOCK, ROWLOCK)
+    WHERE s.session_id = @session_id;
+
+    IF @from_status IS NULL
+    BEGIN
+        SET @result_code = 'ERRAUTH06';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+        RETURN;
+    END;
+
+    --------------------------------------------------
+    -- Terminal state protection
+    --------------------------------------------------
+
+    IF @from_status IN ('EXPIRED', 'LOGGED_OUT', 'REVOKED')
+    BEGIN
+        SET @result_code = 'ERRAUTH06';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+        RETURN;
+    END;
+
+    --------------------------------------------------
+    -- Validate target status
+    --------------------------------------------------
+
+    IF NOT EXISTS
+    (
+        SELECT 1
+        FROM auth.session_statuses ss
+        WHERE ss.status_code = @to_status
+    )
+    BEGIN
+        SET @result_code = 'ERRPROC02';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+        RETURN;
+    END;
+
+    --------------------------------------------------
+    -- No-op (same state)
+    --------------------------------------------------
+
+    IF @from_status = @to_status
+    BEGIN
+        SET @result_code = 'SUCAUTH02';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+        RETURN;
+    END;
+
+    --------------------------------------------------
+    -- Validate transition
+    --------------------------------------------------
+
+    IF NOT EXISTS
+    (
+        SELECT 1
+        FROM auth.session_status_transitions t
+        WHERE t.from_status = @from_status
+          AND t.to_status = @to_status
+    )
+    BEGIN
+        SET @result_code = 'ERRAUTH07';
+        SET @friendly_msg = CONCAT(
+            'Illegal session transition from ',
+            @from_status,
+            ' to ',
+            @to_status,
+            '.');
+        RETURN;
+    END;
+
+    --------------------------------------------------
+    -- Apply transition
+    --------------------------------------------------
+
+    UPDATE auth.user_sessions
+    SET
+        session_status = @to_status,
+        is_active =
+            CASE
+                WHEN @to_status IN ('ACTIVE', 'IDLE') THEN 1
+                ELSE 0
+            END,
+        updated_at = SYSUTCDATETIME()
+    WHERE session_id = @session_id;
+
+    --------------------------------------------------
+    -- Resolve event type
+    --------------------------------------------------
+
+    SET @event_type =
+        CASE @to_status
+            WHEN 'ACTIVE' THEN 'SESSION_REACTIVATED'
+            WHEN 'IDLE' THEN 'SESSION_IDLE'
+            WHEN 'EXPIRED' THEN 'LOGOUT_TIMEOUT'
+            WHEN 'LOGGED_OUT' THEN 'LOGOUT_USER'
+            WHEN 'REVOKED' THEN 'SESSION_KILLED'
+            ELSE 'SESSION_STATUS_CHANGED'
+        END;
+
+    --------------------------------------------------
+    -- System user fallback
+    --------------------------------------------------
+
+    SELECT TOP (1)
+        @system_user_id = id
+    FROM auth.users
+    WHERE username = 'system';
+
+    --------------------------------------------------
+    -- Log event
+    --------------------------------------------------
+
+    INSERT INTO auth.session_events
+    (
+        session_id,
+        user_id,
+        event_type,
+        source_app,
+        source_client,
+        source_ip,
+        details,
+        created_by
+    )
+    VALUES
+    (
+        @session_id,
+        @user_id,
+        @event_type,
+        @source_app,
+        @source_client,
+        @source_ip,
+        @details,
+        COALESCE(CONVERT(INT, SESSION_CONTEXT(N'user_id')), @system_user_id)
+    );
+
+    --------------------------------------------------
+    -- Success
+    --------------------------------------------------
+
+    SET @result_code = 'SUCAUTH02';
+    SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+
+END;
+GO
+
+---------------------------------------------------------------
+-- 1.8 SESSION CONFIG TABLE
+---------------------------------------------------------------
+IF OBJECT_ID('auth.clients', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.clients
+    (
+        client_name NVARCHAR(100) NOT NULL
+            CONSTRAINT PK_auth_clients PRIMARY KEY,
+            -- Unique identifier of the client application.
+            -- Must match the value stored in auth.user_sessions.client_info
+
+        session_timeout_minutes INT NULL,
+            -- Optional client-specific timeout override.
+            -- NULL = use global timeout from operations.settings
+
+        max_concurrent_sessions INT NULL,
+            -- Optional limit for concurrent sessions per user.
+            -- NULL = unlimited
+
+        is_active BIT NOT NULL
+            CONSTRAINT DF_auth_clients_is_active DEFAULT (1),
+            -- Allows disabling a client without deleting it
+
+        description NVARCHAR(255) NULL,
+
+        created_at DATETIME2(3) NOT NULL
+            CONSTRAINT DF_auth_clients_created_at DEFAULT SYSUTCDATETIME(),
+
+        created_by INT NULL
+            DEFAULT (CONVERT(INT, SESSION_CONTEXT(N'user_id')))
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- 1.9 SESSION CLIENT SEED - Required, do not delete
+---------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM auth.clients WHERE client_name = 'PeasyWare.Desktop')
+BEGIN
+    INSERT INTO auth.clients
+        (client_name, session_timeout_minutes, max_concurrent_sessions, description, created_by)
+    VALUES
+        ('PeasyWare.Desktop', 480, NULL, 'PeasyWare desktop application',
+            (SELECT id FROM auth.users WHERE username = 'system'));
+END;
+
+IF NOT EXISTS (SELECT 1 FROM auth.clients WHERE client_name = 'PeasyWare.CLI')
+BEGIN
+    INSERT INTO auth.clients
+        (client_name, session_timeout_minutes, max_concurrent_sessions, description, created_by)
+    VALUES
+        ('PeasyWare.CLI', 60, NULL, 'PeasyWare terminal application',
+            (SELECT id FROM auth.users WHERE username = 'system'));
+END;
+GO
 
 /* ============================================================
     2.1 HELPER: HASH PASSWORD
@@ -1123,22 +1875,22 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @timeout_minutes INT =
+    DECLARE @default_timeout_minutes INT =
     (
         SELECT TRY_CONVERT(INT, setting_value)
         FROM operations.settings
         WHERE setting_name = 'auth.session_timeout_minutes'
     );
 
-    IF @timeout_minutes IS NULL OR @timeout_minutes <= 0
-        SET @timeout_minutes = 30;
+    IF @default_timeout_minutes IS NULL OR @default_timeout_minutes <= 0
+        SET @default_timeout_minutes = 30;
 
     DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
 
     DECLARE @SystemUserId INT =
     (
-        SELECT TOP (1) id 
-        FROM auth.users 
+        SELECT TOP (1) id
+        FROM auth.users
         WHERE username = 'system'
     );
 
@@ -1155,11 +1907,18 @@ BEGIN
         s.last_seen
     INTO #Expired
     FROM auth.user_sessions s
-    WHERE s.is_active = 1
-      AND (
-            s.last_seen IS NULL
-         OR DATEDIFF(MINUTE, s.last_seen, @now) >= @timeout_minutes
-      );
+    LEFT JOIN auth.clients c
+        ON c.client_name = s.client_app
+    CROSS APPLY
+    (
+        SELECT COALESCE(c.session_timeout_minutes, @default_timeout_minutes) AS effective_timeout
+    ) t
+    WHERE
+        s.is_active = 1
+        AND (
+                s.last_seen IS NULL
+             OR DATEADD(MINUTE, t.effective_timeout, s.last_seen) <= @now
+        );
 
     ------------------------------------------------------------------
     -- Log timeout events
@@ -1182,15 +1941,41 @@ BEGIN
     FROM #Expired e;
 
     ------------------------------------------------------------------
-    -- Deactivate expired sessions
+    -- Deactivate expired sessions via lifecycle transition
     ------------------------------------------------------------------
-    UPDATE s
-    SET is_active = 0
-    FROM auth.user_sessions s
-    JOIN #Expired e ON s.session_id = e.session_id;
+    DECLARE
+        @expired_session_id UNIQUEIDENTIFIER,
+        @code NVARCHAR(20),
+        @msg NVARCHAR(400);
+
+    DECLARE expired_cursor CURSOR LOCAL FAST_FORWARD FOR
+        SELECT e.session_id
+        FROM #Expired e;
+
+    OPEN expired_cursor;
+
+    FETCH NEXT FROM expired_cursor INTO @expired_session_id;
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        EXEC auth.usp_session_set_status
+            @session_id = @expired_session_id,
+            @to_status = 'EXPIRED',
+            @source_app = 'PeasyWare.System',
+            @source_client = 'SessionCleanupJob',
+            @source_ip = NULL,
+            @details = N'{"reason":"cleanup timeout"}',
+            @result_code = @code OUTPUT,
+            @friendly_msg = @msg OUTPUT;
+
+        FETCH NEXT FROM expired_cursor INTO @expired_session_id;
+    END
+
+    CLOSE expired_cursor;
+    DEALLOCATE expired_cursor;
+
 END;
 GO
-
 
 /* ============================================================
    6. LOGIN
@@ -1205,7 +1990,7 @@ CREATE OR ALTER PROCEDURE auth.usp_login
     @client_app         NVARCHAR(50)  = NULL,
     @os_info            NVARCHAR(200) = NULL,
     @force_login        BIT           = 0,
-    @correlation_id     VARCHAR(32)   = NULL,
+    @correlation_id     UNIQUEIDENTIFIER = NULL,
 
     -- OUTPUTS
     @result_code        NVARCHAR(20)  OUTPUT,
@@ -1279,6 +2064,16 @@ BEGIN
         END;
 
         --------------------------------------------------------
+        -- Disabled user guard
+        --------------------------------------------------------
+        IF @is_active = 0
+        BEGIN
+            SET @result_code = 'ERRAUTH02';
+            SET @friendly_message = operations.fn_get_friendly_message(@result_code);
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
         -- Lockout check
         --------------------------------------------------------
         IF @lockout_until IS NOT NULL AND @now < @lockout_until
@@ -1293,7 +2088,7 @@ BEGIN
         END;
 
         --------------------------------------------------------
-        -- Password validation (MANDATORY)
+        -- Password validation
         --------------------------------------------------------
         DECLARE @calc_hash VARBINARY(512) =
             HASHBYTES('SHA2_512',
@@ -1306,7 +2101,6 @@ BEGIN
             DECLARE @lock_minutes INT = NULL;
             DECLARE @terminal_lock DATETIME2(3) = '9999-12-31 23:59:59.997';
 
-            -- Progressive lockout policy
             IF      @failed = 3 SET @lock_minutes = 1;
             ELSE IF @failed = 4 SET @lock_minutes = 2;
             ELSE IF @failed = 5 SET @lock_minutes = 5;
@@ -1316,14 +2110,12 @@ BEGIN
             ELSE IF @failed = 9 SET @lock_minutes = 60;
             ELSE IF @failed >= 10
             BEGIN
-                -- Terminal lockout (admin / password reset only)
                 UPDATE auth.users
-                SET
-                    failed_attempts = @failed,
+                SET failed_attempts = @failed,
                     lockout_until = @terminal_lock
                 WHERE id = @user_id;
 
-                SET @result_code = 'ERRAUTH08'; -- e.g. "Account locked"
+                SET @result_code = 'ERRAUTH08';
                 SET @friendly_message =
                     'Account locked due to repeated failed login attempts. Contact an administrator.';
 
@@ -1333,10 +2125,8 @@ BEGIN
                 GOTO LogAndExit;
             END;
 
-            -- Time-based lockout
             UPDATE auth.users
-            SET
-                failed_attempts = @failed,
+            SET failed_attempts = @failed,
                 lockout_until = DATEADD(MINUTE, @lock_minutes, @now)
             WHERE id = @user_id;
 
@@ -1347,6 +2137,7 @@ BEGIN
 
             GOTO LogAndExit;
         END;
+
         --------------------------------------------------------
         -- Clear failures
         --------------------------------------------------------
@@ -1356,7 +2147,7 @@ BEGIN
         WHERE id = @user_id;
 
         --------------------------------------------------------
-        -- Must change / expiry AFTER validation
+        -- Password policy
         --------------------------------------------------------
         IF @must_change_password = 1
            OR (@password_expires_at IS NOT NULL AND @now > @password_expires_at)
@@ -1369,7 +2160,7 @@ BEGIN
         END;
 
         --------------------------------------------------------
-        -- Existing active session (same app)
+        -- Existing session
         --------------------------------------------------------
         IF EXISTS (
             SELECT 1 FROM auth.user_sessions
@@ -1408,43 +2199,74 @@ BEGIN
         SET @display_name_out = @display_name;
 
 LogAndExit:
+
+        --------------------------------------------------------
+        -- Login attempts
+        --------------------------------------------------------
         INSERT INTO auth.login_attempts
         (username, attempt_time, result_code, success,
          session_id, correlation_id, ip_address, client_info, client_app, os_info)
         VALUES
         (@username, @now, @result_code,
-         CASE WHEN @result_code LIKE 'SUC%' THEN 1 ELSE 0 END,
+         CASE WHEN @result_code = 'SUCAUTH01' THEN 1 ELSE 0 END,
          @session_id_out, @correlation_id,
          @ip_address, @client_info, @client_app, @os_info);
 
-    END TRY
-    BEGIN CATCH
-    DECLARE @err NVARCHAR(4000);
-    DECLARE @ctx NVARCHAR(MAX);
+        --------------------------------------------------------
+        -- Event logging (STRICT MAPPING)
+        --------------------------------------------------------
+        DECLARE @payload_json NVARCHAR(MAX);
 
-    SET @err = ERROR_MESSAGE();
-
-    SET @ctx =
-        CONCAT(
-            '{',
-            '"username":"',     ISNULL(@username, ''),     '",',
-            '"client_app":"',   ISNULL(@client_app, ''),   '",',
-            '"client_info":"',  ISNULL(@client_info, ''),  '",',
-            '"ip_address":"',   ISNULL(@ip_address, ''),   '"',
-            '}'
+        SET @payload_json = (
+            SELECT
+                @username AS Username,
+                @client_app AS ClientApp,
+                @ip_address AS IpAddress,
+                @result_code AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         );
 
-    EXEC operations.usp_log_error
-        @error_code     = 'ERRAUTH99',
-        @module_code    = 'AUTH',
-        @message        = 'Unhandled authentication error in auth.usp_login.',
-        @details        = @err,
-        @context_json   = @ctx,
-        @correlation_id = @correlation_id;
+        DECLARE @event_result_code NVARCHAR(50);
+            DECLARE @event_success BIT;
 
-    SET @result_code      = 'ERRAUTH99';
-    SET @friendly_message = operations.fn_get_friendly_message('ERRAUTH99');
-END CATCH;
+            SELECT
+                @event_result_code = m.event_result_code,
+                @event_success = m.event_success
+            FROM audit.fn_map_auth_result(@result_code) m;
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @user_id,
+            @session_id     = @session_id_out,
+            @event_name     = 'auth.login',
+            @result_code    = @event_result_code,
+            @success        = @event_success,
+            @payload_json   = @payload_json;
+
+    END TRY
+    BEGIN CATCH
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @err AS ErrorMessage,
+                @username AS Username
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = NULL,
+            @session_id     = NULL,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code      = 'ERRAUTH99';
+        SET @friendly_message = operations.fn_get_friendly_message('ERRAUTH99');
+    END CATCH;
 END;
 GO
 
@@ -1453,10 +2275,14 @@ GO
    ============================================================*/
 CREATE OR ALTER PROCEDURE auth.usp_session_touch
 (
-    @session_id    UNIQUEIDENTIFIER,
-    @result_code   NVARCHAR(20)  OUTPUT,
-    @friendly_msg  NVARCHAR(400) OUTPUT,
-    @is_alive      BIT           OUTPUT
+    @session_id     UNIQUEIDENTIFIER,
+    @source_app     NVARCHAR(50),
+    @source_client  NVARCHAR(200),
+    @source_ip      NVARCHAR(50) = NULL,
+
+    @result_code    NVARCHAR(20)  OUTPUT,
+    @friendly_msg   NVARCHAR(400) OUTPUT,
+    @is_alive       BIT           OUTPUT
 )
 AS
 BEGIN
@@ -1467,88 +2293,94 @@ BEGIN
     SET @friendly_msg = NULL;
 
     DECLARE
-        @user_id        INT,
-        @is_active      BIT,
-        @last_seen      DATETIME2(3),
-        @now            DATETIME2(3) = SYSUTCDATETIME(),
-        @timeout_minutes INT;
+        @user_id INT,
+        @is_active BIT,
+        @last_seen DATETIME2(3),
+        @now DATETIME2(3) = SYSUTCDATETIME(),
+        @timeout_minutes INT,
+        @session_status NVARCHAR(20),
+        @transition_code NVARCHAR(20),
+        @transition_msg NVARCHAR(400),
+        @client_app NVARCHAR(100),
+        @details NVARCHAR(4000);
 
     SELECT
-        @user_id   = s.user_id,
+        @user_id = s.user_id,
         @is_active = s.is_active,
-        @last_seen = s.last_seen
+        @last_seen = s.last_seen,
+        @session_status = s.session_status,
+        @client_app = s.client_app
     FROM auth.user_sessions s
     WHERE s.session_id = @session_id;
 
     IF @user_id IS NULL
     BEGIN
-        SET @result_code  = 'ERRAUTH06';
+        SET @result_code = 'ERRAUTH06';
         SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
         RETURN;
     END;
 
-    IF @is_active = 0
+    IF @session_status IS NULL
     BEGIN
-        SET @result_code  = 'ERRAUTH06';
+        SET @result_code = 'ERRAUTH06';
+        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+        RETURN;
+    END;
+
+    IF @session_status IN ('EXPIRED', 'LOGGED_OUT', 'REVOKED')
+    BEGIN
+        SET @result_code = 'ERRAUTH06';
         SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
         RETURN;
     END;
 
     SELECT @timeout_minutes =
-        TRY_CONVERT(INT, setting_value)
-    FROM operations.settings
-    WHERE setting_name = 'auth.session_timeout_minutes';
+        COALESCE(c.session_timeout_minutes,
+            TRY_CONVERT(INT, os.setting_value))
+    FROM operations.settings os
+    LEFT JOIN auth.clients c
+        ON c.client_name = @client_app
+    WHERE os.setting_name = 'auth.session_timeout_minutes';
 
     IF @timeout_minutes IS NULL OR @timeout_minutes <= 0
         SET @timeout_minutes = 30;
 
-    IF DATEDIFF(MINUTE, @last_seen, @now) >= @timeout_minutes
+    IF @last_seen IS NULL
+       OR @last_seen < DATEADD(MINUTE, -@timeout_minutes, @now)
     BEGIN
-        UPDATE auth.user_sessions
-        SET is_active = 0
-        WHERE session_id = @session_id;
+        SET @details =
+            N'{"last_seen":"'
+            + COALESCE(CONVERT(NVARCHAR(30), @last_seen, 126), N'NULL')
+            + N'","reason":"touch timeout"}';
 
-        DECLARE @client_info_db NVARCHAR(200);
+        EXEC auth.usp_session_set_status
+            @session_id = @session_id,
+            @to_status = 'EXPIRED',
+            @source_app = @source_app,
+            @source_client = @source_client,
+            @source_ip = @source_ip,
+            @details = @details,
+            @result_code = @transition_code OUTPUT,
+            @friendly_msg = @transition_msg OUTPUT;
 
-        SELECT @client_info_db = client_info
-        FROM auth.user_sessions
-        WHERE session_id = @session_id;
-
-        DECLARE @SystemUserId INT =
-        (
-            SELECT TOP (1) id 
-            FROM auth.users 
-            WHERE username = 'system'
-        );
-
-        INSERT INTO auth.session_events
-        (session_id, user_id, event_type, source_app, source_client, source_ip, details, created_by)
-        VALUES
-        (
-            @session_id,
-            @user_id,
-            'LOGOUT_TIMEOUT',
-            'CLI',
-            @client_info_db,
-            NULL,
-            CONCAT('{"last_seen":"', CONVERT(varchar(30), @last_seen, 126), '"}'),
-            @SystemUserId
-        );
-
-        SET @result_code  = 'ERRAUTH06';
+        SET @result_code = 'ERRAUTH06';
         SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
         RETURN;
     END;
 
     UPDATE auth.user_sessions
-    SET 
+    SET
         last_seen = @now,
+        session_status = CASE
+            WHEN session_status = 'IDLE' THEN 'ACTIVE'
+            ELSE session_status
+        END,
         is_active = 1
     WHERE session_id = @session_id;
 
-    SET @result_code  = 'SUCAUTH02';
+    SET @result_code = 'SUCAUTH02';
     SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-    SET @is_alive     = 1;
+    SET @is_alive = 1;
 END;
 GO
 
@@ -1563,7 +2395,8 @@ CREATE OR ALTER PROCEDURE auth.usp_logout
     @source_app      NVARCHAR(50),
     @source_client   NVARCHAR(200),
     @source_ip       NVARCHAR(50) = NULL,
-    @correlation_id  VARCHAR(32) = NULL,
+    @correlation_id  UNIQUEIDENTIFIER = NULL,
+
     @result_code     NVARCHAR(20) OUTPUT,
     @friendly_msg    NVARCHAR(400) OUTPUT,
     @success         BIT OUTPUT
@@ -1572,54 +2405,174 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @user_id INT;
+    SET @success = 0;
+    SET @result_code = NULL;
+    SET @friendly_msg = NULL;
 
-    SELECT @user_id = user_id
-    FROM auth.user_sessions
-    WHERE session_id = @session_id
-      AND is_active = 1;
+    DECLARE
+        @actor_id        INT = TRY_CAST(SESSION_CONTEXT(N'user_id') AS INT),
+        @ctx_session_id  UNIQUEIDENTIFIER = TRY_CAST(SESSION_CONTEXT(N'session_id') AS UNIQUEIDENTIFIER),
+        @corr_id         UNIQUEIDENTIFIER = COALESCE(@correlation_id, TRY_CAST(SESSION_CONTEXT(N'correlation_id') AS UNIQUEIDENTIFIER)),
+        @now             DATETIME2(3) = SYSUTCDATETIME(),
 
-    -- Already logged out → idempotent success
-    IF @user_id IS NULL
-    BEGIN
-        SET @result_code  = 'SUCAUTH03';
-        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-        SET @success = 1;
-        RETURN;
-    END;
+        @session_status  NVARCHAR(20),
+        @transition_code NVARCHAR(20),
+        @transition_msg  NVARCHAR(400),
+        @details         NVARCHAR(MAX);
 
-    UPDATE auth.user_sessions
-    SET
-        is_active = 0,
-        last_seen = SYSUTCDATETIME()
-    WHERE session_id = @session_id;
+    BEGIN TRY
 
-    INSERT INTO auth.session_events
-    (
-        session_id,
-        user_id,
-        event_type,
-        source_app,
-        source_client,
-        source_ip,
-        details,
-        created_by
-    )
-    VALUES
-    (
-        @session_id,
-        @user_id,
-        'LOGOUT_USER',
-        @source_app,
-        @source_client,
-        @source_ip,
-        CONCAT('{"correlation_id":"', @correlation_id, '"}'),
-        @user_id
-    );
+        --------------------------------------------------------
+        -- Fetch current status
+        --------------------------------------------------------
+        SELECT @session_status = session_status
+        FROM auth.user_sessions
+        WHERE session_id = @session_id;
 
-    SET @result_code  = 'SUCAUTH03';
-    SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-    SET @success = 1;
+        --------------------------------------------------------
+        -- Not found
+        --------------------------------------------------------
+        IF @session_status IS NULL
+        BEGIN
+            SET @result_code = 'ERRAUTH06';
+
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Idempotent success
+        --------------------------------------------------------
+        IF @session_status IN ('LOGGED_OUT', 'EXPIRED', 'REVOKED')
+        BEGIN
+            SET @result_code = 'SUCAUTH03';
+
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            SET @success = 1;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Build details payload (for transition)
+        --------------------------------------------------------
+        SET @details = (
+            SELECT
+                @corr_id AS correlation_id,
+                'user logout' AS reason
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        --------------------------------------------------------
+        -- Perform transition
+        --------------------------------------------------------
+        EXEC auth.usp_session_set_status
+            @session_id     = @session_id,
+            @to_status      = 'LOGGED_OUT',
+            @source_app     = @source_app,
+            @source_client  = @source_client,
+            @source_ip      = @source_ip,
+            @details        = @details,
+            @result_code    = @transition_code OUTPUT,
+            @friendly_msg   = @transition_msg OUTPUT;
+
+        --------------------------------------------------------
+        -- Final response
+        --------------------------------------------------------
+        IF @transition_code LIKE 'SUC%'
+        BEGIN
+            SET @result_code = 'SUCAUTH03';
+
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            SET @success = 1;
+        END
+        ELSE
+        BEGIN
+            SET @result_code  = @transition_code;
+            SET @friendly_msg = @transition_msg;
+            SET @success = 0;
+        END;
+
+LogAndExit:
+
+        --------------------------------------------------------
+        -- Payload
+        --------------------------------------------------------
+        DECLARE @payload_json NVARCHAR(MAX);
+
+        SET @payload_json = (
+            SELECT
+                @actor_id    AS PerformedBy,
+                @session_id  AS TargetSessionId,
+                @session_status AS PreviousStatus,
+                @result_code AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        --------------------------------------------------------
+        -- Mapping
+        --------------------------------------------------------
+        DECLARE @event_result_code NVARCHAR(50);
+        DECLARE @event_success BIT;
+
+        SELECT
+            @event_result_code = m.event_result_code,
+            @event_success     = m.event_success
+        FROM audit.fn_map_user_result(@result_code) m;
+
+        --------------------------------------------------------
+        -- Audit
+        --------------------------------------------------------
+        EXEC audit.usp_log_event
+            @correlation_id = @corr_id,
+            @user_id        = @actor_id,
+            @session_id     = @ctx_session_id,
+            @event_name     = 'session.logout',
+            @result_code    = @event_result_code,
+            @success        = @event_success,
+            @payload_json   = @payload_json;
+
+    END TRY
+    BEGIN CATCH
+
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @err AS ErrorMessage,
+                @session_id AS TargetSessionId
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @corr_id,
+            @user_id        = @actor_id,
+            @session_id     = @ctx_session_id,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code = 'ERRPROC02';
+
+        SELECT @friendly_msg = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+        SET @success = 0;
+
+    END CATCH;
 END;
 GO
 
@@ -1819,152 +2772,6 @@ BEGIN
 END;
 GO
 
-
-/* ============================================================
-   10. CREATE USER (provisioning)
-   ============================================================*/
-
-CREATE OR ALTER PROCEDURE auth.usp_create_user
-(
-    @username     NVARCHAR(50),
-    @display_name NVARCHAR(100),
-    @role_name    NVARCHAR(100),
-    @email        NVARCHAR(255),
-    @password     NVARCHAR(200),
-
-    @result_code  NVARCHAR(20)  OUTPUT,
-    @friendly_msg NVARCHAR(400) OUTPUT
-)
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE
-        @salt        VARBINARY(256),
-        @hash        VARBINARY(512),
-        @actor       INT = TRY_CONVERT(INT, SESSION_CONTEXT(N'user_id')),
-        @now         DATETIME2(3) = SYSUTCDATETIME(),
-        @expiry_days INT,
-        @expires_at  DATETIME2(0),
-        @role_id     INT;
-
-    -- --------------------------------------------------
-    -- Username uniqueness
-    -- --------------------------------------------------
-    IF EXISTS (
-        SELECT 1
-        FROM auth.users
-        WHERE username = @username
-    )
-    BEGIN
-        SELECT
-            @result_code  = em.error_code,
-            @friendly_msg = em.message_template
-        FROM operations.error_messages em
-        WHERE em.error_code = N'ERRAUTHUSR01'
-          AND em.is_active = 1;
-
-        RETURN;
-    END;
-
-    -- --------------------------------------------------
-    -- Email uniqueness
-    -- --------------------------------------------------
-    IF EXISTS (
-        SELECT 1
-        FROM auth.users
-        WHERE email = @email
-    )
-    BEGIN
-        SELECT
-            @result_code  = em.error_code,
-            @friendly_msg = em.message_template
-        FROM operations.error_messages em
-        WHERE em.error_code = N'ERRAUTHUSR04'
-          AND em.is_active = 1;
-
-        RETURN;
-    END;
-
-    -- --------------------------------------------------
-    -- Role validation
-    -- --------------------------------------------------
-    SELECT @role_id = id
-    FROM auth.roles
-    WHERE role_name = @role_name;
-
-    IF @role_id IS NULL
-    BEGIN
-        SELECT
-            @result_code  = em.error_code,
-            @friendly_msg = em.message_template
-        FROM operations.error_messages em
-        WHERE em.error_code = N'ERRAUTHUSR02'
-          AND em.is_active = 1;
-
-        RETURN;
-    END;
-
-    -- --------------------------------------------------
-    -- Password hashing
-    -- --------------------------------------------------
-    EXEC auth.sp_hash_password
-         @plain = @password,
-         @salt  = @salt OUTPUT,
-         @hash  = @hash OUTPUT;
-
-    -- --------------------------------------------------
-    -- Password expiry
-    -- --------------------------------------------------
-    SELECT @expiry_days =
-        TRY_CONVERT(INT, setting_value)
-    FROM operations.settings
-    WHERE setting_name = 'auth.password_expiry_days';
-
-    IF @expiry_days IS NULL OR @expiry_days <= 0
-        SET @expiry_days = 90;
-
-    SET @expires_at = DATEADD(DAY, @expiry_days, @now);
-
-    -- --------------------------------------------------
-    -- User insert
-    -- --------------------------------------------------
-    INSERT INTO auth.users
-        (username, display_name, email,
-         password_hash, salt,
-         password_last_changed, password_expires_at,
-         must_change_password,
-         is_active,
-         created_at, created_by)
-    VALUES
-        (@username, @display_name, @email,
-         @hash, @salt,
-         @now, @expires_at,
-         1,        -- must change password on first login
-         1,        -- active by default
-         @now, @actor);
-
-    DECLARE @new_user_id INT = SCOPE_IDENTITY();
-
-    -- --------------------------------------------------
-    -- Role assignment
-    -- --------------------------------------------------
-    INSERT INTO auth.user_roles (user_id, role_id)
-    VALUES (@new_user_id, @role_id);
-
-    -- --------------------------------------------------
-    -- Success
-    -- --------------------------------------------------
-    SELECT
-        @result_code  = em.error_code,
-        @friendly_msg = em.message_template
-    FROM operations.error_messages em
-    WHERE em.error_code = N'SUCAUTHUSR01'
-      AND em.is_active = 1;
-END;
-GO
-
-
 /* ============================================================
    11. ROLE RESOLUTION VIEW
    ============================================================*/
@@ -2161,6 +2968,48 @@ GO
 
 IF OBJECT_ID('auth.fn_is_session_expired', 'FN') IS NULL
     EXEC('CREATE FUNCTION auth.fn_is_session_expired() RETURNS bit AS BEGIN RETURN 0; END');
+GO
+
+CREATE OR ALTER VIEW operations.v_settings
+AS
+SELECT
+    s.setting_name,
+    s.display_name,
+    s.category,
+    c.display_name AS category_name,
+    c.display_order AS category_order,
+    s.display_order,
+
+    s.setting_value,
+    s.data_type,
+    s.validation_rule,
+    s.description,
+    s.is_sensitive,
+    s.requires_restart,
+
+    s.created_at,
+    s.created_by,
+    s.updated_at,
+    s.updated_by,
+    u.username AS updated_by_username,
+
+    CASE WHEN s.data_type = 'bool' THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS is_boolean,
+
+    CASE WHEN JSON_VALUE(s.validation_rule,'$.type') = 'enum'
+         THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS is_enum,
+
+    CASE WHEN JSON_VALUE(s.validation_rule,'$.type') = 'range'
+         THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS is_range,
+
+    TRY_CONVERT(int, JSON_VALUE(s.validation_rule,'$.min')) AS range_min,
+    TRY_CONVERT(int, JSON_VALUE(s.validation_rule,'$.max')) AS range_max
+
+FROM operations.settings s
+LEFT JOIN operations.setting_categories c
+    ON s.category = c.category
+LEFT JOIN auth.users u
+    ON s.updated_by = u.id;
+
 GO
 
 ALTER FUNCTION auth.fn_is_session_expired
@@ -2458,40 +3307,120 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- -----------------------------------------
-    -- Validate target user
-    -- -----------------------------------------
-    IF NOT EXISTS (
-        SELECT 1
-        FROM auth.users
-        WHERE id = @user_id
-    )
-    BEGIN
-        SET @result_code  = 'ERRUSR01';
-        SET @friendly_msg = 'User not found.';
-        RETURN;
-    END
+    DECLARE
+        @actor          INT = TRY_CONVERT(INT, SESSION_CONTEXT(N'user_id')),
+        @session_id     UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, SESSION_CONTEXT(N'session_id')),
+        @correlation_id UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, SESSION_CONTEXT(N'correlation_id')),
+        @now            DATETIME2(3) = SYSUTCDATETIME();
 
-    -- -----------------------------------------
-    -- Perform update
-    -- -----------------------------------------
-    UPDATE auth.users
-    SET
-        is_active   = @is_active,
-        updated_at = SYSUTCDATETIME(),
-        updated_by = TRY_CAST(SESSION_CONTEXT(N'user_id') AS INT)
-    WHERE id = @user_id;
+    BEGIN TRY
 
-    -- -----------------------------------------
-    -- Success
-    -- -----------------------------------------
-    SET @result_code = 'SUCUSR01';
+        --------------------------------------------------------
+        -- Validate target user
+        --------------------------------------------------------
+        IF NOT EXISTS (
+            SELECT 1
+            FROM auth.users
+            WHERE id = @user_id
+        )
+        BEGIN
+            SET @result_code = 'ERRUSR01';
 
-    SET @friendly_msg =
-        CASE
-            WHEN @is_active = 1 THEN 'User has been enabled.'
-            ELSE 'User has been disabled.'
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
         END;
+
+        --------------------------------------------------------
+        -- Perform update
+        --------------------------------------------------------
+        UPDATE auth.users
+        SET
+            is_active   = @is_active,
+            updated_at  = @now,
+            updated_by  = @actor
+        WHERE id = @user_id;
+
+        --------------------------------------------------------
+        -- Success
+        --------------------------------------------------------
+        SET @result_code = 'SUCUSR01';
+
+        SELECT @friendly_msg = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+LogAndExit:
+
+        --------------------------------------------------------
+        -- Payload
+        --------------------------------------------------------
+        DECLARE @payload_json NVARCHAR(MAX);
+
+        SET @payload_json = (
+            SELECT
+                @actor       AS PerformedBy,
+                @user_id     AS TargetUserId,
+                @is_active   AS IsActive,
+                @result_code AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        --------------------------------------------------------
+        -- Mapping (CENTRALISED)
+        --------------------------------------------------------
+        DECLARE @event_result_code NVARCHAR(50);
+        DECLARE @event_success BIT;
+
+        SELECT
+            @event_result_code = m.event_result_code,
+            @event_success     = m.event_success
+        FROM audit.fn_map_user_result(@result_code) m;
+
+        --------------------------------------------------------
+        -- Audit
+        --------------------------------------------------------
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor,
+            @session_id     = @session_id,
+            @event_name     = 'user.status.updated',
+            @result_code    = @event_result_code,
+            @success        = @event_success,
+            @payload_json   = @payload_json;
+
+    END TRY
+    BEGIN CATCH
+
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @err AS ErrorMessage,
+                @user_id AS TargetUserId
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor,
+            @session_id     = @session_id,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code = 'ERRPROC02';
+
+        SELECT @friendly_msg = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+    END CATCH;
 END;
 GO
 
@@ -2558,65 +3487,120 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE
-        @username   NVARCHAR(100),
-        @now        DATETIME2(3) = SYSUTCDATETIME(),
-        @actor_id   INT =
-            TRY_CAST(SESSION_CONTEXT(N'user_id') AS INT),
-        @session_id UNIQUEIDENTIFIER =
-            TRY_CAST(SESSION_CONTEXT(N'session_id') AS UNIQUEIDENTIFIER);
+        @username        NVARCHAR(100),
+        @actor_id        INT = TRY_CAST(SESSION_CONTEXT(N'user_id') AS INT),
+        @session_id      UNIQUEIDENTIFIER = TRY_CAST(SESSION_CONTEXT(N'session_id') AS UNIQUEIDENTIFIER),
+        @correlation_id  UNIQUEIDENTIFIER = TRY_CAST(SESSION_CONTEXT(N'correlation_id') AS UNIQUEIDENTIFIER),
+        @now             DATETIME2(3) = SYSUTCDATETIME();
 
-    --------------------------------------------------------
-    -- 0. Resolve target user
-    --------------------------------------------------------
-    SELECT @username = u.username
-    FROM auth.users u
-    WHERE u.id = @target_user_id;
+    BEGIN TRY
 
-    IF @username IS NULL
-    BEGIN
-        SET @result_code      = 'ERRAUTH02';
-        SET @friendly_message = operations.fn_get_friendly_message(@result_code);
-        RETURN;
-    END;
+        --------------------------------------------------------
+        -- Resolve target user
+        --------------------------------------------------------
+        SELECT @username = u.username
+        FROM auth.users u
+        WHERE u.id = @target_user_id;
 
-    --------------------------------------------------------
-    -- 1. Reuse standard password rules + unlock behaviour
-    --------------------------------------------------------
-    EXEC auth.usp_change_password
-        @username         = @username,
-        @new_password     = @new_password,
-        @result_code      = @result_code OUTPUT,
-        @friendly_message = @friendly_message OUTPUT;
+        IF @username IS NULL
+        BEGIN
+            SET @result_code = 'ERRAUTH02';
 
-    --------------------------------------------------------
-    -- 2. Admin override: force password change on next login
-    --    + explicit audit trail
-    --------------------------------------------------------
-    IF @result_code LIKE 'SUC%'
-    BEGIN
-        UPDATE auth.users
-        SET must_change_password = 1
-        WHERE id = @target_user_id;
+            SELECT @friendly_message = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
 
-        INSERT INTO audit.user_changes
-        (
-            user_id,
-            action,
-            details,
-            changed_at,
-            changed_by,
-            session_id
-        )
-        VALUES
-        (
-            @target_user_id,
-            'ADMIN_PASSWORD_RESET',
-            'Password reset by administrator; must_change_password enforced',
-            SYSUTCDATETIME(),
-            TRY_CAST(SESSION_CONTEXT(N'user_id') AS INT),
-            TRY_CAST(SESSION_CONTEXT(N'session_id') AS UNIQUEIDENTIFIER)
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Delegate to core password change
+        --------------------------------------------------------
+        EXEC auth.usp_change_password
+            @username         = @username,
+            @new_password     = @new_password,
+            @result_code      = @result_code OUTPUT,
+            @friendly_message = @friendly_message OUTPUT;
+
+        --------------------------------------------------------
+        -- Admin override
+        --------------------------------------------------------
+        IF @result_code LIKE 'SUC%'
+        BEGIN
+            UPDATE auth.users
+            SET must_change_password = 1
+            WHERE id = @target_user_id;
+        END;
+
+LogAndExit:
+
+        --------------------------------------------------------
+        -- Payload
+        --------------------------------------------------------
+        DECLARE @payload_json NVARCHAR(MAX);
+
+        SET @payload_json = (
+            SELECT
+                @actor_id       AS PerformedBy,
+                @target_user_id AS TargetUserId,
+                @username       AS Username,
+                @result_code    AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         );
-    END;
+
+        --------------------------------------------------------
+        -- Mapping
+        --------------------------------------------------------
+        DECLARE @event_result_code NVARCHAR(50);
+        DECLARE @event_success BIT;
+
+        SELECT
+            @event_result_code = m.event_result_code,
+            @event_success     = m.event_success
+        FROM audit.fn_map_user_result(@result_code) m;
+
+        --------------------------------------------------------
+        -- Audit (single source of truth)
+        --------------------------------------------------------
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor_id,
+            @session_id     = @session_id,
+            @event_name     = 'user.password.reset',
+            @result_code    = @event_result_code,
+            @success        = @event_success,
+            @payload_json   = @payload_json;
+
+    END TRY
+    BEGIN CATCH
+
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @err AS ErrorMessage,
+                @target_user_id AS TargetUserId
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor_id,
+            @session_id     = @session_id,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code = 'ERRPROC02';
+
+        SELECT @friendly_message = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+    END CATCH;
 END;
 GO
 
@@ -2682,28 +3666,6 @@ BEGIN
 END;
 GO
 
-
--- --------------------------------------------------
--- Initial role & user
--- --------------------------------------------------
-DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @OutputId INT;
-
-EXEC auth.usp_add_role 
-    @RoleName = 'admin', 
-    @Description = 'Administrator with full access', 
-    @CreatedBy = @SystemUserId,
-    @NewRoleId = @OutputId OUTPUT;
-
-EXEC auth.usp_create_user
-    @username = 'admin',
-    @display_name = 'Warehouse Administrator',
-    @role_name = 'operator',
-    @email = 'warehouse.admin@pw.local',
-    @password = 'Operator0',
-    @result_code = NULL,
-    @friendly_msg = NULL;
-GO
 
 USE PW_Core_DEV;
 GO
@@ -3038,6 +4000,8 @@ CREATE TABLE inventory.inventory_units
 
     created_at          DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by          INT NULL,
+    updated_at          DATETIME2(3) NULL,
+    updated_by          INT NULL,
 
     CONSTRAINT fk_inventory_units_sku
         FOREIGN KEY (sku_id)
@@ -3552,7 +4516,8 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
 ('ACT','RCV',0),
 ('RCV','CLS',0),
 ('EXP','CNL',0),
-('ACT','CNL',1);
+('ACT','CNL',1),
+('CLS', 'RCV', 1);
 
 
 
@@ -3722,7 +4687,7 @@ SELECT
     COUNT(*)         AS open_inbounds
 FROM deliveries.inbound_deliveries d
 JOIN core.parties s ON s.party_id = d.supplier_party_id
-WHERE d.inbound_status_code IN ('EXP','ACT','REC')
+WHERE d.inbound_status_code IN ('EXP','ACT','RCV')
 GROUP BY s.party_code, s.display_name;
 GO
 
@@ -3737,7 +4702,7 @@ SELECT
     MIN(d.expected_arrival_at) AS next_eta
 FROM deliveries.inbound_deliveries d
 JOIN core.parties h ON h.party_id = d.haulier_party_id
-WHERE d.inbound_status_code IN ('EXP','ACT','REC')
+WHERE d.inbound_status_code IN ('EXP','ACT','RCV')
 GROUP BY h.display_name;
 GO
 
@@ -3831,7 +4796,9 @@ INSERT INTO deliveries.inbound_line_state_transitions VALUES
 ('PRC','RCV',0),
 ('EXP','RCV',0),
 ('EXP','CNL',1),
-('PRC','CNL',1);
+('PRC','CNL',1),
+('RCV', 'PRC', 1),
+('RCV', 'EXP', 1);
 GO
 
 CREATE TABLE deliveries.inbound_lines
@@ -3844,6 +4811,7 @@ CREATE TABLE deliveries.inbound_lines
     expected_qty        INT NOT NULL CHECK (expected_qty > 0),
     received_qty        INT NOT NULL DEFAULT (0),
 
+    arrival_stock_status_code VARCHAR(2) NOT NULL DEFAULT 'AV',
     batch_number        NVARCHAR(100) NULL,
     best_before_date    DATE NULL,
 
@@ -3870,7 +4838,11 @@ CREATE TABLE deliveries.inbound_lines
         UNIQUE (inbound_id, line_no),
 
     CONSTRAINT CK_received_qty_valid
-        CHECK (received_qty <= expected_qty)
+        CHECK (received_qty <= expected_qty),
+
+    CONSTRAINT FK_inbound_lines_arrival_status
+        FOREIGN KEY (arrival_stock_status_code)
+        REFERENCES inventory.stock_statuses(status_code)
 );
 
 /* ============================================================
@@ -3915,7 +4887,8 @@ USING (VALUES
     ('EXP','CLM',0),  -- preview claim
     ('CLM','EXP',0),  -- auto-expire / release claim
     ('CLM','RCV',0),  -- confirm receive
-    ('EXP','RCV',1)   -- optional: admin force receive without claim (usually NO; keep as 1)
+    ('EXP','RCV',1),  -- optional: admin force receive without claim (usually NO; keep as 1)
+    ('RCV', 'EXP', 1)
 ) AS src(from_state_code, to_state_code, requires_authority)
 ON  tgt.from_state_code = src.from_state_code
 AND tgt.to_state_code   = src.to_state_code
@@ -4076,6 +5049,46 @@ GO
 CREATE NONCLUSTERED INDEX IX_inbound_receipts_line
 ON deliveries.inbound_receipts(inbound_line_id)
 INCLUDE (received_qty, received_at);
+GO
+
+USE PW_Core_DEV;
+GO
+
+/* ============================================================
+   View: deliveries.vw_inbounds_activatable
+   ------------------------------------------------------------
+   Returns inbound deliveries eligible for activation.
+
+   Criteria:
+   - Status = 'EXP' (Expected — not yet activated)
+   - Has at least one inbound line
+   
+   Used by:
+   - CLI: ActivateInboundScreen.RenderList()
+   - Application: IInboundQueryRepository.GetActivatableInbounds()
+
+   Columns match SqlInboundQueryRepository.GetActivatableInbounds()
+   ordinal read: inbound_id(0), inbound_ref(1),
+                 expected_arrival_at(2), line_count(3)
+   ============================================================ */
+CREATE OR ALTER VIEW deliveries.vw_inbounds_activatable
+AS
+SELECT
+    d.inbound_id,
+    d.inbound_ref,
+    d.expected_arrival_at,
+    COUNT(l.inbound_line_id)  AS line_count
+
+FROM deliveries.inbound_deliveries d
+JOIN deliveries.inbound_lines l
+    ON l.inbound_id = d.inbound_id
+
+WHERE d.inbound_status_code = 'EXP'
+
+GROUP BY
+    d.inbound_id,
+    d.inbound_ref,
+    d.expected_arrival_at;
 GO
 
 CREATE OR ALTER VIEW deliveries.vw_inbound_lines_receivable
@@ -4257,40 +5270,6 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER VIEW deliveries.vw_inbounds_activatable
-AS
-SELECT
-    d.inbound_id,
-    d.inbound_ref,
-    d.expected_arrival_at,
-    d.inbound_status_code,
-    COUNT(l.inbound_line_id) AS line_count
-FROM deliveries.inbound_deliveries d
-JOIN deliveries.inbound_lines l
-    ON l.inbound_id = d.inbound_id
-WHERE
-    d.inbound_status_code = 'EXP'
-    AND l.line_state_code <> 'CNL'
-GROUP BY
-    d.inbound_id,
-    d.inbound_ref,
-    d.expected_arrival_at,
-    d.inbound_status_code;
-GO
-
-/* ============================================================
-   deliveries.usp_receive_inbound_line
-   ------------------------------------------------------------
-   SSCC-aware receiving procedure.
-
-   Supports:
-   - SSCC-based receiving (pre-advised)  => no split
-   - Manual quantity receiving (non-SSCC)
-
-   Returns a single row:
-       success_bit  BIT
-       error_code   NVARCHAR(20)
-   ============================================================ */
 CREATE OR ALTER PROCEDURE deliveries.usp_receive_inbound_line
 (
     -- Manual mode
@@ -4299,11 +5278,11 @@ CREATE OR ALTER PROCEDURE deliveries.usp_receive_inbound_line
 
     @staging_bin_code           NVARCHAR(100),
 
-    -- SSCC mode (authoritative)
+    -- SSCC mode
     @inbound_expected_unit_id   INT = NULL,
     @claim_token                UNIQUEIDENTIFIER = NULL,
 
-    -- Optional fields (manual mode can supply; SSCC resolves from expected unit)
+    -- Optional fields
     @external_ref               NVARCHAR(100) = NULL,
     @batch_number               NVARCHAR(100) = NULL,
     @best_before_date           DATE = NULL,
@@ -4319,22 +5298,24 @@ BEGIN
     EXEC sys.sp_set_session_context @key = N'user_id',    @value = @user_id;
     EXEC sys.sp_set_session_context @key = N'session_id', @value = @session_id;
 
+    DECLARE @is_closed BIT = 0;
+
     BEGIN TRY
         BEGIN TRAN;
 
-        /* --------------------------------------------------------
-           1) Validate staging bin input
-        -------------------------------------------------------- */
+        /* -------------------------------------------------------- */
+        /* 1) Validate staging bin                                  */
+        /* -------------------------------------------------------- */
         IF NULLIF(LTRIM(RTRIM(@staging_bin_code)), N'') IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL07';
+            SELECT CAST(0 AS BIT), N'ERRINBL07', NULL, NULL, NULL;
             ROLLBACK;
             RETURN;
         END
 
-        /* --------------------------------------------------------
-           2) Determine mode
-        -------------------------------------------------------- */
+        /* -------------------------------------------------------- */
+        /* 2) Determine mode                                        */
+        /* -------------------------------------------------------- */
         DECLARE @is_sscc_mode BIT =
             CASE WHEN @inbound_expected_unit_id IS NOT NULL THEN 1 ELSE 0 END;
 
@@ -4344,29 +5325,31 @@ BEGIN
             @inbound_id            INT = NULL,
             @expected_qty          INT = NULL,
             @already_received      INT = NULL,
-            @line_state            VARCHAR(3) = NULL,
-            @header_status         VARCHAR(3) = NULL,
-            @expected_unit_qty     INT = NULL,
-            @existing_received_id  INT = NULL,
+            @line_state            VARCHAR(3),
+            @header_status         VARCHAR(3),
+            @expected_unit_qty     INT,
+            @existing_received_id  INT,
             @now                   DATETIME2(3) = SYSUTCDATETIME(),
-            @claim_expires_at      DATETIME2(3) = NULL,
-            @db_claim_token        UNIQUEIDENTIFIER = NULL,
-            @claimed_session_id    UNIQUEIDENTIFIER = NULL;
+            @claim_expires_at      DATETIME2(3),
+            @db_claim_token        UNIQUEIDENTIFIER,
+            @claimed_session_id    UNIQUEIDENTIFIER,
+            @new_received_qty      INT,
+            @new_line_state        VARCHAR(3),
+            @receipt_id            INT,
+            @arrival_status_code   VARCHAR(2); 
 
-        /* ========================================================
-           SSCC MODE
-        ======================================================== */
+        /* ======================================================== */
+        /* SSCC MODE                                                */
+        /* ======================================================== */
         IF @is_sscc_mode = 1
         BEGIN
-            -- 1) Protocol guards (cheap checks first)
             IF @session_id IS NULL OR @claim_token IS NULL
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRPROC02';
+                SELECT CAST(0 AS BIT), N'ERRPROC02', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
-            -- 2) Lock and load the expected unit row (single source of truth)
             SELECT
                 @resolved_line_id     = eu.inbound_line_id,
                 @expected_unit_qty    = eu.expected_quantity,
@@ -4382,209 +5365,111 @@ BEGIN
 
             IF @resolved_line_id IS NULL
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRSSCC01';
+                SELECT CAST(0 AS BIT), N'ERRSSCC01', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
             IF @existing_received_id IS NOT NULL
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRSSCC06';
+                SELECT CAST(0 AS BIT), N'ERRSSCC06', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
-            -- 3) Self-heal expired claims (under the same lock)
-            IF @claim_expires_at IS NOT NULL
-               AND @claim_expires_at <= @now
+            IF @claim_expires_at IS NOT NULL AND @claim_expires_at <= @now
             BEGIN
-                UPDATE deliveries.inbound_expected_units
-                SET expected_unit_state_code = 'EXP',
-                    claimed_session_id = NULL,
-                    claimed_by_user_id = NULL,
-                    claimed_at = NULL,
-                    claim_expires_at = NULL,
-                    claim_token = NULL
-                WHERE inbound_expected_unit_id = @inbound_expected_unit_id
-                  AND received_inventory_unit_id IS NULL;
-
-                -- After self-heal, the confirm must fail (force re-preview).
-                -- This is the correct UX: "claim expired, rescan".
-                SELECT CAST(0 AS BIT), N'ERRSSCC08';
+                SELECT CAST(0 AS BIT), N'ERRSSCC08', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
-            -- 4) Claim must match this session + token and be unexpired
-            IF @claimed_session_id IS NULL
-               OR @claim_expires_at IS NULL
-               OR @claimed_session_id <> @session_id
+            IF @claimed_session_id <> @session_id
                OR @db_claim_token <> @claim_token
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRSSCC08';
+                SELECT CAST(0 AS BIT), N'ERRSSCC08', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
-            -- 5) Force HU quantity
             SET @received_qty = @expected_unit_qty;
         END
         ELSE
         BEGIN
-            /* ========================================================
-               MANUAL MODE
-            ======================================================== */
-
             SET @resolved_line_id = @inbound_line_id;
 
             IF @resolved_line_id IS NULL
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRINBL01';
+                SELECT CAST(0 AS BIT), N'ERRINBL01', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
 
             IF @received_qty IS NULL OR @received_qty <= 0
             BEGIN
-                SELECT CAST(0 AS BIT), N'ERRINBL06';
+                SELECT CAST(0 AS BIT), N'ERRINBL06', NULL, NULL, NULL;
                 ROLLBACK;
                 RETURN;
             END
         END
 
-        /* --------------------------------------------------------
-           4) Lock and resolve line
-        -------------------------------------------------------- */
+        /* -------------------------------------------------------- */
+        /* 3) Resolve line                                          */
+        /* -------------------------------------------------------- */
         SELECT
             @sku_id           = l.sku_id,
             @inbound_id       = l.inbound_id,
             @expected_qty     = l.expected_qty,
             @already_received = ISNULL(l.received_qty, 0),
-            @line_state       = l.line_state_code
+            @line_state       = l.line_state_code,
+            @arrival_status_code  = l.arrival_stock_status_code 
         FROM deliveries.inbound_lines l WITH (UPDLOCK, HOLDLOCK)
         WHERE l.inbound_line_id = @resolved_line_id;
 
-        IF @sku_id IS NULL
-        BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL01';
-            ROLLBACK;
-            RETURN;
-        END
-
-        IF @line_state = 'CNL'
-        BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL08';
-            ROLLBACK;
-            RETURN;
-        END
-
         IF (@already_received + @received_qty) > @expected_qty
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL02';
+            SELECT CAST(0 AS BIT), N'ERRINBL02', NULL, NULL, NULL;
             ROLLBACK;
             RETURN;
         END
 
-        /* --------------------------------------------------------
-           5) Validate header
-        -------------------------------------------------------- */
-        SELECT @header_status = d.inbound_status_code
-        FROM deliveries.inbound_deliveries d WITH (UPDLOCK, HOLDLOCK)
-        WHERE d.inbound_id = @inbound_id;
-
-        IF @header_status IS NULL
-        BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINB01';
-            ROLLBACK;
-            RETURN;
-        END
-
-        IF @header_status NOT IN ('ACT','RCV')
-        BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL04';
-            ROLLBACK;
-            RETURN;
-        END
-
-        /* --------------------------------------------------------
-           6) Resolve bin
-        -------------------------------------------------------- */
-        DECLARE @staging_bin_id INT;
-
-        SELECT @staging_bin_id = b.bin_id
-        FROM locations.bins b
-        WHERE b.bin_code = @staging_bin_code
-          AND b.is_active = 1;
-
-        IF @staging_bin_id IS NULL
-        BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL05';
-            ROLLBACK;
-            RETURN;
-        END
-
-        /* --------------------------------------------------------
-           7) Create inventory unit
-        -------------------------------------------------------- */
+        /* -------------------------------------------------------- */
+        /* 4) Create inventory unit                                 */
+        /* -------------------------------------------------------- */
         DECLARE @inventory_unit_id INT;
 
         INSERT INTO inventory.inventory_units
         (
-            sku_id,
-            external_ref,
-            batch_number,
-            best_before_date,
-            quantity,
-            stock_state_code,
-            stock_status_code,
-            created_at,
-            created_by
+            sku_id, external_ref, batch_number, best_before_date,
+            quantity, stock_state_code, stock_status_code,
+            created_at, created_by
         )
         VALUES
         (
-            @sku_id,
-            @external_ref,
-            @batch_number,
-            @best_before_date,
-            @received_qty,
-            'RCD',
-            'AV',
-            SYSUTCDATETIME(),
-            @user_id
+            @sku_id, @external_ref, @batch_number, @best_before_date,
+            @received_qty, 'RCD', @arrival_status_code,
+            SYSUTCDATETIME(), @user_id
         );
 
         SET @inventory_unit_id = SCOPE_IDENTITY();
 
-        /* --------------------------------------------------------
-           8) Mark expected unit received (SSCC mode)
-        -------------------------------------------------------- */
-        IF @is_sscc_mode = 1
-        BEGIN
-            UPDATE deliveries.inbound_expected_units
-            SET received_inventory_unit_id = @inventory_unit_id,
-                expected_unit_state_code   = 'RCV',
-                claimed_session_id         = NULL,
-                claimed_by_user_id         = NULL,
-                claimed_at                 = NULL,
-                claim_expires_at           = NULL,
-                claim_token                = NULL
-            WHERE inbound_expected_unit_id = @inbound_expected_unit_id
-              AND received_inventory_unit_id IS NULL
-              AND claimed_session_id = @session_id
-              AND claim_token = @claim_token
-              AND claim_expires_at > @now;
+        /* -------------------------------------------------------- */
+        /* 4b) Place unit in staging bin                            */
+        /* -------------------------------------------------------- */
+        DECLARE @staging_bin_id INT;
 
-            IF @@ROWCOUNT = 0
-            BEGIN
-                SELECT CAST(0 AS BIT), N'ERRSSCC08';
-                ROLLBACK;
-                RETURN;
-            END
+        SELECT @staging_bin_id = bin_id
+        FROM locations.bins
+        WHERE bin_code = @staging_bin_code
+          AND is_active = 1;
+
+        IF @staging_bin_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBL08', NULL, NULL, NULL;
+            ROLLBACK;
+            RETURN;
         END
 
-        /* --------------------------------------------------------
-           9) Placement
-        -------------------------------------------------------- */
         INSERT INTO inventory.inventory_placements
         (
             inventory_unit_id,
@@ -4600,9 +5485,46 @@ BEGIN
             @user_id
         );
 
-        /* --------------------------------------------------------
-           10) Receipt record
-        -------------------------------------------------------- */
+        /* -------------------------------------------------------- */
+        /* 5) Update expected unit                                  */
+        /* -------------------------------------------------------- */
+        IF @is_sscc_mode = 1
+        BEGIN
+            UPDATE deliveries.inbound_expected_units
+            SET received_inventory_unit_id = @inventory_unit_id,
+                expected_unit_state_code   = 'RCV'
+            WHERE inbound_expected_unit_id = @inbound_expected_unit_id;
+        END
+
+        /* -------------------------------------------------------- */
+        /* 6) Update line                                           */
+        /* -------------------------------------------------------- */
+        SET @new_received_qty = @already_received + @received_qty;
+
+        SET @new_line_state =
+            CASE
+                WHEN @new_received_qty < @expected_qty THEN 'PRC'
+                ELSE 'RCV'
+            END;
+
+        UPDATE deliveries.inbound_lines
+        SET
+            received_qty    = @new_received_qty,
+            line_state_code = @new_line_state,
+            updated_at      = SYSUTCDATETIME(),
+            updated_by      = @user_id
+        WHERE inbound_line_id = @resolved_line_id;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBL_UPDATE_MISS', @resolved_line_id, NULL, NULL;
+            ROLLBACK;
+            RETURN;
+        END
+
+        /* -------------------------------------------------------- */
+        /* 6.5) Receipt record (CRITICAL TRACEABILITY)              */
+        /* -------------------------------------------------------- */
         INSERT INTO deliveries.inbound_receipts
         (
             inbound_line_id,
@@ -4624,9 +5546,11 @@ BEGIN
             @session_id
         );
 
-        /* --------------------------------------------------------
-           11) Inventory movement
-        -------------------------------------------------------- */
+        SET @receipt_id = SCOPE_IDENTITY();
+
+        /* -------------------------------------------------------- */
+        /* 6.6) Movement log — inbound receipt                      */
+        /* -------------------------------------------------------- */
         INSERT INTO inventory.inventory_movements
         (
             inventory_unit_id,
@@ -4634,6 +5558,8 @@ BEGIN
             moved_qty,
             from_bin_id,
             to_bin_id,
+            from_state_code,
+            to_state_code,
             from_status_code,
             to_status_code,
             movement_type,
@@ -4648,49 +5574,23 @@ BEGIN
             @inventory_unit_id,
             @sku_id,
             @received_qty,
-            NULL,
+            NULL,           -- no origin bin on first receipt
             @staging_bin_id,
-            NULL,
-            'AV',
-            'RECEIVE',
+            NULL,           -- no prior state
+            'RCD',
+            NULL,           -- no prior status
+            @arrival_status_code,
             'INBOUND',
-            @inbound_id,
+            'RECEIPT',
+            @receipt_id,    -- ← captured from SCOPE_IDENTITY() after receipts insert
             SYSUTCDATETIME(),
             @user_id,
             @session_id
         );
 
-        /* --------------------------------------------------------
-           12) Update line
-        -------------------------------------------------------- */
-        DECLARE @new_received_qty INT = @already_received + @received_qty;
-        DECLARE @new_line_state VARCHAR(3);
-
-        SET @new_line_state =
-            CASE
-                WHEN @new_received_qty < @expected_qty THEN 'PRC'
-                ELSE 'RCV'
-            END;
-
-        UPDATE deliveries.inbound_lines
-        SET received_qty    = @new_received_qty,
-            line_state_code = @new_line_state,
-            updated_at      = SYSUTCDATETIME(),
-            updated_by      = @user_id
-        WHERE inbound_line_id = @resolved_line_id;
-
-        /* --------------------------------------------------------
-           13) Update header
-        -------------------------------------------------------- */
-        IF @header_status = 'ACT'
-        BEGIN
-            UPDATE deliveries.inbound_deliveries
-            SET inbound_status_code = 'RCV',
-                updated_at          = SYSUTCDATETIME(),
-                updated_by          = @user_id
-            WHERE inbound_id = @inbound_id;
-        END
-
+        /* -------------------------------------------------------- */
+        /* 7) Close inbound if fully received                       */
+        /* -------------------------------------------------------- */
         IF NOT EXISTS
         (
             SELECT 1
@@ -4704,29 +5604,35 @@ BEGIN
                 updated_at          = SYSUTCDATETIME(),
                 updated_by          = @user_id
             WHERE inbound_id = @inbound_id;
+
+            SET @is_closed = 1;
         END
 
         COMMIT;
 
-        SELECT CAST(1 AS BIT), N'SUCINBL01';
-        END TRY
-        BEGIN CATCH
-            IF @@TRANCOUNT > 0 ROLLBACK;
+        /* -------------------------------------------------------- */
+        /* FINAL RESULT                                             */
+        /* -------------------------------------------------------- */
+        SELECT
+            CAST(1 AS BIT),
+            N'SUCINBL01',
+            @resolved_line_id,
+            @inbound_id,
+            @is_closed;
 
-            DECLARE @err_no INT = ERROR_NUMBER();
-            DECLARE @err_msg NVARCHAR(2048) = ERROR_MESSAGE();
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
 
-            -- Pass-through our domain THROWs (guards etc.)
-            IF @err_no = 50001 AND @err_msg LIKE N'ERR%'
-            BEGIN
-                SELECT CAST(0 AS BIT), @err_msg;
-                RETURN;
-            END
-
-            SELECT CAST(0 AS BIT), N'ERRINBL99';
-        END CATCH
-    END;
-    GO
+        SELECT
+            CAST(0 AS BIT),
+            N'ERRINBL99',
+            NULL,
+            NULL,
+            NULL;
+    END CATCH
+END;
+GO
 
 CREATE OR ALTER PROCEDURE deliveries.usp_get_inbound_summary
 (
@@ -4783,7 +5689,7 @@ BEGIN
     DECLARE
         @success                  BIT              = 0,
         @result_code              NVARCHAR(20)     = NULL,
-        @inbound_expected_unit_id INT              = NULL,  -- claim key
+        @inbound_expected_unit_id INT              = NULL,
         @inbound_line_id          INT              = NULL,
         @inbound_ref              NVARCHAR(50)     = NULL,
         @header_status            VARCHAR(3)       = NULL,
@@ -4797,31 +5703,28 @@ BEGIN
         @best_before_date         DATE             = NULL,
         @received_inventory_id    INT              = NULL,
 
-        -- expected unit state (NEW)
         @expected_unit_state      VARCHAR(3)       = NULL,
 
-        -- claim fields
         @claimed_session_id       UNIQUEIDENTIFIER = NULL,
         @claimed_by_user_id       INT              = NULL,
         @claim_expires_at         DATETIME2(3)     = NULL,
         @claim_token              UNIQUEIDENTIFIER = NULL,
 
-        @ttl_seconds              INT              = NULL;
+        @ttl_seconds              INT              = NULL,
+        @now                      DATETIME2(3)     = SYSUTCDATETIME();
 
     ----------------------------------------------------------------------
-    -- TTL seconds (operations.settings)
+    -- TTL seconds
     ----------------------------------------------------------------------
     SELECT @ttl_seconds = TRY_CONVERT(INT, s.setting_value)
     FROM operations.settings s
     WHERE s.setting_name = 'inbound.sscc_claim_ttl_seconds';
 
     IF @ttl_seconds IS NULL OR @ttl_seconds <= 0
-        SET @ttl_seconds = 30; -- safe default for DEV
+        SET @ttl_seconds = 30;
 
     ----------------------------------------------------------------------
-    -- 0) Cleanup expired claims (CLM → EXP)
-    --    NOTE: This update will be blocked by guards if they disallow it.
-    --          Your trigger should allow CLM->EXP operational updates.
+    -- 0) Cleanup expired claims (short update, no explicit transaction)
     ----------------------------------------------------------------------
     UPDATE deliveries.inbound_expected_units
     SET expected_unit_state_code = 'EXP',
@@ -4830,16 +5733,15 @@ BEGIN
         claimed_at               = NULL,
         claim_expires_at         = NULL,
         claim_token              = NULL
-    WHERE claim_expires_at <= SYSUTCDATETIME()
+    WHERE claim_expires_at IS NOT NULL
+      AND claim_expires_at < @now
       AND received_inventory_unit_id IS NULL
       AND expected_unit_state_code = 'CLM';
 
-    ----------------------------------------------------------------------
-    -- 1) Resolve + LOCK expected unit row (preview is where we claim)
-    ----------------------------------------------------------------------
     BEGIN TRY
-        BEGIN TRAN;
-
+        ------------------------------------------------------------------
+        -- 1) Resolve expected unit (read-only preview lookup)
+        ------------------------------------------------------------------
         SELECT TOP (1)
             @inbound_line_id          = l.inbound_line_id,
             @inbound_ref              = d.inbound_ref,
@@ -4853,15 +5755,13 @@ BEGIN
             @batch_number             = eu.batch_number,
             @best_before_date         = eu.best_before_date,
             @received_inventory_id    = eu.received_inventory_unit_id,
-
-            @expected_unit_state      = eu.expected_unit_state_code,    -- ✅ NEW
-
+            @expected_unit_state      = eu.expected_unit_state_code,
             @inbound_expected_unit_id = eu.inbound_expected_unit_id,
             @claimed_session_id       = eu.claimed_session_id,
             @claimed_by_user_id       = eu.claimed_by_user_id,
             @claim_expires_at         = eu.claim_expires_at,
             @claim_token              = eu.claim_token
-        FROM deliveries.inbound_expected_units eu WITH (UPDLOCK, ROWLOCK)
+        FROM deliveries.inbound_expected_units eu
         JOIN deliveries.inbound_lines l
             ON eu.inbound_line_id = l.inbound_line_id
         JOIN deliveries.inbound_deliveries d
@@ -4872,20 +5772,18 @@ BEGIN
 
         IF @inbound_line_id IS NULL
         BEGIN
-            ROLLBACK;
             SELECT CAST(0 AS BIT), N'ERRSSCC01',
                    NULL,
-                   NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+                   NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
                    NULL,NULL,NULL,NULL;
             RETURN;
-        END
+        END;
 
         ------------------------------------------------------------------
         -- 2) Already received?
         ------------------------------------------------------------------
         IF @received_inventory_id IS NOT NULL
         BEGIN
-            ROLLBACK;
             SELECT CAST(0 AS BIT), N'ERRSSCC06',
                    @inbound_expected_unit_id,
                    @inbound_line_id,
@@ -4903,14 +5801,13 @@ BEGIN
                    @best_before_date,
                    NULL,NULL,NULL,NULL;
             RETURN;
-        END
+        END;
 
         ------------------------------------------------------------------
         -- 3) Header lifecycle check
         ------------------------------------------------------------------
         IF @header_status NOT IN ('ACT','RCV')
         BEGIN
-            ROLLBACK;
             SELECT CAST(0 AS BIT), N'ERRINBL04',
                    @inbound_expected_unit_id,
                    @inbound_line_id,
@@ -4928,20 +5825,17 @@ BEGIN
                    @best_before_date,
                    NULL,NULL,NULL,NULL;
             RETURN;
-        END
+        END;
 
         ------------------------------------------------------------------
-        -- 4) Claim logic
+        -- 4) Claim logic (STRICT MODE)
         ------------------------------------------------------------------
-        DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
 
-        -- Another-session active claim?
+        -- 4.1 Active claim exists (any session) -> reject
         IF @claimed_session_id IS NOT NULL
            AND @claim_expires_at IS NOT NULL
-           AND @claim_expires_at > @now
-           AND (@session_id IS NULL OR @claimed_session_id <> @session_id)
+           AND @claim_expires_at >= DATEADD(SECOND, -1, @now)
         BEGIN
-            ROLLBACK;
             SELECT CAST(0 AS BIT), N'ERRSSCC07',
                    @inbound_expected_unit_id,
                    @inbound_line_id,
@@ -4959,91 +5853,75 @@ BEGIN
                    @best_before_date,
                    @claimed_session_id, @claimed_by_user_id, @claim_expires_at, @claim_token;
             RETURN;
-        END
+        END;
 
-        -- Same-session active claim already valid? Treat as success; no rewrite required.
-        IF @session_id IS NOT NULL
-           AND @claimed_session_id = @session_id
-           AND @claim_expires_at IS NOT NULL
-           AND @claim_expires_at > @now
-           AND @claim_token IS NOT NULL
+        -- 4.2 Transition validation (EXP -> CLM)
+        IF NOT EXISTS
+        (
+            SELECT 1
+            FROM deliveries.inbound_expected_unit_state_transitions t
+            WHERE t.from_state_code = @expected_unit_state
+              AND t.to_state_code   = 'CLM'
+        )
         BEGIN
-            COMMIT;
-
-            SET @success = 1;
-            SET @result_code = N'SUCSSCC01';
-
-            SELECT
-                @success,
-                @result_code,
-                @inbound_expected_unit_id,
-                @inbound_line_id,
-                @inbound_ref,
-                @header_status,
-                @line_state,
-                @sku_code,
-                @sku_description,
-                @expected_unit_qty,
-                @line_expected_qty,
-                @line_received_qty,
-                (@line_expected_qty - @line_received_qty),
-                (@line_expected_qty - @line_received_qty - @expected_unit_qty),
-                @batch_number,
-                @best_before_date,
-                @claimed_session_id,
-                @claimed_by_user_id,
-                @claim_expires_at,
-                @claim_token;
+            SELECT CAST(0 AS BIT), N'ERRSSCCSTATE01',
+                   @inbound_expected_unit_id,
+                   @inbound_line_id,
+                   @inbound_ref,
+                   @header_status,
+                   @line_state,
+                   @sku_code,
+                   @sku_description,
+                   @expected_unit_qty,
+                   @line_expected_qty,
+                   @line_received_qty,
+                   (@line_expected_qty - @line_received_qty),
+                   (@line_expected_qty - @line_received_qty),
+                   @batch_number,
+                   @best_before_date,
+                   NULL,NULL,NULL,NULL;
             RETURN;
-        END
+        END;
 
-        -- (re)claim for this session if we have one
-        IF @session_id IS NOT NULL
+        -- 4.3 Create NEW claim (no reuse)
+        SET @claim_token      = NEWID();
+        SET @claim_expires_at = DATEADD(SECOND, @ttl_seconds, @now);
+
+        UPDATE deliveries.inbound_expected_units
+        SET expected_unit_state_code = 'CLM',
+            claimed_session_id       = @session_id,
+            claimed_by_user_id       = @user_id,
+            claimed_at               = @now,
+            claim_expires_at         = @claim_expires_at,
+            claim_token              = @claim_token
+        WHERE inbound_expected_unit_id = @inbound_expected_unit_id
+          AND received_inventory_unit_id IS NULL
+          AND (
+                claimed_session_id IS NULL
+                OR claim_expires_at < @now
+              );
+
+        -- 4.4 Race protection
+        IF @@ROWCOUNT = 0
         BEGIN
-            -- ✅ Transition check: current expected unit state -> CLM must be allowed
-            IF NOT EXISTS
-            (
-                SELECT 1
-                FROM deliveries.inbound_expected_unit_state_transitions t
-                WHERE t.from_state_code = @expected_unit_state
-                  AND t.to_state_code   = 'CLM'
-            )
-            BEGIN
-                ROLLBACK;
-                SELECT CAST(0 AS BIT), N'ERRSSCCSTATE01',
-                       @inbound_expected_unit_id,
-                       @inbound_line_id,
-                       @inbound_ref,
-                       @header_status,
-                       @line_state,
-                       @sku_code,
-                       @sku_description,
-                       @expected_unit_qty,
-                       @line_expected_qty,
-                       @line_received_qty,
-                       (@line_expected_qty - @line_received_qty),
-                       (@line_expected_qty - @line_received_qty),
-                       @batch_number,
-                       @best_before_date,
-                       NULL,NULL,NULL,NULL;
-                RETURN;
-            END
-
-            SET @claim_token      = NEWID();
-            SET @claim_expires_at = DATEADD(SECOND, @ttl_seconds, @now);
-
-            UPDATE deliveries.inbound_expected_units
-            SET expected_unit_state_code = 'CLM',
-                claimed_session_id       = @session_id,
-                claimed_by_user_id       = @user_id,
-                claimed_at               = @now,
-                claim_expires_at         = @claim_expires_at,
-                claim_token              = @claim_token
-            WHERE inbound_expected_unit_id = @inbound_expected_unit_id
-              AND received_inventory_unit_id IS NULL;
-        END
-
-        COMMIT;
+            SELECT CAST(0 AS BIT), N'ERRSSCC07',
+                   @inbound_expected_unit_id,
+                   @inbound_line_id,
+                   @inbound_ref,
+                   @header_status,
+                   @line_state,
+                   @sku_code,
+                   @sku_description,
+                   @expected_unit_qty,
+                   @line_expected_qty,
+                   @line_received_qty,
+                   (@line_expected_qty - @line_received_qty),
+                   (@line_expected_qty - @line_received_qty),
+                   @batch_number,
+                   @best_before_date,
+                   NULL,NULL,NULL,NULL;
+            RETURN;
+        END;
 
         ------------------------------------------------------------------
         -- 5) Valid preview
@@ -5075,13 +5953,10 @@ BEGIN
 
     END TRY
     BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK;
-
         DECLARE @err_no   INT = ERROR_NUMBER();
         DECLARE @err_line INT = ERROR_LINE();
         DECLARE @err_msg  NVARCHAR(2048) = ERROR_MESSAGE();
 
-        -- Contract columns 0-19 unchanged; debug extras start at 20+
         SELECT
             CAST(0 AS BIT)      AS success,
             N'ERRSSCC99'        AS result_code,
@@ -5516,4 +6391,1530 @@ REFERENCES warehouse.task_states(state_code);
 CREATE UNIQUE INDEX UX_tasks_open_unit
 ON warehouse.warehouse_tasks (inventory_unit_id)
 WHERE task_state_code IN ('OPN','CLM');
+GO
+
+CREATE OR ALTER PROCEDURE deliveries.usp_reverse_inbound_receipt
+(
+    @receipt_id      INT,
+    @reason_code     NVARCHAR(50) = NULL,
+    @reason_text     NVARCHAR(400) = NULL,
+    @user_id         INT = NULL,
+    @session_id      UNIQUEIDENTIFIER = NULL
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    EXEC sys.sp_set_session_context @key = N'user_id',    @value = @user_id;
+    EXEC sys.sp_set_session_context @key = N'session_id', @value = @session_id;
+
+    DECLARE
+        @inbound_id               INT,
+        @inbound_line_id          INT,
+        @inbound_expected_unit_id INT,
+        @inventory_unit_id        INT,
+        @received_qty             INT,
+        @reversal_receipt_id      INT,
+        @header_reopened          BIT = 0,
+        @old_header_status        VARCHAR(3),
+        @new_header_status        VARCHAR(3);
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+        /* --------------------------------------------------------
+           1) Lock + resolve original receipt
+        -------------------------------------------------------- */
+        SELECT
+            @inbound_line_id          = r.inbound_line_id,
+            @inbound_expected_unit_id = r.inbound_expected_unit_id,
+            @inventory_unit_id        = r.inventory_unit_id,
+            @received_qty             = r.received_qty
+        FROM deliveries.inbound_receipts r WITH (UPDLOCK, HOLDLOCK)
+        WHERE r.receipt_id = @receipt_id
+          AND r.is_reversal = 0;
+
+        IF @inbound_line_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBREV01', NULL, NULL, NULL, NULL, NULL, NULL;
+            ROLLBACK;
+            RETURN;
+        END
+
+        IF EXISTS
+        (
+            SELECT 1
+            FROM deliveries.inbound_receipts
+            WHERE receipt_id = @receipt_id
+              AND reversed_receipt_id IS NOT NULL
+        )
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBREV02', NULL, NULL, @receipt_id, NULL, NULL, NULL;
+            ROLLBACK;
+            RETURN;
+        END
+
+        /* --------------------------------------------------------
+           2) Resolve inbound + header
+        -------------------------------------------------------- */
+        SELECT @inbound_id = inbound_id
+        FROM deliveries.inbound_lines
+        WHERE inbound_line_id = @inbound_line_id;
+
+        SELECT @old_header_status = inbound_status_code
+        FROM deliveries.inbound_deliveries WITH (UPDLOCK, HOLDLOCK)
+        WHERE inbound_id = @inbound_id;
+
+        /* --------------------------------------------------------
+           3) Reverse inventory unit
+        -------------------------------------------------------- */
+        UPDATE inventory.inventory_units
+        SET stock_state_code = 'EXP',
+            updated_at       = SYSUTCDATETIME(),
+            updated_by       = @user_id
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBREV03', @inbound_id, @inbound_line_id, @receipt_id, NULL, @inventory_unit_id, NULL;
+            ROLLBACK;
+            RETURN;
+        END
+
+        /* --------------------------------------------------------
+           4) Restore expected unit (SSCC mode)
+        -------------------------------------------------------- */
+        IF @inbound_expected_unit_id IS NOT NULL
+        BEGIN
+            UPDATE deliveries.inbound_expected_units
+            SET received_inventory_unit_id = NULL,
+                expected_unit_state_code   = 'EXP',
+                claimed_session_id         = NULL,
+                claimed_by_user_id         = NULL,
+                claimed_at                 = NULL,
+                claim_expires_at           = NULL,
+                claim_token                = NULL,
+                updated_at                 = SYSUTCDATETIME(),
+                updated_by                 = @user_id
+            WHERE inbound_expected_unit_id = @inbound_expected_unit_id;
+        END
+
+        /* --------------------------------------------------------
+           5) Insert reversal receipt
+        -------------------------------------------------------- */
+        INSERT INTO deliveries.inbound_receipts
+        (
+            inbound_line_id,
+            inbound_expected_unit_id,
+            inventory_unit_id,
+            received_qty,
+            received_by_user_id,
+            session_id,
+            received_at,
+            is_reversal,
+            reversed_receipt_id
+        )
+        VALUES
+        (
+            @inbound_line_id,
+            @inbound_expected_unit_id,
+            @inventory_unit_id,
+            @received_qty,
+            @user_id,
+            @session_id,
+            SYSUTCDATETIME(),
+            1,
+            @receipt_id
+        );
+
+        SET @reversal_receipt_id = SCOPE_IDENTITY();
+
+        /* --------------------------------------------------------
+           6) Mark original receipt reversed
+        -------------------------------------------------------- */
+        UPDATE deliveries.inbound_receipts
+        SET reversed_receipt_id = @reversal_receipt_id
+        WHERE receipt_id = @receipt_id;
+
+        /* --------------------------------------------------------
+           7) Recompute line (🔥 correct aggregation)
+        -------------------------------------------------------- */
+        UPDATE l
+        SET
+            received_qty =
+            (
+                SELECT ISNULL(SUM(
+                    CASE 
+                        WHEN r.is_reversal = 0 THEN r.received_qty
+                        ELSE -r.received_qty
+                    END), 0)
+                FROM deliveries.inbound_receipts r
+                WHERE r.inbound_line_id = l.inbound_line_id
+            ),
+            line_state_code =
+            CASE
+                WHEN (
+                    SELECT ISNULL(SUM(
+                        CASE 
+                            WHEN r.is_reversal = 0 THEN r.received_qty
+                            ELSE -r.received_qty
+                        END), 0)
+                    FROM deliveries.inbound_receipts r
+                    WHERE r.inbound_line_id = l.inbound_line_id
+                ) = 0 THEN 'EXP'
+
+                WHEN (
+                    SELECT ISNULL(SUM(
+                        CASE 
+                            WHEN r.is_reversal = 0 THEN r.received_qty
+                            ELSE -r.received_qty
+                        END), 0)
+                    FROM deliveries.inbound_receipts r
+                    WHERE r.inbound_line_id = l.inbound_line_id
+                ) < l.expected_qty THEN 'PRC'
+
+                ELSE 'RCV'
+            END,
+            updated_at = SYSUTCDATETIME(),
+            updated_by = @user_id
+        FROM deliveries.inbound_lines l
+        WHERE l.inbound_line_id = @inbound_line_id;
+
+        /* --------------------------------------------------------
+           8) Recompute header
+        -------------------------------------------------------- */
+
+        -- Default
+        SET @new_header_status = 'ACT';
+
+        IF EXISTS
+        (
+            SELECT 1
+            FROM deliveries.inbound_lines
+            WHERE inbound_id = @inbound_id
+              AND line_state_code IN ('PRC','RCV')
+        )
+            SET @new_header_status = 'RCV';
+
+        IF NOT EXISTS
+        (
+            SELECT 1
+            FROM deliveries.inbound_lines
+            WHERE inbound_id = @inbound_id
+              AND line_state_code NOT IN ('RCV','CNL')
+        )
+            SET @new_header_status = 'CLS';
+
+        UPDATE deliveries.inbound_deliveries
+        SET inbound_status_code = @new_header_status,
+            updated_at          = SYSUTCDATETIME(),
+            updated_by          = @user_id
+        WHERE inbound_id = @inbound_id;
+
+        IF @old_header_status = 'CLS' AND @new_header_status <> 'CLS'
+            SET @header_reopened = 1;
+
+        COMMIT;
+
+        /* --------------------------------------------------------
+           FINAL RESULT (STRICT CONTRACT)
+        -------------------------------------------------------- */
+        SELECT
+            CAST(1 AS BIT),
+            N'SUCINBREV01',
+            @inbound_id,
+            @inbound_line_id,
+            @receipt_id,
+            @reversal_receipt_id,
+            @inventory_unit_id,
+            @header_reopened;
+
+    END TRY
+    BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK;
+
+    DECLARE @err_no INT = ERROR_NUMBER();
+    DECLARE @err_msg NVARCHAR(2048) = ERROR_MESSAGE();
+
+    SELECT 
+        CAST(0 AS BIT),
+        N'ERRINBREV99',
+        @err_no, 
+        @err_msg,
+        @receipt_id;
+
+    RETURN;
+END CATCH
+END;
+GO
+
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @OutputId INT;
+/* ========================================================
+   AUDIT FOUNDATION (CLEAN BOOTSTRAP)
+======================================================== */
+
+----------------------------------------------------------
+-- 1. EVENT CATALOG
+----------------------------------------------------------
+IF OBJECT_ID('audit.event_catalog') IS NULL
+BEGIN
+    CREATE TABLE audit.event_catalog
+    (
+        event_name NVARCHAR(200) PRIMARY KEY,
+        description NVARCHAR(500) NOT NULL,
+        is_active BIT NOT NULL DEFAULT 1
+    );
+END;
+
+----------------------------------------------------------
+-- 2. EVENT CATALOG SEED
+----------------------------------------------------------
+INSERT INTO audit.event_catalog (event_name, description)
+SELECT v.event_name, v.description
+FROM (VALUES
+
+    ('auth.login', 'User login attempt'),
+    ('auth.password.changed', 'User password updated'),
+
+    ('user.created', 'User account created'),
+    ('user.status.updated', 'User enabled or disabled'),
+    ('user.password.reset', 'Admin password reset'),
+
+    ('session.created', 'Session started'),
+    ('session.touched', 'Session activity recorded'),
+    ('session.ended', 'Session ended'),
+    ('session.logout', 'User logout'),
+
+    ('system.setting.updated', 'System configuration updated'),
+    ('system.error.occurred', 'Unhandled system error'),
+
+    ('trace.session', 'Session trace heartbeat'),
+    ('trace.action', 'Generic trace action')
+
+) v(event_name, description)
+WHERE NOT EXISTS (
+    SELECT 1 FROM audit.event_catalog e WHERE e.event_name = v.event_name
+);
+
+----------------------------------------------------------
+-- 3. RESULT CODE TABLE
+----------------------------------------------------------
+IF OBJECT_ID('audit.event_result_codes') IS NULL
+BEGIN
+    CREATE TABLE audit.event_result_codes
+    (
+        event_name NVARCHAR(200) NOT NULL,
+        result_code NVARCHAR(50) NOT NULL,
+        PRIMARY KEY (event_name, result_code),
+        FOREIGN KEY (event_name) REFERENCES audit.event_catalog(event_name)
+    );
+END;
+
+----------------------------------------------------------
+-- 4. RESULT CODE SEED (ALL DOMAINS)
+----------------------------------------------------------
+INSERT INTO audit.event_result_codes (event_name, result_code)
+SELECT v.event_name, v.result_code
+FROM (VALUES
+
+    -- auth.login
+    ('auth.login', 'SUCCESS'),
+    ('auth.login', 'INVALID_PASSWORD'),
+    ('auth.login', 'USER_DISABLED'),
+    ('auth.login', 'USER_LOCKED'),
+    ('auth.login', 'USER_TERMINAL_LOCK'),
+    ('auth.login', 'ALREADY_LOGGED_IN'),
+    ('auth.login', 'PASSWORD_CHANGE_REQUIRED'),
+    ('auth.login', 'ERROR'),
+
+    -- user.created
+    ('user.created', 'SUCCESS'),
+    ('user.created', 'DUPLICATE_USERNAME'),
+    ('user.created', 'DUPLICATE_EMAIL'),
+    ('user.created', 'INVALID_ROLE'),
+    ('user.created', 'ERROR'),
+
+    -- user.status.updated
+    ('user.status.updated', 'SUCCESS'),
+    ('user.status.updated', 'NOT_FOUND'),
+    ('user.status.updated', 'ERROR'),
+
+    -- user.password.reset
+    ('user.password.reset', 'SUCCESS'),
+    ('user.password.reset', 'NOT_FOUND'),
+    ('user.password.reset', 'VALIDATION_FAILED'),
+    ('user.password.reset', 'ERROR'),
+
+    -- session.logout
+    ('session.logout', 'SUCCESS'),
+    ('session.logout', 'NOT_FOUND'),
+    ('session.logout', 'ALREADY_ENDED'),
+    ('session.logout', 'ERROR'),
+
+    -- session.touched
+    ('session.touched', 'SUCCESS'),
+    ('session.touched', 'SESSION_EXPIRED'),
+
+    -- session.ended
+    ('session.ended', 'SUCCESS'),
+
+    -- settings
+    ('system.setting.updated', 'SUCCESS'),
+    ('system.setting.updated', 'VALIDATION_FAILED'),
+    ('system.setting.updated', 'ERROR'),
+
+    -- system error
+    ('system.error.occurred', 'UNHANDLED_EXCEPTION')
+
+) v(event_name, result_code)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM audit.event_result_codes e
+    WHERE e.event_name = v.event_name
+      AND e.result_code = v.result_code
+);
+
+----------------------------------------------------------
+-- 5. FK FROM audit_events → catalog
+----------------------------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_audit_events_event_name'
+)
+BEGIN
+    ALTER TABLE audit.audit_events
+    ADD CONSTRAINT FK_audit_events_event_name
+    FOREIGN KEY (event_name)
+    REFERENCES audit.event_catalog(event_name);
+END;
+
+----------------------------------------------------------
+-- 6. VALIDATION FUNCTION
+----------------------------------------------------------
+IF OBJECT_ID('audit.fn_is_valid_result_code') IS NOT NULL
+    DROP FUNCTION audit.fn_is_valid_result_code;
+GO
+
+CREATE FUNCTION audit.fn_is_valid_result_code
+(
+    @event_name NVARCHAR(200),
+    @result_code NVARCHAR(50)
+)
+RETURNS BIT
+AS
+BEGIN
+    RETURN (
+        SELECT CASE 
+            WHEN EXISTS (
+                SELECT 1
+                FROM audit.event_result_codes
+                WHERE event_name = @event_name
+                  AND result_code = @result_code
+            )
+            THEN 1 ELSE 0 END
+    );
+END;
+GO
+
+----------------------------------------------------------
+-- 7. CHECK CONSTRAINT
+----------------------------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name = 'CK_audit_events_valid_result_code'
+)
+BEGIN
+    ALTER TABLE audit.audit_events
+    ADD CONSTRAINT CK_audit_events_valid_result_code
+    CHECK (audit.fn_is_valid_result_code(event_name, result_code) = 1);
+END;
+
+----------------------------------------------------------
+-- 8. TRACE TABLE
+----------------------------------------------------------
+IF OBJECT_ID('audit.trace_logs') IS NULL
+BEGIN
+    CREATE TABLE audit.trace_logs
+    (
+        trace_id        BIGINT IDENTITY PRIMARY KEY,
+        occurred_at     DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        correlation_id  UNIQUEIDENTIFIER NULL,
+        user_id         INT NULL,
+        session_id      UNIQUEIDENTIFIER NULL,
+        level           NVARCHAR(10) NOT NULL,
+        action          NVARCHAR(200) NOT NULL,
+        payload_json    NVARCHAR(MAX) NULL
+    );
+END;
+
+----------------------------------------------------------
+-- 9. TRACE PROCEDURE
+----------------------------------------------------------
+IF OBJECT_ID('audit.usp_log_trace') IS NOT NULL
+    DROP PROCEDURE audit.usp_log_trace;
+GO
+
+CREATE PROCEDURE audit.usp_log_trace
+(
+    @correlation_id UNIQUEIDENTIFIER = NULL,
+    @user_id        INT = NULL,
+    @session_id     UNIQUEIDENTIFIER = NULL,
+    @level          NVARCHAR(10),
+    @action         NVARCHAR(200),
+    @payload_json   NVARCHAR(MAX) = NULL
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @level  = UPPER(LTRIM(RTRIM(@level)));
+    SET @action = LTRIM(RTRIM(@action));
+
+    IF @level NOT IN ('INFO', 'WARN', 'ERROR')
+        THROW 51001, 'audit.usp_log_trace: invalid level.', 1;
+
+    IF @action IS NULL OR @action = ''
+        THROW 51002, 'audit.usp_log_trace: action is required.', 1;
+
+    IF @payload_json IS NOT NULL AND ISJSON(@payload_json) <> 1
+        THROW 51003, 'audit.usp_log_trace: payload must be valid JSON.', 1;
+
+    INSERT INTO audit.trace_logs
+    (
+        occurred_at,
+        correlation_id,
+        user_id,
+        session_id,
+        level,
+        action,
+        payload_json
+    )
+    VALUES
+    (
+        SYSUTCDATETIME(),
+        @correlation_id,
+        @user_id,
+        @session_id,
+        @level,
+        @action,
+        @payload_json
+    );
+END;
+GO
+
+/* ========================================================
+   EVENT RESULT CODES (IDEMPOTENT INSERT)
+======================================================== */
+
+/* ========================================================
+   EVENT CATALOG TABLE
+======================================================== */
+
+IF OBJECT_ID('audit.event_catalog') IS NULL
+BEGIN
+    CREATE TABLE audit.event_catalog
+    (
+        event_name NVARCHAR(200) PRIMARY KEY,
+        description NVARCHAR(500) NOT NULL,
+        is_active BIT NOT NULL DEFAULT 1
+    );
+END;
+
+/* ========================================================
+   AUTH RESULT MAPPING FUNCTION
+======================================================== */
+
+IF OBJECT_ID('audit.fn_map_auth_result') IS NOT NULL
+    DROP FUNCTION audit.fn_map_auth_result;
+GO
+
+CREATE FUNCTION audit.fn_map_auth_result
+(
+    @result_code NVARCHAR(20)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT
+        event_result_code =
+            CASE
+                WHEN @result_code = 'SUCAUTH01' THEN 'SUCCESS'
+
+                WHEN @result_code = 'ERRAUTH01' THEN 'INVALID_PASSWORD'
+                WHEN @result_code = 'ERRAUTH02' THEN 'USER_DISABLED'
+                WHEN @result_code = 'ERRAUTH05' THEN 'ALREADY_LOGGED_IN'
+                WHEN @result_code = 'ERRAUTH07' THEN 'USER_LOCKED'
+                WHEN @result_code = 'ERRAUTH08' THEN 'USER_TERMINAL_LOCK'
+                WHEN @result_code = 'ERRAUTH09' THEN 'PASSWORD_CHANGE_REQUIRED'
+
+                ELSE 'ERROR'
+            END,
+
+        event_success =
+            CASE
+                WHEN @result_code = 'SUCAUTH01' THEN 1
+                ELSE 0
+            END
+);
+GO
+
+
+/* ========================================================
+   CHECK CONSTRAINT (SAFE ADD)
+======================================================== */
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_audit_events_valid_result_code'
+)
+BEGIN
+    ALTER TABLE audit.audit_events
+    ADD CONSTRAINT CK_audit_events_valid_result_code
+    CHECK (audit.fn_is_valid_result_code(event_name, result_code) = 1);
+END;
+GO
+
+IF OBJECT_ID('audit.fn_map_user_result') IS NOT NULL
+    DROP FUNCTION audit.fn_map_user_result;
+GO
+
+CREATE FUNCTION audit.fn_map_user_result
+(
+    @result_code NVARCHAR(20)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT
+        event_result_code =
+            CASE
+                WHEN @result_code = 'SUCAUTHUSR01' THEN 'SUCCESS'
+                WHEN @result_code = 'ERRAUTHUSR01' THEN 'DUPLICATE_USERNAME'
+                WHEN @result_code = 'ERRAUTHUSR04' THEN 'DUPLICATE_EMAIL'
+                WHEN @result_code = 'ERRAUTHUSR02' THEN 'INVALID_ROLE'
+                WHEN @result_code = 'ERRUSR01' THEN 'NOT_FOUND'
+                WHEN @result_code = 'SUCUSR01' THEN 'SUCCESS'
+                WHEN @result_code = 'ERRAUTH02' THEN 'NOT_FOUND'
+                WHEN @result_code = 'SUCAUTH10' THEN 'SUCCESS'
+                WHEN @result_code LIKE 'ERRAUTH%' THEN 'VALIDATION_FAILED'
+                WHEN @result_code = 'SUCAUTH03' THEN 'SUCCESS'
+                WHEN @result_code = 'ERRAUTH06' THEN 'NOT_FOUND'
+                ELSE 'ERROR'
+            END,
+
+        event_success =
+            CASE
+                WHEN @result_code = 'SUCAUTHUSR01' THEN 1
+                ELSE 0
+            END
+);
+GO
+
+/* ============================================================
+   10. CREATE USER (provisioning)
+   ============================================================*/
+
+CREATE OR ALTER PROCEDURE auth.usp_create_user
+(
+    @username     NVARCHAR(50),
+    @display_name NVARCHAR(100),
+    @role_name    NVARCHAR(100),
+    @email        NVARCHAR(255),
+    @password     NVARCHAR(200),
+
+    @result_code  NVARCHAR(20)  OUTPUT,
+    @friendly_msg NVARCHAR(400) OUTPUT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE
+        @salt        VARBINARY(256),
+        @hash        VARBINARY(512),
+        @actor       INT = TRY_CONVERT(INT, SESSION_CONTEXT(N'user_id')),
+        @session_id  UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, SESSION_CONTEXT(N'session_id')),
+        @correlation_id UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, SESSION_CONTEXT(N'correlation_id')),
+
+        @now         DATETIME2(3) = SYSUTCDATETIME(),
+        @expiry_days INT,
+        @expires_at  DATETIME2(0),
+        @role_id     INT,
+        @new_user_id INT;
+
+    BEGIN TRY
+
+        --------------------------------------------------------
+        -- Username uniqueness
+        --------------------------------------------------------
+        IF EXISTS (SELECT 1 FROM auth.users WHERE username = @username)
+        BEGIN
+            SET @result_code = 'ERRAUTHUSR01';
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Email uniqueness
+        --------------------------------------------------------
+        IF EXISTS (SELECT 1 FROM auth.users WHERE email = @email)
+        BEGIN
+            SET @result_code = 'ERRAUTHUSR04';
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Role validation
+        --------------------------------------------------------
+        SELECT @role_id = id
+        FROM auth.roles
+        WHERE role_name = @role_name;
+
+        IF @role_id IS NULL
+        BEGIN
+            SET @result_code = 'ERRAUTHUSR02';
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
+        -- Password hashing
+        --------------------------------------------------------
+        EXEC auth.sp_hash_password
+             @plain = @password,
+             @salt  = @salt OUTPUT,
+             @hash  = @hash OUTPUT;
+
+        --------------------------------------------------------
+        -- Password expiry
+        --------------------------------------------------------
+        SELECT @expiry_days =
+            TRY_CONVERT(INT, setting_value)
+        FROM operations.settings
+        WHERE setting_name = 'auth.password_expiry_days';
+
+        IF @expiry_days IS NULL OR @expiry_days <= 0
+            SET @expiry_days = 90;
+
+        SET @expires_at = DATEADD(DAY, @expiry_days, @now);
+
+        --------------------------------------------------------
+        -- Insert user
+        --------------------------------------------------------
+        INSERT INTO auth.users
+        (
+            username, display_name, email,
+            password_hash, salt,
+            password_last_changed, password_expires_at,
+            must_change_password,
+            is_active,
+            created_at, created_by
+        )
+        VALUES
+        (
+            @username, @display_name, @email,
+            @hash, @salt,
+            @now, @expires_at,
+            1,
+            1,
+            @now, @actor
+        );
+
+        SET @new_user_id = SCOPE_IDENTITY();
+
+        --------------------------------------------------------
+        -- Role assignment
+        --------------------------------------------------------
+        INSERT INTO auth.user_roles (user_id, role_id)
+        VALUES (@new_user_id, @role_id);
+
+        --------------------------------------------------------
+        -- Success
+        --------------------------------------------------------
+        SET @result_code = 'SUCAUTHUSR01';
+        SELECT @friendly_msg = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+LogAndExit:
+
+        --------------------------------------------------------
+        -- Payload
+        --------------------------------------------------------
+        DECLARE @payload_json NVARCHAR(MAX);
+
+        SET @payload_json = (
+            SELECT
+                @username     AS Username,
+                @role_name    AS Role,
+                @actor        AS PerformedBy,
+                @new_user_id  AS NewUserId,
+                @result_code  AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        --------------------------------------------------------
+        -- Mapping (CENTRALISED)
+        --------------------------------------------------------
+        DECLARE @event_result_code NVARCHAR(50);
+        DECLARE @event_success BIT;
+
+        SELECT
+            @event_result_code = m.event_result_code,
+            @event_success     = m.event_success
+        FROM audit.fn_map_user_result(@result_code) m;
+
+        --------------------------------------------------------
+        -- Audit
+        --------------------------------------------------------
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor,
+            @session_id     = @session_id,
+            @event_name     = 'user.created',
+            @result_code    = @event_result_code,
+            @success        = @event_success,
+            @payload_json   = @payload_json;
+
+    END TRY
+    BEGIN CATCH
+
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+
+        DECLARE @payload_json_error NVARCHAR(MAX);
+
+        SET @payload_json_error = (
+            SELECT
+                @err AS ErrorMessage,
+                @username AS Username
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = @correlation_id,
+            @user_id        = @actor,
+            @session_id     = @session_id,
+            @event_name     = 'system.error.occurred',
+            @result_code    = 'UNHANDLED_EXCEPTION',
+            @success        = 0,
+            @payload_json   = @payload_json_error;
+
+        SET @result_code = 'ERRAUTHUSR03';
+        SELECT @friendly_msg = message_template
+        FROM operations.error_messages
+        WHERE error_code = @result_code;
+
+    END CATCH;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE locations.usp_suggest_putaway_bin
+(
+    @inventory_unit_id INT,
+    @suggested_bin_id INT OUTPUT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE
+        @sku_id INT,
+        @type_id INT,
+        @section_id INT;
+
+    /* --------------------------------------------------------
+       1) Resolve SKU storage preferences
+    -------------------------------------------------------- */
+    SELECT
+        @sku_id = iu.sku_id,
+        @type_id = s.preferred_storage_type_id,
+        @section_id = s.preferred_storage_section_id
+    FROM inventory.inventory_units iu
+    JOIN inventory.skus s
+        ON iu.sku_id = s.sku_id
+    WHERE iu.inventory_unit_id = @inventory_unit_id;
+
+    IF @type_id IS NULL
+        RETURN;
+
+    /* --------------------------------------------------------
+       2) Calculate zone activity (traffic awareness)
+    -------------------------------------------------------- */
+    ;WITH zone_load AS
+    (
+        SELECT
+            b.zone_id,
+
+            /* active putaway tasks */
+            COUNT(DISTINCT t.task_id)
+
+            +
+
+            /* active reservations */
+            COUNT(DISTINCT r.reservation_id)
+
+            AS zone_activity
+
+        FROM locations.bins b
+
+        LEFT JOIN warehouse.warehouse_tasks t
+            ON t.destination_bin_id = b.bin_id
+           AND t.task_state_code IN ('NEW','CLM','ACT')
+
+        LEFT JOIN locations.bin_reservations r
+            ON r.bin_id = b.bin_id
+           AND r.expires_at > SYSUTCDATETIME()
+
+        WHERE b.zone_id IS NOT NULL
+
+        GROUP BY b.zone_id
+    ),
+
+    /* --------------------------------------------------------
+       3) Candidate bins
+    -------------------------------------------------------- */
+    bin_candidates AS
+    (
+        SELECT
+            b.bin_id,
+            b.zone_id,
+            b.capacity,
+
+            /* existing pallets */
+            ISNULL(p.placement_count,0) AS placement_count,
+
+            /* active reservations */
+            ISNULL(r.reservation_count,0) AS reservation_count,
+
+            /* zone traffic */
+            ISNULL(z.zone_activity,0) AS zone_activity
+
+        FROM locations.bins b
+
+        OUTER APPLY
+        (
+            SELECT COUNT(*) AS placement_count
+            FROM inventory.inventory_placements ip
+            WHERE ip.bin_id = b.bin_id
+        ) p
+
+        OUTER APPLY
+        (
+            SELECT COUNT(*) AS reservation_count
+            FROM locations.bin_reservations br
+            WHERE br.bin_id = b.bin_id
+              AND br.expires_at > SYSUTCDATETIME()
+        ) r
+
+        LEFT JOIN zone_load z
+            ON z.zone_id = b.zone_id
+
+        WHERE
+            b.is_active = 1
+            AND b.storage_type_id = @type_id
+            AND (@section_id IS NULL OR b.storage_section_id = @section_id)
+    )
+
+    /* --------------------------------------------------------
+       4) Select best bin
+    -------------------------------------------------------- */
+    SELECT TOP (1)
+        @suggested_bin_id = bin_id
+    FROM bin_candidates
+    WHERE (placement_count + reservation_count) < capacity
+    ORDER BY
+        zone_activity ASC,       -- least busy zone first
+        placement_count ASC,     -- emptier bins preferred
+        NEWID();                 -- random tie break to prevent clustering
+
+END
+GO
+
+CREATE OR ALTER PROCEDURE warehouse.usp_create_putaway_task
+(
+    @inventory_unit_id INT,
+    @user_id INT = NULL,
+    @session_id UNIQUEIDENTIFIER = NULL
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE
+        @sku_id INT,
+        @stock_state VARCHAR(3),
+        @current_bin_id INT,
+        @dest_bin_id INT,
+        @ttl_seconds INT,
+        @expires_at DATETIME2(3),
+        @task_id INT;
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+        -- Resolve inventory unit
+        SELECT
+            @sku_id = sku_id,
+            @stock_state = stock_state_code
+        FROM inventory.inventory_units
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @sku_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), 'ERRTASK01';
+            ROLLBACK;
+            RETURN;
+        END
+
+        -- Must be in RECEIVED state
+        IF @stock_state <> 'RCD'
+        BEGIN
+            SELECT CAST(0 AS BIT), 'ERRTASK02';
+            ROLLBACK;
+            RETURN;
+        END
+
+        -- Resolve current placement
+        SELECT @current_bin_id = bin_id
+        FROM inventory.inventory_placements
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @current_bin_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), 'ERRTASK03';
+            ROLLBACK;
+            RETURN;
+        END
+
+        -- Prevent duplicate tasks
+        IF EXISTS (
+            SELECT 1
+            FROM warehouse.warehouse_tasks
+            WHERE inventory_unit_id = @inventory_unit_id
+            AND task_state_code IN ('OPN','CLM')
+        )
+        BEGIN
+            SELECT CAST(0 AS BIT), 'ERRTASK05';
+            ROLLBACK;
+            RETURN;
+        END
+
+        -- Suggest destination bin
+        EXEC locations.usp_suggest_putaway_bin
+            @inventory_unit_id = @inventory_unit_id,
+            @suggested_bin_id = @dest_bin_id OUTPUT;
+
+        IF @dest_bin_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), 'ERRTASK04';
+            ROLLBACK;
+            RETURN;
+        END
+
+        -- Load TTL from settings
+        SELECT @ttl_seconds =
+            TRY_CONVERT(INT, setting_value)
+        FROM operations.settings
+        WHERE setting_name = 'warehouse.putaway_task_ttl_seconds';
+
+        IF @ttl_seconds IS NULL OR @ttl_seconds <= 0
+            SET @ttl_seconds = 300;
+
+        SET @expires_at = DATEADD(SECOND, @ttl_seconds, SYSUTCDATETIME());
+
+        -- Create task
+        INSERT INTO warehouse.warehouse_tasks
+        (
+            task_type_code,
+            inventory_unit_id,
+            source_bin_id,
+            destination_bin_id,
+            task_state_code,
+            expires_at,
+            created_by
+        )
+        VALUES
+        (
+            'PUTAWAY',
+            @inventory_unit_id,
+            @current_bin_id,
+            @dest_bin_id,
+            'OPN',
+            @expires_at,
+            @user_id
+        );
+
+        SET @task_id = SCOPE_IDENTITY();
+
+        COMMIT;
+
+        SELECT
+            CAST(1 AS BIT) AS success,
+            'SUCTASK01' AS result_code,
+            @task_id AS task_id,
+            @dest_bin_id AS destination_bin_id;
+
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        SELECT CAST(0 AS BIT), 'ERRTASK99';
+    END CATCH
+END;
+GO
+
+CREATE OR ALTER PROCEDURE warehouse.usp_putaway_create_task_for_unit
+(
+    @inventory_unit_id INT,
+    @user_id           INT,
+    @session_id        UNIQUEIDENTIFIER
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE
+        @task_id INT,
+        @dest_bin_id INT,
+        @dest_bin_code NVARCHAR(100),
+        @source_bin_id INT,
+        @ttl_seconds INT,
+        @expires_at DATETIME2(3),
+        @sku_id INT,
+        @state_code VARCHAR(3);
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+    ------------------------------------------------------------
+    -- 1. Validate inventory unit
+    ------------------------------------------------------------
+        SELECT
+            @sku_id = sku_id,
+            @state_code = stock_state_code
+        FROM inventory.inventory_units
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @sku_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK01';
+            ROLLBACK;
+            RETURN;
+        END
+
+        IF @state_code <> 'RCD'
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK02';
+            ROLLBACK;
+            RETURN;
+        END
+
+    ------------------------------------------------------------
+    -- 2. Resolve current placement
+    ------------------------------------------------------------
+        SELECT
+            @source_bin_id = bin_id
+        FROM inventory.inventory_placements
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @source_bin_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK03';
+            ROLLBACK;
+            RETURN;
+        END
+
+    ------------------------------------------------------------
+    -- 3. Detect existing open task (idempotency)
+    ------------------------------------------------------------
+        SELECT TOP (1)
+            @task_id = task_id,
+            @dest_bin_id = destination_bin_id
+        FROM warehouse.warehouse_tasks
+        WHERE inventory_unit_id = @inventory_unit_id
+        AND task_state_code IN ('OPN','CLM')
+        ORDER BY created_at DESC;
+
+        IF @task_id IS NOT NULL
+        BEGIN
+            SELECT @dest_bin_code = bin_code
+            FROM locations.bins
+            WHERE bin_id = @dest_bin_id;
+
+            COMMIT;
+
+            SELECT
+                CAST(1 AS BIT),
+                N'SUCTASK01',
+                @task_id,
+                @dest_bin_code;
+
+            RETURN;
+        END
+
+    ------------------------------------------------------------
+    -- 4. Suggest destination bin
+    ------------------------------------------------------------
+        EXEC locations.usp_suggest_putaway_bin
+            @inventory_unit_id = @inventory_unit_id,
+            @suggested_bin_id = @dest_bin_id OUTPUT;
+
+        IF @dest_bin_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK04';
+            ROLLBACK;
+            RETURN;
+        END
+
+        SELECT
+            @dest_bin_code = bin_code
+        FROM locations.bins
+        WHERE bin_id = @dest_bin_id;
+
+    ------------------------------------------------------------
+    -- 5. Resolve TTL from settings
+    ------------------------------------------------------------
+        SELECT
+            @ttl_seconds = TRY_CAST(setting_value AS INT)
+        FROM operations.settings
+        WHERE setting_name = 'warehouse.putaway_task_ttl_seconds';
+
+        IF @ttl_seconds IS NULL
+            SET @ttl_seconds = 300;
+
+        SET @expires_at =
+            DATEADD(SECOND, @ttl_seconds, SYSUTCDATETIME());
+
+    ------------------------------------------------------------
+    -- 6. Insert warehouse task
+    ------------------------------------------------------------
+        INSERT INTO warehouse.warehouse_tasks
+        (
+            task_type_code,
+            inventory_unit_id,
+            source_bin_id,
+            destination_bin_id,
+            task_state_code,
+            expires_at,
+            created_by
+        )
+        VALUES
+        (
+            'PUTAWAY',
+            @inventory_unit_id,
+            @source_bin_id,
+            @dest_bin_id,
+            'OPN',
+            @expires_at,
+            @user_id
+        );
+
+        SET @task_id = SCOPE_IDENTITY();
+
+    ------------------------------------------------------------
+    -- 7. Create bin reservation
+    ------------------------------------------------------------
+        INSERT INTO locations.bin_reservations
+        (
+            bin_id,
+            reservation_type,
+            reserved_by,
+            expires_at
+        )
+        VALUES
+        (
+            @dest_bin_id,
+            'PUTAWAY',
+            @user_id,
+            @expires_at
+        );
+
+    ------------------------------------------------------------
+    -- 8. Success
+    ------------------------------------------------------------
+        COMMIT;
+
+        SELECT
+            CAST(1 AS BIT),
+            N'SUCTASK01',
+            @task_id,
+            @dest_bin_code;
+
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK;
+
+        SELECT
+            CAST(0 AS BIT),
+            N'ERRTASK99';
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE warehouse.usp_putaway_confirm_task
+(
+    @task_id         INT,
+    @scanned_bin_code NVARCHAR(100),   -- ← new: what the operator actually scanned
+    @user_id         INT,
+    @session_id      UNIQUEIDENTIFIER
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE
+        @inventory_unit_id  INT,
+        @source_bin_id      INT,
+        @dest_bin_id        INT,
+        @dest_bin_code      NVARCHAR(100),
+        @sku_id             INT,
+        @quantity           INT,
+        @task_state         VARCHAR(3),
+        @scanned_bin_id     INT,
+        @bin_capacity       INT,
+        @bin_active         BIT,
+        @current_placements INT,
+        @active_reservations INT,
+        @now                DATETIME2(3) = SYSUTCDATETIME();
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+        ------------------------------------------------------------
+        -- 1. Lock and resolve task
+        ------------------------------------------------------------
+        SELECT
+            @inventory_unit_id = inventory_unit_id,
+            @source_bin_id     = source_bin_id,
+            @dest_bin_id       = destination_bin_id,
+            @task_state        = task_state_code
+        FROM warehouse.warehouse_tasks WITH (UPDLOCK, HOLDLOCK)
+        WHERE task_id = @task_id;
+
+        IF @inventory_unit_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK01';
+            ROLLBACK;
+            RETURN;
+        END
+
+        IF @task_state NOT IN ('OPN', 'CLM')
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK07';
+            ROLLBACK;
+            RETURN;
+        END
+
+        ------------------------------------------------------------
+        -- 2. Resolve destination bin code (for comparison)
+        ------------------------------------------------------------
+        SELECT
+            @dest_bin_code = bin_code
+        FROM locations.bins
+        WHERE bin_id = @dest_bin_id;
+
+        ------------------------------------------------------------
+        -- 3. Check scanned bin matches reserved destination
+        ------------------------------------------------------------
+        IF LTRIM(RTRIM(@scanned_bin_code)) <> LTRIM(RTRIM(@dest_bin_code))
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK08';
+            ROLLBACK;
+            RETURN;
+        END
+
+        ------------------------------------------------------------
+        -- 4. Re-validate destination bin still available
+        --    (capacity check at confirm time)
+        ------------------------------------------------------------
+        SELECT
+            @scanned_bin_id      = bin_id,
+            @bin_capacity        = capacity,
+            @bin_active          = is_active
+        FROM locations.bins
+        WHERE bin_id = @dest_bin_id;
+
+        IF @bin_active = 0
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK09';
+            ROLLBACK;
+            RETURN;
+        END
+
+        SELECT @current_placements = COUNT(*)
+        FROM inventory.inventory_placements
+        WHERE bin_id = @dest_bin_id;
+
+        SELECT @active_reservations = COUNT(*)
+        FROM locations.bin_reservations
+        WHERE bin_id = @dest_bin_id
+          AND expires_at > @now;
+
+        -- Subtract 1 from reservations: this unit's own reservation
+        -- is still active at confirm time, so it shouldn't count against capacity
+        IF (@current_placements + @active_reservations - 1) >= @bin_capacity
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRTASK09';
+            ROLLBACK;
+            RETURN;
+        END
+
+        ------------------------------------------------------------
+        -- 5. Lock inventory unit
+        ------------------------------------------------------------
+        SELECT
+            @sku_id   = sku_id,
+            @quantity = quantity,
+            @current_status_code = stock_status_code 
+        FROM inventory.inventory_units WITH (UPDLOCK, HOLDLOCK)
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        ------------------------------------------------------------
+        -- 6. Move placement
+        ------------------------------------------------------------
+        UPDATE inventory.inventory_placements
+        SET bin_id    = @dest_bin_id,
+            placed_at = @now,
+            placed_by = @user_id
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        ------------------------------------------------------------
+        -- 7. Transition inventory state
+        ------------------------------------------------------------
+        UPDATE inventory.inventory_units
+        SET stock_state_code = 'PTW',
+            updated_at       = @now,
+            updated_by       = @user_id
+        WHERE inventory_unit_id = @inventory_unit_id
+          AND stock_state_code = 'RCD';
+
+        ------------------------------------------------------------
+        -- 8. Close warehouse task
+        ------------------------------------------------------------
+        UPDATE warehouse.warehouse_tasks
+        SET task_state_code      = 'CNF',
+            completed_at         = @now,
+            completed_by_user_id = @user_id,
+            updated_at           = @now,
+            updated_by           = @user_id
+        WHERE task_id = @task_id;
+
+        ------------------------------------------------------------
+        -- 9. Remove bin reservation
+        ------------------------------------------------------------
+        DELETE FROM locations.bin_reservations
+        WHERE bin_id          = @dest_bin_id
+          AND reservation_type = 'PUTAWAY'
+          AND expires_at      >= @now;
+
+        ------------------------------------------------------------
+        -- 10. Movement log
+        ------------------------------------------------------------
+        INSERT INTO inventory.inventory_movements
+        (
+            inventory_unit_id,
+            sku_id,
+            moved_qty,
+            from_bin_id,
+            to_bin_id,
+            from_state_code,
+            to_state_code,
+            from_status_code,
+            to_status_code,
+            movement_type,
+            reference_type,
+            reference_id,
+            moved_at,
+            moved_by_user_id,
+            session_id
+        )
+        VALUES
+        (
+            @inventory_unit_id,
+            @sku_id,
+            @quantity,
+            @source_bin_id,
+            @dest_bin_id,
+            'RCD',
+            'PTW',
+            @current_status_code,
+            @current_status_code,
+            'PUTAWAY',
+            'TASK',
+            @task_id,
+            @now,
+            @user_id,
+            @session_id
+        );
+
+        COMMIT;
+
+        SELECT CAST(1 AS BIT), N'SUCTASK02';
+
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        SELECT CAST(0 AS BIT), N'ERRTASK99';
+    END CATCH
+END;
+GO
+
+CREATE OR ALTER VIEW inventory.v_units_awaiting_putaway
+AS
+SELECT
+    iu.inventory_unit_id,
+    iu.external_ref,
+    iu.sku_id,
+    iu.quantity,
+    iu.created_at
+FROM inventory.inventory_units iu
+WHERE
+    iu.stock_state_code = 'RCD'
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM warehouse.warehouse_tasks wt
+        WHERE wt.inventory_unit_id = iu.inventory_unit_id
+          AND wt.task_type_code = 'PUTAWAY'
+          AND wt.task_state_code IN ('OPN','CLM')
+    );
+GO
+
+CREATE OR ALTER VIEW inventory.v_units_awaiting_putaway
+AS
+SELECT
+    iu.inventory_unit_id,
+    iu.external_ref,
+    iu.sku_id,
+    iu.quantity,
+    iu.created_at
+FROM inventory.inventory_units iu
+WHERE
+    iu.stock_state_code = 'RCD'
+    AND NOT EXISTS
+    (
+        SELECT 1
+        FROM warehouse.warehouse_tasks wt
+        WHERE wt.inventory_unit_id = iu.inventory_unit_id
+          AND wt.task_type_code = 'PUTAWAY'
+          AND wt.task_state_code IN ('OPN','CLM')
+    );
+GO
 

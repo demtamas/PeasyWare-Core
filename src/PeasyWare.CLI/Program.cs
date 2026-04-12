@@ -4,24 +4,20 @@ using PeasyWare.Application.Flows;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.CLI.Flows;
 using PeasyWare.CLI.Networking;
+using PeasyWare.Application.Dto;
 using PeasyWare.CLI.UI;
 using PeasyWare.Domain;
 using PeasyWare.Infrastructure.Bootstrap;
-using PeasyWare.Infrastructure.Errors;
-using PeasyWare.Infrastructure.Logging;
-using PeasyWare.Infrastructure.Repositories;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+
+var argsList = args.Select(a => a.ToLowerInvariant()).ToList();
+var diagnosticsEnabled = argsList.Contains("--diag");
 
 // --------------------------------------------------
 // Startup
 // --------------------------------------------------
 
-var argsList = args.Select(a => a.ToLowerInvariant()).ToList();
-var diagnosticsEnabled = argsList.Contains("--diag");
-
 AppRuntime runtime;
+
 try
 {
     runtime = AppStartup.Initialize();
@@ -33,7 +29,7 @@ catch (Exception ex)
     return;
 }
 
-// Login flow (pre-session)
+// Login flow
 var loginFlow = new LoginFlow(
     runtime.AuthService,
     runtime.UserSecurityRepository);
@@ -46,6 +42,8 @@ Guid? sessionId = null;
 int? userId = null;
 string? username = null;
 string? password = null;
+string? displayName = null;
+int sessionTimeoutMinutes = 480;
 
 while (true)
 {
@@ -68,19 +66,16 @@ while (true)
             string.IsNullOrWhiteSpace(password))
         {
             Console.WriteLine("Username and password are required.");
-            Console.WriteLine("Press any key to try again...");
             Console.ReadKey(true);
             continue;
         }
-
-        CorrelationContext.Set(Guid.NewGuid());
 
         var context = new LoginContext
         {
             ClientApp = "PeasyWare.CLI",
             ClientInfo = Environment.MachineName,
             OsInfo = Environment.OSVersion.ToString(),
-            IpAddress = IpResolver.GetLocalIPv4(),
+            IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
             ForceLogin = false
         };
 
@@ -93,11 +88,16 @@ while (true)
         switch (result.Outcome)
         {
             case LoginOutcome.Success:
+
                 sessionId = result.SessionId!.Value;
                 userId = result.UserId!.Value;
+                displayName = result.DisplayName;
+                sessionTimeoutMinutes = result.SessionTimeoutMinutes;
+
                 goto LoginSucceeded;
 
             case LoginOutcome.PasswordChangeRequired:
+
                 Console.WriteLine(result.Message);
                 Console.WriteLine();
 
@@ -121,22 +121,24 @@ while (true)
                 if (!changed)
                     return;
 
-                continue; // retry login with new password
+                continue;
 
             case LoginOutcome.AlreadyLoggedIn:
+
                 Console.WriteLine(result.Message);
                 Console.Write("Terminate the other session and continue? (y/N): ");
 
                 var answer = Console.ReadLine();
+
                 if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
                     return;
 
                 var forcedContext = new LoginContext
                 {
-                    ClientApp = "PeasyWare.CLI",
-                    ClientInfo = Environment.MachineName,
-                    OsInfo = Environment.OSVersion.ToString(),
-                    IpAddress = IpResolver.GetLocalIPv4(),
+                    ClientApp = context.ClientApp,
+                    ClientInfo = context.ClientInfo,
+                    OsInfo = context.OsInfo,
+                    IpAddress = context.IpAddress,
                     ForceLogin = true
                 };
 
@@ -146,30 +148,31 @@ while (true)
                     forcedContext,
                     diagnosticsEnabled);
 
-                if (!retry.Success)
+                if (retry.Outcome != LoginOutcome.Success)
                 {
                     Console.WriteLine(retry.Message);
-                    Console.WriteLine("Press any key to try again...");
                     Console.ReadKey(true);
                     continue;
                 }
 
                 sessionId = retry.SessionId!.Value;
                 userId = retry.UserId!.Value;
+                displayName = retry.DisplayName;
+                sessionTimeoutMinutes = retry.SessionTimeoutMinutes;
+
                 goto LoginSucceeded;
 
             default:
+
                 Console.WriteLine(result.Message ?? "Login failed.");
-                Console.WriteLine("Press any key to try again...");
                 Console.ReadKey(true);
                 continue;
         }
     }
     catch (Exception ex)
     {
-        runtime.Logger.Error("Unhandled exception during login", ex);
+        runtime.Logger.Error("CLI.Login.Exception", ex);
         Console.WriteLine($"Login failed: {ex.Message}");
-        Console.WriteLine("Press any key to try again...");
         Console.ReadKey(true);
     }
 }
@@ -177,22 +180,24 @@ while (true)
 LoginSucceeded:
 
 // --------------------------------------------------
-// SESSION CONTEXT (CRITICAL)
+// SESSION CONTEXT
 // --------------------------------------------------
 
 var session = new SessionContext(
-    sessionId!.Value,
-    userId!.Value,
-    username!);
+    sessionId: sessionId!.Value,
+    userId: userId!.Value,
+    username: username!,
+    displayName: displayName ?? username!,
+    sourceApp: "PeasyWare.CLI",
+    sourceClient: Environment.MachineName,
+    sourceIp: IpResolver.GetLocalIPv4(),
+    correlationId: Guid.NewGuid(),
+    osInfo: Environment.OSVersion.ToString(),
+    sessionTimeoutMinutes: sessionTimeoutMinutes
+);
 
-// Session-scoped command repo
-var sessionCommandRepo =
-    new SqlSessionCommandRepository(
-        runtime.ConnectionFactory,
-        session.SessionId,
-        session.UserId,
-        runtime.ErrorMessageResolver,
-        runtime.Logger);
+// 🔥 IMPORTANT: bind logger to session
+runtime.Logger.SetSession(session);
 
 // --------------------------------------------------
 // Header (post-login)
@@ -213,73 +218,30 @@ try
 {
     while (true)
     {
-        var touch =
-            sessionCommandRepo.TouchSession(session.SessionId);
-
-        if (!touch.IsAlive)
-        {
-            Console.WriteLine(touch.FriendlyMessage);
-            Console.WriteLine("Session ended.");
-            return;
-        }
-
         var input = MenuRenderer.ShowMainMenu();
 
         switch (input)
         {
             case "1":
-                {
-                    while (true)
-                    {
-                        var inboundInput = MenuRenderer.ShowInboundMenu();
-
-                        switch (inboundInput)
-                        {
-                            case "1":
-                                RunActivateInbound(runtime, session);
-                                break;
-
-                            case "2":
-                                {
-                                    var flow = new ReceiveInboundFlow(runtime, session);
-                                    flow.Run();
-                                    break;
-                                }
-
-                            case "3":
-                                {
-                                    var flow = new PutawayFromInboundFlow(runtime, session);
-                                    await flow.RunAsync();
-                                    break;
-                                }
-
-                            case "0":
-                                goto ExitInbound;
-
-                            default:
-                                Console.WriteLine("Invalid option.");
-                                break;
-                        }
-                    }
-
-                ExitInbound:
-                    break;
-                }
+                RunInbound(runtime, session);
+                break;
 
             case "7":
                 {
-                    var logout =
-                        sessionCommandRepo.LogoutSession(
-                            session.SessionId,
-                            sourceApp: "PeasyWare.CLI",
-                            sourceClient: Environment.MachineName,
-                            sourceIp: IpResolver.GetLocalIPv4());
+                    var sessionCommand =
+                        runtime.Repositories.CreateSessionCommand(session);
+
+                    var logout = sessionCommand.LogoutSession(
+                        session.SessionId,
+                        sourceApp: "PeasyWare.CLI",
+                        sourceClient: Environment.MachineName,
+                        sourceIp: IpResolver.GetLocalIPv4());
 
                     Console.WriteLine(logout.FriendlyMessage);
                     return;
                 }
 
-            case "3":
+            case "0":
                 Console.WriteLine("Exiting application.");
                 return;
 
@@ -291,12 +253,71 @@ try
 }
 catch (Exception ex)
 {
-    runtime.Logger.Error("Unhandled CLI runtime error", ex);
+    runtime.Logger.Error("CLI.Runtime.Exception", ex);
     Console.WriteLine($"Runtime error: {ex.Message}");
 }
 finally
 {
     AppStartup.Shutdown();
+}
+
+// --------------------------------------------------
+// INBOUND MENU
+// --------------------------------------------------
+
+static void RunInbound(AppRuntime runtime, SessionContext session)
+{
+    var inboundQuery = runtime.Repositories.CreateInboundQuery(session);
+    var inboundCommand = runtime.Repositories.CreateInboundCommand(session);
+
+    while (true)
+    {
+        var inboundInput = MenuRenderer.ShowInboundMenu();
+
+        switch (inboundInput)
+        {
+            case "1":
+                {
+                    var activatable = inboundQuery.GetActivatableInbounds();
+
+                    var refInput =
+                        ActivateInboundScreen.PromptInboundRef(activatable);
+
+                    if (string.IsNullOrWhiteSpace(refInput))
+                        return;
+
+                    var result =
+                        inboundCommand.ActivateInboundByRef(refInput);
+
+                    Console.WriteLine();
+                    Console.WriteLine(result.FriendlyMessage);
+
+                    Console.ReadKey(true);
+                    break;
+                }
+
+            case "2":
+                {
+                    var flow = new ReceiveInboundFlow(runtime, session);
+                    flow.Run();
+                    break;
+                }
+
+            case "3":
+                {
+                    var flow = new PutawayFromInboundFlow(runtime, session);
+                    flow.RunAsync().Wait();
+                    break;
+                }
+
+            case "0":
+                return;
+
+            default:
+                Console.WriteLine("Invalid option.");
+                break;
+        }
+    }
 }
 
 // --------------------------------------------------
@@ -313,10 +334,7 @@ static string ReadConfirmedPassword(int maxTries = 3)
         Console.Write("Confirm new password: ");
         var p2 = ReadMaskedPassword();
 
-        if (string.IsNullOrWhiteSpace(p1) || string.IsNullOrWhiteSpace(p2))
-            continue;
-
-        if (p1 == p2)
+        if (!string.IsNullOrWhiteSpace(p1) && p1 == p2)
             return p1;
 
         Console.WriteLine("Passwords do not match.");
@@ -339,13 +357,10 @@ static string ReadMaskedPassword()
             break;
         }
 
-        if (key.Key == ConsoleKey.Backspace)
+        if (key.Key == ConsoleKey.Backspace && buffer.Count > 0)
         {
-            if (buffer.Count > 0)
-            {
-                buffer.RemoveAt(buffer.Count - 1);
-                Console.Write("\b \b");
-            }
+            buffer.RemoveAt(buffer.Count - 1);
+            Console.Write("\b \b");
             continue;
         }
 
@@ -358,42 +373,3 @@ static string ReadMaskedPassword()
 
     return new string(buffer.ToArray());
 }
-
-static void RunActivateInbound(
-    AppRuntime runtime,
-    SessionContext session)
-{
-    var queryRepo = new SqlInboundQueryRepository(
-        runtime.ConnectionFactory,
-        session.SessionId,
-        session.UserId,
-        runtime.ErrorMessageResolver);
-
-    var commandRepo = new SqlInboundCommandRepository(
-    runtime.ConnectionFactory,
-    session.SessionId,
-    session.UserId,
-    runtime.ErrorMessageResolver,
-    runtime.Logger);
-
-    var activatable = queryRepo.GetActivatableInbounds();
-
-    var refInput =
-        ActivateInboundScreen.PromptInboundRef(activatable);
-
-    if (string.IsNullOrWhiteSpace(refInput))
-        return;
-
-    var result =
-        commandRepo.ActivateInboundByRef(refInput);
-
-    Console.WriteLine();
-    Console.WriteLine(result.FriendlyMessage);
-
-    if (result.Success)
-        Console.WriteLine("Inbound activated successfully.");
-
-    Console.WriteLine("Press any key to continue...");
-    Console.ReadKey(true);
-}
-

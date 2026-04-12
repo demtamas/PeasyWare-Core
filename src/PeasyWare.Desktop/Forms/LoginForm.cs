@@ -1,9 +1,5 @@
 ﻿using PeasyWare.Application;
-using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Flows;
-using PeasyWare.Infrastructure.Logging;
-using System;
-using System.Windows.Forms;
 
 namespace PeasyWare.Desktop.Forms;
 
@@ -15,9 +11,8 @@ public partial class LoginForm : Form
     public Guid? SessionId { get; private set; }
     public int? UserId { get; private set; }
     public string Username { get; private set; } = "";
-
-    public SessionContext? SessionContext { get; private set; }
-
+    public string DisplayName { get; private set; } = "";
+    public int SessionTimeoutMinutes { get; private set; }
     public LoginForm(LoginFlow loginFlow, bool diagnosticsEnabled)
     {
         InitializeComponent();
@@ -35,9 +30,7 @@ public partial class LoginForm : Form
 
     private void btnLogin_Click(object sender, EventArgs e)
     {
-        // One correlation per "login attempt session"
-        var correlationId = Guid.NewGuid();
-        CorrelationContext.Set(correlationId);
+        // Correlation now handled via SessionContext → no global state
 
         var username = txtUsername.Text.Trim();
         var password = txtPassword.Text;
@@ -66,6 +59,11 @@ public partial class LoginForm : Form
             case LoginOutcome.Success:
                 SessionId = result.SessionId;
                 UserId = result.UserId;
+                Username = username;
+                DisplayName = result.DisplayName ?? username;
+
+                SessionTimeoutMinutes = result.SessionTimeoutMinutes;
+
                 DialogResult = DialogResult.OK;
                 Close();
                 return;
@@ -96,14 +94,16 @@ public partial class LoginForm : Form
     // --------------------------------------------------
 
     private static LoginContext BuildBaseContext(bool forceLogin)
-        => new LoginContext
-        {
-            ClientApp = "PeasyWare.Desktop",
-            ClientInfo = Environment.MachineName,
-            OsInfo = Environment.OSVersion.ToString(),
-            IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
-            ForceLogin = forceLogin
-        };
+    => new LoginContext
+    {
+        ClientApp = "PeasyWare.Desktop",
+        ClientInfo = Environment.MachineName,
+        OsInfo = Environment.OSVersion.ToString(),
+        IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
+        ForceLogin = forceLogin,
+
+        CorrelationId = Guid.NewGuid()
+    };
 
     private void HandlePasswordChange(
         string username,

@@ -1,45 +1,52 @@
 ﻿using Microsoft.Data.SqlClient;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Sql;
+using System;
 using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
-public sealed class SqlInventoryQueryRepository
+/// <summary>
+/// QUERY repository for inventory.
+/// Read-only, uses SessionContext for DB tracing.
+/// </summary>
+public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    private readonly Guid _sessionId;
-    private readonly int _userId;
-    private readonly IErrorMessageResolver _errorResolver;
+    private readonly SqlConnectionFactory _factory;
+    private readonly SessionContext _session;
 
     public SqlInventoryQueryRepository(
-        SqlConnectionFactory connectionFactory,
-        Guid sessionId,
-        int userId,
-        IErrorMessageResolver errorResolver)
+        SqlConnectionFactory factory,
+        SessionContext session)
     {
-        _connectionFactory = connectionFactory;
-        _sessionId = sessionId;
-        _userId = userId;
-        _errorResolver = errorResolver;
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
     }
+
+    // --------------------------------------------------
+    // Inventory by external ref (SSCC / HU)
+    // --------------------------------------------------
 
     public InventoryUnitDto? GetInventoryUnitByExternalRef(string externalRef)
     {
-        using var conn = _connectionFactory.Create();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
 
-        using var cmd = new SqlCommand(@"
+        command.CommandText = """
             SELECT inventory_unit_id, external_ref
             FROM inventory.inventory_units
             WHERE external_ref = @external_ref
-        ", conn);
+        """;
 
-        cmd.Parameters.AddWithValue("@external_ref", externalRef);
+        command.Parameters.Add(
+            new SqlParameter("@external_ref", SqlDbType.NVarChar, 50)
+            {
+                Value = externalRef
+            });
 
-        conn.Open();
-
-        using var reader = cmd.ExecuteReader();
+        using var reader = command.ExecuteReader();
 
         if (!reader.Read())
             return null;
@@ -51,15 +58,19 @@ public sealed class SqlInventoryQueryRepository
         };
     }
 
+    // --------------------------------------------------
+    // Units awaiting putaway
+    // --------------------------------------------------
+
     public int GetUnitsAwaitingPutawayCount()
     {
-        using var conn = _connectionFactory.Create();
-        using var cmd = conn.CreateCommand();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
 
-        cmd.CommandText = "warehouse.usp_get_units_awaiting_putaway_count";
-        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+        command.CommandText = "warehouse.usp_get_units_awaiting_putaway_count";
+        command.CommandType = CommandType.StoredProcedure;
 
-        var result = cmd.ExecuteScalar();
+        var result = command.ExecuteScalar();
 
         if (result == null || result == DBNull.Value)
             return 0;

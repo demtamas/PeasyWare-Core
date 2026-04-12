@@ -1,8 +1,9 @@
 ﻿using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Logging;
+using PeasyWare.Application.Security;
 using PeasyWare.Infrastructure.Errors;
-using PeasyWare.Infrastructure.Logging;
 using PeasyWare.Infrastructure.Repositories;
 using PeasyWare.Infrastructure.Settings;
 using PeasyWare.Infrastructure.Sql;
@@ -17,23 +18,44 @@ public static class AppStartup
     public static AppRuntime Initialize()
     {
         var bootstrap = BootstrapLoader.Load();
-        _factory = new SqlConnectionFactory(bootstrap.ConnectionString);
 
-        // 🔹 Centralised message resolver
-        _messageResolver = new SqlErrorMessageResolver(_factory);
+        _factory = new SqlConnectionFactory(
+            bootstrap.ConnectionString);
 
-        var settings = new SettingsLoader(_factory).Load();
+        _messageResolver =
+            new SqlErrorMessageResolver(_factory);
+
+        var settings =
+            new SettingsLoader(_factory).Load();
 
         if (!settings.LoginEnabled)
-            throw new InvalidOperationException("Login is disabled by system policy.");
+            throw new InvalidOperationException(
+                "Login is disabled by system policy.");
 
         ILogger logger = settings.LoggingEnabled
             ? new InfrastructureLogger(settings, _factory)
             : new NoOpLogger();
 
-        // ─────────────────────────────
-        // PRE-SESSION ONLY
-        // ─────────────────────────────
+        // --------------------------------------------------
+        // SYSTEM SESSION
+        // --------------------------------------------------
+
+        var bootstrapSession = new SessionContext(
+            sessionId: Guid.Empty,
+            userId: 0,
+            username: "SYSTEM",
+            displayName: "SYSTEM",
+            sourceApp: "PeasyWare.System",
+            sourceClient: Environment.MachineName,
+            sourceIp: null,
+            correlationId: null,
+            osInfo: Environment.OSVersion.ToString(),
+            sessionTimeoutMinutes: 480
+        );
+
+        // --------------------------------------------------
+        // STATELESS QUERY REPOS
+        // --------------------------------------------------
 
         var userSecurityRepo =
             new SqlUserSecurityRepository(
@@ -42,18 +64,56 @@ public static class AppStartup
                 logger);
 
         var sessionQueryRepo =
-            new SqlSessionQueryRepository(_factory);
+            new SqlSessionQueryRepository(_factory, bootstrapSession);
 
         var sessionDetailsRepo =
             new SqlSessionDetailsRepository(_factory);
 
         var userQueryRepo =
-            new SqlUserQueryRepository(_factory);
+            new SqlUserQueryRepository(_factory, bootstrapSession);
 
-        var authService = new AuthService(
-            new SqlLoginRepository(_factory),
-            userSecurityRepo,
-            logger);
+        var settingsQueryRepo =
+            new SqlSettingsQueryRepository(_factory, bootstrapSession);
+
+
+        // --------------------------------------------------
+        // SESSION COMMAND
+        // --------------------------------------------------
+
+        var sessionCommandRepo =
+            new SqlSessionCommandRepository(
+                _factory,
+                bootstrapSession,
+                _messageResolver,
+                logger);
+
+        var sessionGuard =
+            new SessionGuard(sessionCommandRepo);
+
+        // --------------------------------------------------
+        // AUTH
+        // --------------------------------------------------
+
+        var authService =
+            new AuthService(
+                new SqlLoginRepository(_factory, _messageResolver),
+                userSecurityRepo,
+                logger);
+
+        // --------------------------------------------------
+        // FACTORY
+        // --------------------------------------------------
+
+        var repositories =
+            new RepositoryFactory(
+                _factory,
+                _messageResolver,
+                logger,
+                sessionGuard);
+
+        // --------------------------------------------------
+        // RUNTIME
+        // --------------------------------------------------
 
         return new AppRuntime(
             settings,
@@ -63,13 +123,15 @@ public static class AppStartup
             sessionQueryRepo,
             sessionDetailsRepo,
             userQueryRepo,
+            settingsQueryRepo,
+            sessionGuard,
             _factory,
-            _messageResolver   // 🔹 expose resolver
-        );
+            _messageResolver,
+            repositories);
     }
 
     public static void Shutdown()
     {
-        CorrelationContext.Clear();
+        //CorrelationContext.Clear();
     }
 }

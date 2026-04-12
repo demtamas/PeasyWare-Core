@@ -1,18 +1,34 @@
 ﻿using Microsoft.Data.SqlClient;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Sql;
+using System;
+using System.Collections.Generic;
 using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
+/// <summary>
+/// QUERY repository for users (read-only).
+///
+/// Responsibilities:
+/// - Retrieve user data
+/// - Uses SessionContext for DB tracing (SESSION_CONTEXT)
+/// - No session validation
+/// - No side effects
+/// </summary>
 public sealed class SqlUserQueryRepository : IUserQueryRepository
 {
     private readonly SqlConnectionFactory _factory;
+    private readonly SessionContext _session;
 
-    public SqlUserQueryRepository(SqlConnectionFactory factory)
+    public SqlUserQueryRepository(
+        SqlConnectionFactory factory,
+        SessionContext session)
     {
-        _factory = factory;
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
     }
 
     // --------------------------------------------------
@@ -23,11 +39,10 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
     {
         var result = new List<UserSummaryDto>();
 
-        using var connection = _factory.Create();
-        connection.Open();
-
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
-        command.CommandText = @"
+
+        command.CommandText = """
             SELECT
                 id,
                 username,
@@ -52,7 +67,7 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
                 OR display_name LIKE '%' + @search + '%'
             )
             ORDER BY username;
-        ";
+        """;
 
         command.Parameters.Add(
             new SqlParameter("@search", SqlDbType.NVarChar, 100)
@@ -61,6 +76,7 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
             });
 
         using var reader = command.ExecuteReader();
+
         while (reader.Read())
         {
             result.Add(new UserSummaryDto
@@ -96,15 +112,14 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
     // --------------------------------------------------
     // Roles
     // --------------------------------------------------
+
     public IEnumerable<RoleDto> GetRoles()
     {
-        using var connection = _factory.Create();
-
+        using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
+
         command.CommandText = "auth.usp_roles_get";
         command.CommandType = CommandType.StoredProcedure;
-
-        connection.Open();
 
         using var reader = command.ExecuteReader();
 

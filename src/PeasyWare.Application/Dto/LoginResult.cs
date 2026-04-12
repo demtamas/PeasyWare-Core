@@ -12,4 +12,5 @@ public sealed class LoginResult
     public DateTime? LastLoginTime { get; init; }
     public int FailedAttempts { get; init; }
     public DateTime? LockoutUntil { get; init; }
+    public int SessionTimeoutMinutes { get; set; }
 }
