@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
@@ -34,10 +34,6 @@ public sealed class SqlLoginRepository : ILoginRepository
         string? password,
         LoginContext context)
     {
-        // --------------------------------------------------
-        // HARD GUARDED DB BOUNDARY
-        // --------------------------------------------------
-
         var clientApp =
             string.IsNullOrWhiteSpace(context.ClientApp)
                 ? "PeasyWare.UnknownClient"
@@ -82,9 +78,6 @@ public sealed class SqlLoginRepository : ILoginRepository
                 ? DBNull.Value
                 : context.CorrelationId;
 
-        // Correlation (still important for DB-side audit)
-        //SqlCorrelation.Add(command);
-
         // Outputs
         var resultCode = command.Parameters.Add("@result_code", SqlDbType.NVarChar, 40);
         resultCode.Direction = ParameterDirection.Output;
@@ -110,6 +103,9 @@ public sealed class SqlLoginRepository : ILoginRepository
         var lockoutUntil = command.Parameters.Add("@lockout_until_out", SqlDbType.DateTime2);
         lockoutUntil.Direction = ParameterDirection.Output;
 
+        var roleName = command.Parameters.Add("@role_name_out", SqlDbType.NVarChar, 100);
+        roleName.Direction = ParameterDirection.Output;
+
         command.ExecuteNonQuery();
 
         // --------------------------------------------------
@@ -129,44 +125,42 @@ public sealed class SqlLoginRepository : ILoginRepository
 
         return new LoginResult
         {
-            ResultCode = code,
-            FriendlyMessage = message,
-            Success = success,
-
-            UserId = userId.Value == DBNull.Value ? null : (int?)userId.Value,
-            SessionId = sessionId.Value == DBNull.Value ? null : (Guid?)sessionId.Value,
-            DisplayName = displayName.Value as string,
-            LastLoginTime = lastLogin.Value == DBNull.Value ? null : (DateTime?)lastLogin.Value,
-            FailedAttempts = failedAttempts.Value == DBNull.Value ? 0 : (int)failedAttempts.Value,
-            LockoutUntil = lockoutUntil.Value == DBNull.Value ? null : (DateTime?)lockoutUntil.Value,
-
-            SessionTimeoutMinutes = sessionTimeout   // 👈 THIS LINE
+            ResultCode            = code,
+            FriendlyMessage       = message,
+            Success               = success,
+            UserId                = userId.Value == DBNull.Value ? null : (int?)userId.Value,
+            SessionId             = sessionId.Value == DBNull.Value ? null : (Guid?)sessionId.Value,
+            DisplayName           = displayName.Value as string,
+            RoleName              = roleName.Value as string,
+            LastLoginTime         = lastLogin.Value == DBNull.Value ? null : (DateTime?)lastLogin.Value,
+            FailedAttempts        = failedAttempts.Value == DBNull.Value ? 0 : (int)failedAttempts.Value,
+            LockoutUntil          = lockoutUntil.Value == DBNull.Value ? null : (DateTime?)lockoutUntil.Value,
+            SessionTimeoutMinutes = sessionTimeout
         };
     }
+
     private int GetSessionTimeout(SqlConnection connection, string clientApp)
     {
         using var cmd = connection.CreateCommand();
 
         cmd.CommandText = """
-        SELECT TOP (1) session_timeout_minutes
-        FROM
-        (
-            -- Client-specific value first
-            SELECT c.session_timeout_minutes, 1 AS priority
-            FROM auth.clients c
-            WHERE c.client_name = @client_app
-              AND c.session_timeout_minutes IS NOT NULL
+            SELECT TOP (1) session_timeout_minutes
+            FROM
+            (
+                SELECT c.session_timeout_minutes, 1 AS priority
+                FROM auth.clients c
+                WHERE c.client_name = @client_app
+                  AND c.session_timeout_minutes IS NOT NULL
 
-            UNION ALL
+                UNION ALL
 
-            -- Fallback from global settings
-            SELECT TRY_CAST(s.setting_value AS int), 2 AS priority
-            FROM operations.settings s
-            WHERE s.setting_name = 'auth.session_timeout_minutes'
-              AND s.setting_value IS NOT NULL
-        ) x
-        ORDER BY priority;
-    """;
+                SELECT TRY_CAST(s.setting_value AS int), 2 AS priority
+                FROM operations.settings s
+                WHERE s.setting_name = 'auth.session_timeout_minutes'
+                  AND s.setting_value IS NOT NULL
+            ) x
+            ORDER BY priority;
+        """;
 
         cmd.Parameters.Add("@client_app", SqlDbType.NVarChar, 100).Value = clientApp;
 

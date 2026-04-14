@@ -1,9 +1,9 @@
-﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Services;
 using PeasyWare.CLI.UI;
 using PeasyWare.Infrastructure.Bootstrap;
-using PeasyWare.Infrastructure.Repositories;
 using System;
 
 namespace PeasyWare.Application.Flows
@@ -28,7 +28,6 @@ namespace PeasyWare.Application.Flows
             _runtime = runtime;
             _session = session;
             _logger = logger;
-
         }
 
         public void Run()
@@ -41,17 +40,13 @@ namespace PeasyWare.Application.Flows
             if (string.IsNullOrWhiteSpace(inboundRef))
                 return;
 
-            var queryRepo = _runtime.Repositories.CreateInboundQuery(_session);
+            var queryRepo   = _runtime.Repositories.CreateInboundQuery(_session);
             var commandRepo = _runtime.Repositories.CreateInboundCommand(_session);
 
             var service = new InboundReceivingService(
                 queryRepo,
                 commandRepo,
                 _runtime.ErrorMessageResolver);
-
-            // --------------------------------------------------
-            // 1️⃣ Validate inbound summary
-            // --------------------------------------------------
 
             var summary = queryRepo.GetInboundSummary(inboundRef);
 
@@ -76,24 +71,15 @@ namespace PeasyWare.Application.Flows
                 return;
             }
 
-            // --------------------------------------------------
-            // 2️⃣ Ask for bin once
-            // --------------------------------------------------
-
             Console.Write("Enter receiving bin: ");
             var bin = Console.ReadLine()?.Trim();
 
             if (string.IsNullOrWhiteSpace(bin))
                 return;
 
-            // --------------------------------------------------
-            // 3️⃣ SSCC receiving loop
-            // --------------------------------------------------
-
             while (true)
             {
-                var remaining =
-                    queryRepo.GetOutstandingSsccCount(inboundRef);
+                var remaining = queryRepo.GetOutstandingSsccCount(inboundRef);
 
                 if (remaining == 0)
                 {
@@ -111,8 +97,7 @@ namespace PeasyWare.Application.Flows
                 if (string.Equals(scanInput, "0"))
                     return;
 
-                if (string.Equals(scanInput, "B",
-                        StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(scanInput, "B", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Write("Enter new receiving bin: ");
                     bin = Console.ReadLine()?.Trim() ?? "";
@@ -122,13 +107,9 @@ namespace PeasyWare.Application.Flows
                 if (string.IsNullOrWhiteSpace(scanInput))
                     continue;
 
-                // --------------------------------------------------
-                // 4️⃣ Validate SSCC (preview)
-                // --------------------------------------------------
-
                 var validation = service.ValidateSscc(scanInput, bin);
 
-                if (_runtime.Settings.DiagnosticsEnabled)
+                if (_session.UiMode == UiMode.Trace)
                 {
                     Console.WriteLine($"DEBUG -> ExpectedUnitId: {validation.InboundExpectedUnitId}");
                     Console.WriteLine($"DEBUG -> ClaimToken: {validation.ClaimToken}");
@@ -142,7 +123,7 @@ namespace PeasyWare.Application.Flows
 
                 ReceiveInboundScreen.RenderSsccPreview(
                     validation,
-                    _runtime.Settings.ReceivingUiMode,
+                    _session.UiMode,
                     scanInput,
                     bin);
 
@@ -153,41 +134,29 @@ namespace PeasyWare.Application.Flows
                     continue;
                 }
 
-                // --------------------------------------------------
-                // 5️⃣ Double scan confirmation
-                // --------------------------------------------------
-
                 Console.Write("Scan SSCC again to confirm (0=cancel): ");
                 var confirm = Console.ReadLine()?.Trim();
 
                 if (confirm == "0")
                     continue;
 
-                if (!string.Equals(confirm,
-                        scanInput,
-                        StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(confirm, scanInput, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine("Confirmation scan mismatch.");
                     continue;
                 }
 
-                if (validation.InboundExpectedUnitId <= 0 ||
-                    validation.ClaimToken is null)
+                if (validation.InboundExpectedUnitId <= 0 || validation.ClaimToken is null)
                 {
                     Console.WriteLine("Invalid SSCC claim. Please rescan.");
                     continue;
                 }
 
-                // --------------------------------------------------
-                // 6️⃣ Commit receive (authoritative phase)
-                // --------------------------------------------------
-
                 var result = service.ConfirmSscc(
                     validation.InboundExpectedUnitId,
                     scanInput,
                     bin,
-                    validation.ClaimToken.Value
-                );
+                    validation.ClaimToken.Value);
 
                 if (!result.Success)
                 {

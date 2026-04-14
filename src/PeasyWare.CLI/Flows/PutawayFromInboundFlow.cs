@@ -1,7 +1,6 @@
-﻿using PeasyWare.Application.Contexts;
-using PeasyWare.Application.Interfaces;
+using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Infrastructure.Bootstrap;
-using PeasyWare.Infrastructure.Settings;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,7 +11,6 @@ namespace PeasyWare.CLI.Flows
     {
         private readonly AppRuntime _runtime;
         private readonly SessionContext _session;
-        private readonly ILogger? _logger;
 
         public PutawayFromInboundFlow(AppRuntime runtime, SessionContext session)
         {
@@ -22,7 +20,7 @@ namespace PeasyWare.CLI.Flows
 
         public async Task RunAsync()
         {
-            var queryRepo = _runtime.Repositories.CreateInventoryQuery(_session);
+            var queryRepo   = _runtime.Repositories.CreateInventoryQuery(_session);
             var commandRepo = _runtime.Repositories.CreateWarehouseTaskCommand(_session);
 
             while (true)
@@ -33,10 +31,11 @@ namespace PeasyWare.CLI.Flows
                 Console.WriteLine("Putaway from inbound");
                 Console.WriteLine("──────────────────────────");
 
-                if (_runtime.Settings.DiagnosticsEnabled)
+                // Standard and above — show awaiting count
+                if (_session.UiMode >= UiMode.Standard)
                 {
                     var awaiting = queryRepo.GetUnitsAwaitingPutawayCount();
-                    Console.WriteLine($"TRACE → Pallets awaiting putaway: {awaiting}");
+                    Console.WriteLine($"Pallets awaiting putaway: {awaiting}");
                     Console.WriteLine();
                 }
 
@@ -66,27 +65,36 @@ namespace PeasyWare.CLI.Flows
                         continue;
                     }
 
+                    Console.WriteLine();
                     Console.WriteLine("------------------------------------------------------------");
                     Console.WriteLine("PUTAWAY TASK CREATED");
                     Console.WriteLine($"Pallet  : {sscc}");
                     Console.WriteLine($"Task ID : {result.TaskId}");
                     Console.WriteLine($"Bin     : {result.DestinationBinCode}");
 
-                    if (_runtime.Settings.ReceivingUiMode == ReceivingUiMode.Trace)
+                    // Standard and above — operational task detail
+                    if (_session.UiMode >= UiMode.Standard)
                     {
                         Console.WriteLine();
-                        Console.WriteLine("---- TRACE DETAILS ----");
-                        Console.WriteLine($"Unit ID      : {result.InventoryUnitId}");
+                        Console.WriteLine("---- DETAILS ----");
                         Console.WriteLine($"Source Bin   : {result.SourceBinCode}");
                         Console.WriteLine($"Stock State  : {result.StockStateCode}");
                         Console.WriteLine($"Stock Status : {result.StockStatusCode}");
+                    }
+
+                    // Trace only — internal IDs and expiry
+                    if (_session.UiMode == UiMode.Trace)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("---- TRACE ----");
+                        Console.WriteLine($"Unit ID      : {result.InventoryUnitId}");
                         Console.WriteLine($"Zone         : {result.ZoneCode ?? "N/A"}");
                         if (result.ExpiresAt.HasValue)
                             Console.WriteLine($"Task Expires : {result.ExpiresAt.Value:HH:mm:ss} UTC");
-                        Console.WriteLine("----");
                     }
 
                     Console.WriteLine("------------------------------------------------------------");
+                    Console.WriteLine();
 
                     while (true)
                     {

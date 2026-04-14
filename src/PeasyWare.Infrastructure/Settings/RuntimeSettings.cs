@@ -1,9 +1,11 @@
+using PeasyWare.Application;
+
 namespace PeasyWare.Infrastructure.Settings;
 
 /// <summary>
 /// Immutable snapshot of runtime configuration loaded at application start.
 /// Values originate from operations.settings and MUST NOT change during runtime.
-/// 
+///
 /// Any change to these settings requires application restart to take effect.
 /// This is a deliberate design choice.
 /// </summary>
@@ -28,10 +30,10 @@ public sealed class RuntimeSettings
     public LogLevel MinimumLogLevel { get; }
 
     // --------------------------------------------------
-    // Receiving
+    // UI
     // --------------------------------------------------
 
-    public ReceivingUiMode ReceivingUiMode { get; }
+    public UiMode DefaultUiMode { get; }
 
     // --------------------------------------------------
     // Authentication
@@ -52,7 +54,6 @@ public sealed class RuntimeSettings
     public string WarehouseCode { get; }
     public string SiteCode { get; }
     public string SiteName { get; }
-    public bool DiagnosticsEnabled { get; set; }
 
     // --------------------------------------------------
     // Constructor
@@ -68,7 +69,7 @@ public sealed class RuntimeSettings
         bool includeSensitiveLogging,
         LogLevel minimumLogLevel,
         bool auditEnabled,
-        ReceivingUiMode receivingUiMode,
+        UiMode defaultUiMode,
 
         int sessionTimeoutMinutes,
         int appLockMinutes,
@@ -92,7 +93,7 @@ public sealed class RuntimeSettings
         MinimumLogLevel = minimumLogLevel;
         AuditEnabled = auditEnabled;
 
-        ReceivingUiMode = receivingUiMode;
+        DefaultUiMode = defaultUiMode;
 
         SessionTimeoutMinutes = sessionTimeoutMinutes;
         AppLockMinutes = appLockMinutes;
@@ -116,13 +117,4 @@ public enum LogLevel
     Info = 1,
     Warn = 2,
     Error = 3
-}
-
-/// <summary>
-/// Receiving UI presentation modes.
-/// </summary>
-public enum ReceivingUiMode
-{
-    Minimal = 1,
-    Trace = 2
 }

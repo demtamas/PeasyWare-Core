@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application;
+using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Logging;
@@ -50,6 +50,8 @@ public static class AppStartup
             sourceIp: null,
             correlationId: null,
             osInfo: Environment.OSVersion.ToString(),
+            roleName: "system",
+            uiMode: UiMode.Minimal,
             sessionTimeoutMinutes: 480
         );
 
@@ -74,7 +76,6 @@ public static class AppStartup
 
         var settingsQueryRepo =
             new SqlSettingsQueryRepository(_factory, bootstrapSession);
-
 
         // --------------------------------------------------
         // SESSION COMMAND

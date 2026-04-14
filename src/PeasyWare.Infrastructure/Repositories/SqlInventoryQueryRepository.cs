@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
@@ -59,7 +59,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
     }
 
     // --------------------------------------------------
-    // Units awaiting putaway
+    // Units awaiting putaway count
     // --------------------------------------------------
 
     public int GetUnitsAwaitingPutawayCount()
@@ -67,8 +67,10 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
 
-        command.CommandText = "warehouse.usp_get_units_awaiting_putaway_count";
-        command.CommandType = CommandType.StoredProcedure;
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM inventory.v_units_awaiting_putaway
+        """;
 
         var result = command.ExecuteScalar();
 

@@ -1,4 +1,3 @@
-
 namespace PeasyWare.Application;
 
 public sealed class LoginResult
@@ -9,6 +8,7 @@ public sealed class LoginResult
     public int? UserId { get; init; }
     public Guid? SessionId { get; init; }
     public string? DisplayName { get; init; }
+    public string? RoleName { get; init; }
     public DateTime? LastLoginTime { get; init; }
     public int FailedAttempts { get; init; }
     public DateTime? LockoutUntil { get; init; }

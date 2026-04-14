@@ -1,8 +1,10 @@
-﻿using PeasyWare.Application.Contexts;
+﻿using PeasyWare.Application;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Flows;
 using PeasyWare.Desktop.Forms;
 using PeasyWare.Infrastructure.Bootstrap;
 using PeasyWare.Infrastructure.Repositories;
+using PeasyWare.Infrastructure.Settings;
 using PeasyWare.Desktop.Infrastructure;
 using System;
 using System.Windows.Forms;
@@ -24,9 +26,9 @@ catch (Exception ex)
 
 var loginFlow = new LoginFlow(
     runtime.AuthService,
-    runtime.UserSecurityRepository);
+    runtime.UserSecurityRepository,
+    runtime.Settings.DefaultUiMode);
 
-// Create the UI view factory in the Desktop layer
 var viewFactory = new ViewFactory(runtime);
 
 try
@@ -53,6 +55,8 @@ try
             sourceIp: IpResolver.GetLocalIPv4(),
             correlationId: null,
             osInfo: Environment.OSVersion.ToString(),
+            roleName: loginForm.RoleName,
+            uiMode: loginForm.UiMode,
             sessionTimeoutMinutes: loginForm.SessionTimeoutMinutes
         );
 

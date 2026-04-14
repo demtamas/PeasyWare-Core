@@ -1,8 +1,7 @@
-﻿using PeasyWare.Application.Dto;
-using PeasyWare.Infrastructure.Settings;
+using PeasyWare.Application;
+using PeasyWare.Application.Dto;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace PeasyWare.CLI.UI
 {
@@ -62,9 +61,7 @@ namespace PeasyWare.CLI.UI
                 Console.Write($"Enter quantity (max {maxQty}): ");
                 var input = Console.ReadLine();
 
-                if (int.TryParse(input, out var qty)
-                    && qty > 0
-                    && qty <= maxQty)
+                if (int.TryParse(input, out var qty) && qty > 0 && qty <= maxQty)
                     return qty;
 
                 Console.WriteLine("Invalid quantity.");
@@ -79,34 +76,44 @@ namespace PeasyWare.CLI.UI
 
         public static void RenderSsccPreview(
             SsccValidationDto dto,
-            ReceivingUiMode uiMode,
+            UiMode uiMode,
             string externalRef,
             string stagingBin)
-                {
-                    Console.WriteLine();
-                    Console.WriteLine("------------------------------------------------------------");
-                    Console.WriteLine($"SSCC: {externalRef}");
-                    Console.WriteLine($"Inbound: {dto.InboundRef}   [{dto.HeaderStatus}]");
-                    Console.WriteLine($"SKU: {dto.SkuCode} | {dto.SkuDescription}");
-                    Console.WriteLine($"Unit Qty: {dto.ExpectedUnitQty}");
-                    Console.WriteLine($"Batch: {dto.BatchNumber}");
-                    Console.WriteLine($"BBE: {dto.BestBeforeDate:dd-MM-yyyy}");
-                    Console.WriteLine($"Staging Bin: {stagingBin}");
-                    Console.WriteLine($"Arrival Stock Status: {dto.ArrivalStockStatusCode}");
+        {
+            Console.WriteLine();
+            Console.WriteLine("------------------------------------------------------------");
+            Console.WriteLine($"SSCC: {externalRef}");
+            Console.WriteLine($"Inbound: {dto.InboundRef}   [{dto.HeaderStatus}]");
+            Console.WriteLine($"SKU: {dto.SkuCode} | {dto.SkuDescription}");
+            Console.WriteLine($"Unit Qty: {dto.ExpectedUnitQty}");
+            Console.WriteLine($"Batch: {dto.BatchNumber}");
+            Console.WriteLine($"BBE: {dto.BestBeforeDate:dd-MM-yyyy}");
+            Console.WriteLine($"Staging Bin: {stagingBin}");
+            Console.WriteLine($"Arrival Stock Status: {dto.ArrivalStockStatusCode}");
 
-                    if (uiMode == ReceivingUiMode.Trace)
-                    {
-                        Console.WriteLine();
-                        Console.WriteLine("---- TRACE DETAILS ----");
-                        Console.WriteLine($"Line State: {dto.LineState}");
-                        Console.WriteLine($"Line Expected: {dto.LineExpectedQty}");
-                        Console.WriteLine($"Line Received: {dto.LineReceivedQty}");
-                        Console.WriteLine($"Outstanding Before: {dto.OutstandingBefore}");
-                        Console.WriteLine($"Outstanding After:  {dto.OutstandingAfter}");
-                    }
+            // Standard and above — operational detail
+            if (uiMode >= UiMode.Standard)
+            {
+                Console.WriteLine();
+                Console.WriteLine("---- DETAILS ----");
+                Console.WriteLine($"Line State:    {dto.LineState}");
+                Console.WriteLine($"Line Expected: {dto.LineExpectedQty}");
+                Console.WriteLine($"Line Received: {dto.LineReceivedQty}");
+                Console.WriteLine($"Outstanding Before: {dto.OutstandingBefore}");
+                Console.WriteLine($"Outstanding After:  {dto.OutstandingAfter}");
+            }
 
-                    Console.WriteLine("------------------------------------------------------------");
-                }
+            // Trace only — internal IDs and claim detail
+            if (uiMode == UiMode.Trace)
+            {
+                Console.WriteLine();
+                Console.WriteLine("---- TRACE ----");
+                Console.WriteLine($"Expected Unit ID: {dto.InboundExpectedUnitId}");
+                Console.WriteLine($"Inbound Line ID:  {dto.InboundLineId}");
+                Console.WriteLine($"Claim Expires:    {dto.ClaimExpiresAt:HH:mm:ss} UTC");
+            }
+
+            Console.WriteLine("------------------------------------------------------------");
+        }
     }
-
 }

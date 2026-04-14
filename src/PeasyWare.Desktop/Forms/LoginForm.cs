@@ -12,7 +12,10 @@ public partial class LoginForm : Form
     public int? UserId { get; private set; }
     public string Username { get; private set; } = "";
     public string DisplayName { get; private set; } = "";
+    public string? RoleName { get; private set; }
+    public UiMode UiMode { get; private set; } = UiMode.Minimal;
     public int SessionTimeoutMinutes { get; private set; }
+
     public LoginForm(LoginFlow loginFlow, bool diagnosticsEnabled)
     {
         InitializeComponent();
@@ -30,8 +33,6 @@ public partial class LoginForm : Form
 
     private void btnLogin_Click(object sender, EventArgs e)
     {
-        // Correlation now handled via SessionContext → no global state
-
         var username = txtUsername.Text.Trim();
         var password = txtPassword.Text;
 
@@ -61,9 +62,9 @@ public partial class LoginForm : Form
                 UserId = result.UserId;
                 Username = username;
                 DisplayName = result.DisplayName ?? username;
-
+                RoleName = result.RoleName;
+                UiMode = result.UiMode;
                 SessionTimeoutMinutes = result.SessionTimeoutMinutes;
-
                 DialogResult = DialogResult.OK;
                 Close();
                 return;
@@ -82,32 +83,24 @@ public partial class LoginForm : Form
                     "Login failed",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
-
                 txtPassword.Clear();
                 txtPassword.Focus();
                 return;
         }
     }
 
-    // --------------------------------------------------
-    // Context builder (single source of truth)
-    // --------------------------------------------------
-
     private static LoginContext BuildBaseContext(bool forceLogin)
-    => new LoginContext
-    {
-        ClientApp = "PeasyWare.Desktop",
-        ClientInfo = Environment.MachineName,
-        OsInfo = Environment.OSVersion.ToString(),
-        IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
-        ForceLogin = forceLogin,
+        => new LoginContext
+        {
+            ClientApp = "PeasyWare.Desktop",
+            ClientInfo = Environment.MachineName,
+            OsInfo = Environment.OSVersion.ToString(),
+            IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
+            ForceLogin = forceLogin,
+            CorrelationId = Guid.NewGuid()
+        };
 
-        CorrelationId = Guid.NewGuid()
-    };
-
-    private void HandlePasswordChange(
-        string username,
-        string oldPassword)
+    private void HandlePasswordChange(string username, string oldPassword)
     {
         using var pwdForm = new PasswordChangeForm(username);
 
@@ -119,16 +112,12 @@ public partial class LoginForm : Form
                 "Login",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
-
             txtPassword.Clear();
             txtPassword.Focus();
             return;
         }
 
-        // 1) Change password
-        var changeResult = _loginFlow.ChangePassword(
-            username,
-            pwdForm.NewPassword);
+        var changeResult = _loginFlow.ChangePassword(username, pwdForm.NewPassword);
 
         if (!changeResult.Success)
         {
@@ -137,13 +126,11 @@ public partial class LoginForm : Form
                 "Password change failed",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-
             txtPassword.Clear();
             txtPassword.Focus();
             return;
         }
 
-        // 2) Re-attempt login
         var retryContext = BuildBaseContext(forceLogin: false);
 
         var retryResult = _loginFlow.Run(
@@ -159,22 +146,20 @@ public partial class LoginForm : Form
                 "Login failed",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-
             txtPassword.Clear();
             txtPassword.Focus();
             return;
         }
 
-        // 3) Success
         SessionId = retryResult.SessionId;
-        UserId = retryResult.UserId;     // 🔹 NEW
+        UserId = retryResult.UserId;
+        RoleName = retryResult.RoleName;
+        UiMode = retryResult.UiMode;
         DialogResult = DialogResult.OK;
         Close();
     }
 
-    private void HandleAlreadyLoggedIn(
-        string username,
-        string password)
+    private void HandleAlreadyLoggedIn(string username, string password)
     {
         var confirm = MessageBox.Show(
             "You are already logged in from this application.\n\n" +
@@ -206,14 +191,15 @@ public partial class LoginForm : Form
                 "Login failed",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-
             txtPassword.Clear();
             txtPassword.Focus();
             return;
         }
 
         SessionId = retryResult.SessionId;
-        UserId = retryResult.UserId;     // 🔹 NEW
+        UserId = retryResult.UserId;
+        RoleName = retryResult.RoleName;
+        UiMode = retryResult.UiMode;
         DialogResult = DialogResult.OK;
         Close();
     }

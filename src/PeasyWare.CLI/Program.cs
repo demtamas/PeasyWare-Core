@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application;
+using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Flows;
 using PeasyWare.Application.Interfaces;
@@ -11,10 +11,6 @@ using PeasyWare.Infrastructure.Bootstrap;
 
 var argsList = args.Select(a => a.ToLowerInvariant()).ToList();
 var diagnosticsEnabled = argsList.Contains("--diag");
-
-// --------------------------------------------------
-// Startup
-// --------------------------------------------------
 
 AppRuntime runtime;
 
@@ -29,20 +25,22 @@ catch (Exception ex)
     return;
 }
 
-// Login flow
 var loginFlow = new LoginFlow(
     runtime.AuthService,
-    runtime.UserSecurityRepository);
+    runtime.UserSecurityRepository,
+    runtime.Settings.DefaultUiMode);
 
 // --------------------------------------------------
 // LOGIN LOOP
 // --------------------------------------------------
 
-Guid? sessionId = null;
-int? userId = null;
-string? username = null;
-string? password = null;
-string? displayName = null;
+Guid? sessionId           = null;
+int? userId               = null;
+string? username          = null;
+string? password          = null;
+string? displayName       = null;
+string? roleName          = null;
+UiMode uiMode             = UiMode.Minimal;
 int sessionTimeoutMinutes = 480;
 
 while (true)
@@ -72,11 +70,12 @@ while (true)
 
         var context = new LoginContext
         {
-            ClientApp = "PeasyWare.CLI",
+            ClientApp  = "PeasyWare.CLI",
             ClientInfo = Environment.MachineName,
-            OsInfo = Environment.OSVersion.ToString(),
-            IpAddress = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
-            ForceLogin = false
+            OsInfo     = Environment.OSVersion.ToString(),
+            IpAddress  = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
+            ForceLogin = false,
+            CorrelationId = Guid.NewGuid()
         };
 
         var result = loginFlow.Run(
@@ -88,16 +87,15 @@ while (true)
         switch (result.Outcome)
         {
             case LoginOutcome.Success:
-
-                sessionId = result.SessionId!.Value;
-                userId = result.UserId!.Value;
-                displayName = result.DisplayName;
+                sessionId             = result.SessionId!.Value;
+                userId                = result.UserId!.Value;
+                displayName           = result.DisplayName;
+                roleName              = result.RoleName;
+                uiMode                = result.UiMode;
                 sessionTimeoutMinutes = result.SessionTimeoutMinutes;
-
                 goto LoginSucceeded;
 
             case LoginOutcome.PasswordChangeRequired:
-
                 Console.WriteLine(result.Message);
                 Console.WriteLine();
 
@@ -111,7 +109,7 @@ while (true)
                     if (change.Success)
                     {
                         password = newPassword;
-                        changed = true;
+                        changed  = true;
                         break;
                     }
 
@@ -124,7 +122,6 @@ while (true)
                 continue;
 
             case LoginOutcome.AlreadyLoggedIn:
-
                 Console.WriteLine(result.Message);
                 Console.Write("Terminate the other session and continue? (y/N): ");
 
@@ -135,11 +132,12 @@ while (true)
 
                 var forcedContext = new LoginContext
                 {
-                    ClientApp = context.ClientApp,
-                    ClientInfo = context.ClientInfo,
-                    OsInfo = context.OsInfo,
-                    IpAddress = context.IpAddress,
-                    ForceLogin = true
+                    ClientApp     = context.ClientApp,
+                    ClientInfo    = context.ClientInfo,
+                    OsInfo        = context.OsInfo,
+                    IpAddress     = context.IpAddress,
+                    ForceLogin    = true,
+                    CorrelationId = Guid.NewGuid()
                 };
 
                 var retry = loginFlow.Run(
@@ -155,15 +153,15 @@ while (true)
                     continue;
                 }
 
-                sessionId = retry.SessionId!.Value;
-                userId = retry.UserId!.Value;
-                displayName = retry.DisplayName;
+                sessionId             = retry.SessionId!.Value;
+                userId                = retry.UserId!.Value;
+                displayName           = retry.DisplayName;
+                roleName              = retry.RoleName;      // ← retry, not result
+                uiMode                = retry.UiMode;        // ← retry, not result
                 sessionTimeoutMinutes = retry.SessionTimeoutMinutes;
-
                 goto LoginSucceeded;
 
             default:
-
                 Console.WriteLine(result.Message ?? "Login failed.");
                 Console.ReadKey(true);
                 continue;
@@ -179,29 +177,32 @@ while (true)
 
 LoginSucceeded:
 
-// --------------------------------------------------
-// SESSION CONTEXT
-// --------------------------------------------------
-
 var session = new SessionContext(
-    sessionId: sessionId!.Value,
-    userId: userId!.Value,
-    username: username!,
-    displayName: displayName ?? username!,
-    sourceApp: "PeasyWare.CLI",
-    sourceClient: Environment.MachineName,
-    sourceIp: IpResolver.GetLocalIPv4(),
-    correlationId: Guid.NewGuid(),
-    osInfo: Environment.OSVersion.ToString(),
+    sessionId:            sessionId!.Value,
+    userId:               userId!.Value,
+    username:             username!,
+    displayName:          displayName ?? username!,
+    sourceApp:            "PeasyWare.CLI",
+    sourceClient:         Environment.MachineName,
+    sourceIp:             IpResolver.GetLocalIPv4(),
+    correlationId:        Guid.NewGuid(),
+    osInfo:               Environment.OSVersion.ToString(),
+    roleName:             roleName,
+    uiMode:               uiMode,
     sessionTimeoutMinutes: sessionTimeoutMinutes
 );
 
-// 🔥 IMPORTANT: bind logger to session
 runtime.Logger.SetSession(session);
 
-// --------------------------------------------------
-// Header (post-login)
-// --------------------------------------------------
+runtime.Logger.Info("Session.Start", new
+{
+    session.UserId,
+    session.Username,
+    session.RoleName,
+    UiMode = session.UiMode.ToString(),
+    session.SourceApp,
+    session.SourceClient
+});
 
 HeaderRenderer.Render(
     runtime.Settings,
@@ -209,10 +210,6 @@ HeaderRenderer.Render(
     session.SessionId);
 
 Console.WriteLine("Login successful. Welcome back!\n");
-
-// --------------------------------------------------
-// MAIN LOOP
-// --------------------------------------------------
 
 try
 {
@@ -233,9 +230,9 @@ try
 
                     var logout = sessionCommand.LogoutSession(
                         session.SessionId,
-                        sourceApp: "PeasyWare.CLI",
+                        sourceApp:    "PeasyWare.CLI",
                         sourceClient: Environment.MachineName,
-                        sourceIp: IpResolver.GetLocalIPv4());
+                        sourceIp:     IpResolver.GetLocalIPv4());
 
                     Console.WriteLine(logout.FriendlyMessage);
                     return;
@@ -267,7 +264,7 @@ finally
 
 static void RunInbound(AppRuntime runtime, SessionContext session)
 {
-    var inboundQuery = runtime.Repositories.CreateInboundQuery(session);
+    var inboundQuery   = runtime.Repositories.CreateInboundQuery(session);
     var inboundCommand = runtime.Repositories.CreateInboundCommand(session);
 
     while (true)
@@ -279,19 +276,15 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
             case "1":
                 {
                     var activatable = inboundQuery.GetActivatableInbounds();
-
-                    var refInput =
-                        ActivateInboundScreen.PromptInboundRef(activatable);
+                    var refInput    = ActivateInboundScreen.PromptInboundRef(activatable);
 
                     if (string.IsNullOrWhiteSpace(refInput))
                         return;
 
-                    var result =
-                        inboundCommand.ActivateInboundByRef(refInput);
+                    var result = inboundCommand.ActivateInboundByRef(refInput);
 
                     Console.WriteLine();
                     Console.WriteLine(result.FriendlyMessage);
-
                     Console.ReadKey(true);
                     break;
                 }

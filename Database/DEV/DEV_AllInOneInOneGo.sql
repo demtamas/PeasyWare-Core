@@ -389,9 +389,9 @@ VALUES
  '{"type":"bool"}',
  'Allows sensitive fields to be logged (DEV ONLY)'),
 
-('receiving.ui_mode','Receiving UI mode','inbound',30,'TRACE','string',
- '{"type":"enum","values":["MINIMAL","TRACE"]}',
- 'Receiving UI mode'),
+('core.default_ui_mode','Default UI mode','core',30,'TRACE','string',
+ '{"type":"enum","values":["Minimal","Standard","Trace"]}',
+ 'Diagnostic UI mode'),
 
 --------------------------------------------------
 -- AUDIT
@@ -2000,7 +2000,8 @@ CREATE OR ALTER PROCEDURE auth.usp_login
     @display_name_out   NVARCHAR(200) OUTPUT,
     @last_login_time    DATETIME2(3)  OUTPUT,
     @failed_attempts    INT           OUTPUT,
-    @lockout_until_out  DATETIME2(3)  OUTPUT
+    @lockout_until_out  DATETIME2(3)  OUTPUT,
+    @role_name_out      NVARCHAR(100) OUTPUT
 )
 AS
 BEGIN
@@ -2037,6 +2038,7 @@ BEGIN
         @must_change_password BIT,
         @password_expires_at DATETIME2(3),
         @display_name NVARCHAR(200),
+        @role_name NVARCHAR(100),
         @now DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
@@ -2052,8 +2054,11 @@ BEGIN
             @lockout_until = u.lockout_until,
             @must_change_password = u.must_change_password,
             @password_expires_at = u.password_expires_at,
-            @display_name = u.display_name
+            @display_name = u.display_name,
+            @role_name            = r.role_name 
         FROM auth.users u
+        JOIN auth.user_roles ur ON ur.user_id = u.id
+        JOIN auth.roles r       ON r.id = ur.role_id
         WHERE u.username = @username;
 
         IF @user_id IS NULL
@@ -2197,6 +2202,7 @@ BEGIN
         SET @user_id_out = @user_id;
         SET @session_id_out = @session_id;
         SET @display_name_out = @display_name;
+        SET @role_name_out = @role_name;
 
 LogAndExit:
 

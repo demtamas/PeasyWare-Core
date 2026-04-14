@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
+using PeasyWare.Application;
 using PeasyWare.Infrastructure.Sql;
 
 namespace PeasyWare.Infrastructure.Settings;
@@ -35,38 +36,38 @@ public sealed class SettingsLoader
         // AUTHENTICATION
         // --------------------------------------------------
 
-        var loginEnabled = GetBool(values, "auth.login_enabled");
+        var loginEnabled          = GetBool(values, "auth.login_enabled");
         var sessionTimeoutMinutes = GetInt(values, "auth.session_timeout_minutes");
-        var appLockMinutes = GetInt(values, "auth.app_lock_minutes");
-        var maxLoginAttempts = GetInt(values, "auth.max_login_attempts");
-        var passwordMinLength = GetInt(values, "auth.password_min_length");
-        var passwordExpiryDays = GetInt(values, "auth.password_expiry_days");
-        var passwordHistoryDepth = GetInt(values, "auth.password_history_depth");
-        var auditEnabled = GetBool(values, "audit.enabled");
+        var appLockMinutes        = GetInt(values, "auth.app_lock_minutes");
+        var maxLoginAttempts      = GetInt(values, "auth.max_login_attempts");
+        var passwordMinLength     = GetInt(values, "auth.password_min_length");
+        var passwordExpiryDays    = GetInt(values, "auth.password_expiry_days");
+        var passwordHistoryDepth  = GetInt(values, "auth.password_history_depth");
+        var auditEnabled          = GetBool(values, "audit.enabled");
 
         // --------------------------------------------------
         // LOGGING
         // --------------------------------------------------
 
-        var loggingEnabled = GetBool(values, "logging.enabled");
-        var consoleLoggingEnabled = GetBool(values, "logging.console.enabled");
+        var loggingEnabled         = GetBool(values, "logging.enabled");
+        var consoleLoggingEnabled  = GetBool(values, "logging.console.enabled");
         var databaseLoggingEnabled = GetBool(values, "logging.db.enabled");
         var includeSensitiveLogging = GetBool(values, "logging.include_sensitive");
-        var minimumLogLevel = GetEnum<LogLevel>(values, "logging.min_level");
+        var minimumLogLevel        = GetEnum<LogLevel>(values, "logging.min_level");
 
         // --------------------------------------------------
-        // RECEIVING
+        // UI MODE
         // --------------------------------------------------
 
-        var receivingUiMode = GetEnum<ReceivingUiMode>(values, "receiving.ui_mode");
+        var defaultUiMode = GetEnum<UiMode>(values, "core.default_ui_mode");
 
         // --------------------------------------------------
         // CLIENT / SITE
         // --------------------------------------------------
 
         var warehouseCode = GetString(values, "pw.warehouse_code");
-        var siteCode = GetString(values, "pw.site_code");
-        var siteName = GetString(values, "pw.site_name");
+        var siteCode      = GetString(values, "pw.site_code");
+        var siteName      = GetString(values, "pw.site_name");
 
         return new RuntimeSettings(
             coreVersion,
@@ -78,7 +79,7 @@ public sealed class SettingsLoader
             includeSensitiveLogging,
             minimumLogLevel,
             auditEnabled,
-            receivingUiMode,
+            defaultUiMode,
 
             sessionTimeoutMinutes,
             appLockMinutes,
