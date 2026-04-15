@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application.Dto;
+using PeasyWare.Application.Dto;
 
 namespace PeasyWare.Application.Interfaces;
 
@@ -13,4 +13,6 @@ public interface IInboundQueryRepository
     SsccValidationDto ValidateSsccForInbound(
         string externalRef,
         string stagingBin);
+
+    IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef);
 }

@@ -156,8 +156,8 @@ while (true)
                 sessionId             = retry.SessionId!.Value;
                 userId                = retry.UserId!.Value;
                 displayName           = retry.DisplayName;
-                roleName              = retry.RoleName;      // ← retry, not result
-                uiMode                = retry.UiMode;        // ← retry, not result
+                roleName              = retry.RoleName;
+                uiMode                = retry.UiMode;
                 sessionTimeoutMinutes = retry.SessionTimeoutMinutes;
                 goto LoginSucceeded;
 
@@ -264,12 +264,15 @@ finally
 
 static void RunInbound(AppRuntime runtime, SessionContext session)
 {
+    // Reversal is available to manager (Standard) and admin (Trace) only
+    bool canReverse = session.UiMode >= UiMode.Standard;
+
     var inboundQuery   = runtime.Repositories.CreateInboundQuery(session);
     var inboundCommand = runtime.Repositories.CreateInboundCommand(session);
 
     while (true)
     {
-        var inboundInput = MenuRenderer.ShowInboundMenu();
+        var inboundInput = MenuRenderer.ShowInboundMenu(canReverse);
 
         switch (inboundInput)
         {
@@ -300,6 +303,13 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                 {
                     var flow = new PutawayFromInboundFlow(runtime, session);
                     flow.RunAsync().Wait();
+                    break;
+                }
+
+            case "4" when canReverse:
+                {
+                    var flow = new ReverseInboundReceiptFlow(runtime, session);
+                    flow.Run();
                     break;
                 }
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
@@ -53,14 +53,19 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         using var reader = command.ExecuteReader();
 
+        var colInboundId       = reader.GetOrdinal("inbound_id");
+        var colInboundRef      = reader.GetOrdinal("inbound_ref");
+        var colExpectedArrival = reader.GetOrdinal("expected_arrival_at");
+        var colLineCount       = reader.GetOrdinal("line_count");
+
         while (reader.Read())
         {
             yield return new ActivatableInboundDto
             {
-                InboundId = reader.GetInt32(0),
-                InboundRef = reader.GetString(1),
-                ExpectedArrivalAt = reader.IsDBNull(2) ? null : reader.GetDateTime(2),
-                LineCount = reader.GetInt32(3)
+                InboundId         = reader.GetInt32(colInboundId),
+                InboundRef        = reader.GetString(colInboundRef),
+                ExpectedArrivalAt = reader.IsDBNull(colExpectedArrival) ? null : reader.GetDateTime(colExpectedArrival),
+                LineCount         = reader.GetInt32(colLineCount)
             };
         }
     }
@@ -93,17 +98,25 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         using var reader = command.ExecuteReader();
 
+        var colLineId      = reader.GetOrdinal("inbound_line_id");
+        var colLineNo      = reader.GetOrdinal("line_no");
+        var colSkuCode     = reader.GetOrdinal("sku_code");
+        var colSkuDesc     = reader.GetOrdinal("sku_description");
+        var colExpected    = reader.GetOrdinal("expected_qty");
+        var colReceived    = reader.GetOrdinal("received_qty");
+        var colOutstanding = reader.GetOrdinal("outstanding_qty");
+
         while (reader.Read())
         {
             yield return new InboundLineDto
             {
-                InboundLineId = reader.GetInt32(0),
-                LineNo = reader.GetInt32(1),
-                SkuCode = reader.GetString(2),
-                Description = reader.GetString(3),
-                ExpectedQty = reader.GetInt32(4),
-                ReceivedQty = reader.GetInt32(5),
-                OutstandingQty = reader.GetInt32(6)
+                InboundLineId  = reader.GetInt32(colLineId),
+                LineNo         = reader.GetInt32(colLineNo),
+                SkuCode        = reader.GetString(colSkuCode),
+                Description    = reader.GetString(colSkuDesc),
+                ExpectedQty    = reader.GetInt32(colExpected),
+                ReceivedQty    = reader.GetInt32(colReceived),
+                OutstandingQty = reader.GetInt32(colOutstanding)
             };
         }
     }
@@ -136,11 +149,16 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
             };
         }
 
+        // Column names match SP aliases: ExistsFlag, IsReceivable, HasExpectedUnits
+        var colExists           = reader.GetOrdinal("ExistsFlag");
+        var colIsReceivable     = reader.GetOrdinal("IsReceivable");
+        var colHasExpectedUnits = reader.GetOrdinal("HasExpectedUnits");
+
         return new InboundSummaryDto
         {
-            Exists = reader.GetBoolean(0),
-            IsReceivable = reader.GetBoolean(1),
-            HasExpectedUnits = reader.GetBoolean(2)
+            Exists           = reader.GetBoolean(colExists),
+            IsReceivable     = reader.GetBoolean(colIsReceivable),
+            HasExpectedUnits = reader.GetBoolean(colHasExpectedUnits)
         };
     }
 
@@ -174,6 +192,89 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
     }
 
     // ------------------------------------------------------------
+    // Receivable receipts (non-reversed, reversible state only)
+    // ------------------------------------------------------------
+
+    public IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                r.receipt_id,
+                r.inbound_line_id,
+                r.inbound_expected_unit_id,
+                r.inventory_unit_id,
+                r.received_qty,
+                r.received_at,
+                r.is_reversal,
+                r.reversed_receipt_id,
+                iu.external_ref,
+                iu.stock_state_code,
+                b.bin_code          AS current_bin_code,
+                d.inbound_ref,
+                l.line_state_code
+            FROM deliveries.inbound_receipts r
+            JOIN inventory.inventory_units iu
+                ON iu.inventory_unit_id = r.inventory_unit_id
+            JOIN deliveries.inbound_lines l
+                ON l.inbound_line_id = r.inbound_line_id
+            JOIN deliveries.inbound_deliveries d
+                ON d.inbound_id = l.inbound_id
+            LEFT JOIN inventory.inventory_placements p
+                ON p.inventory_unit_id = r.inventory_unit_id
+            LEFT JOIN locations.bins b
+                ON b.bin_id = p.bin_id
+            WHERE d.inbound_ref  = @ref
+              AND r.is_reversal  = 0
+              AND r.reversed_receipt_id IS NULL
+              AND iu.stock_state_code = 'RCD'
+            ORDER BY r.receipt_id
+        """;
+
+        command.Parameters.Add(
+            new SqlParameter("@ref", SqlDbType.NVarChar, 50)
+            { Value = inboundRef });
+
+        using var reader = command.ExecuteReader();
+
+        var colReceiptId         = reader.GetOrdinal("receipt_id");
+        var colLineId            = reader.GetOrdinal("inbound_line_id");
+        var colExpectedUnitId    = reader.GetOrdinal("inbound_expected_unit_id");
+        var colUnitId            = reader.GetOrdinal("inventory_unit_id");
+        var colReceivedQty       = reader.GetOrdinal("received_qty");
+        var colReceivedAt        = reader.GetOrdinal("received_at");
+        var colIsReversal        = reader.GetOrdinal("is_reversal");
+        var colReversedReceiptId = reader.GetOrdinal("reversed_receipt_id");
+        var colExternalRef       = reader.GetOrdinal("external_ref");
+        var colStateCode         = reader.GetOrdinal("stock_state_code");
+        var colBinCode           = reader.GetOrdinal("current_bin_code");
+        var colInboundRef        = reader.GetOrdinal("inbound_ref");
+        var colLineState         = reader.GetOrdinal("line_state_code");
+
+        while (reader.Read())
+        {
+            yield return new InboundReceiptDto
+            {
+                ReceiptId              = reader.GetInt32(colReceiptId),
+                InboundLineId          = reader.GetInt32(colLineId),
+                InboundExpectedUnitId  = reader.IsDBNull(colExpectedUnitId) ? null : reader.GetInt32(colExpectedUnitId),
+                InventoryUnitId        = reader.GetInt32(colUnitId),
+                ReceivedQty            = reader.GetInt32(colReceivedQty),
+                ReceivedAt             = reader.GetDateTime(colReceivedAt),
+                IsReversal             = reader.GetBoolean(colIsReversal),
+                ReversedReceiptId      = reader.IsDBNull(colReversedReceiptId) ? null : reader.GetInt32(colReversedReceiptId),
+                ExternalRef            = reader.IsDBNull(colExternalRef) ? null : reader.GetString(colExternalRef),
+                StockStateCode         = reader.GetString(colStateCode),
+                CurrentBinCode         = reader.IsDBNull(colBinCode) ? null : reader.GetString(colBinCode),
+                InboundRef             = reader.GetString(colInboundRef),
+                LineStateCode          = reader.GetString(colLineState)
+            };
+        }
+    }
+
+    // ------------------------------------------------------------
     // SSCC validation
     // ------------------------------------------------------------
 
@@ -185,9 +286,10 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
         using var command = connection.CreateCommand();
 
         command.CommandText = "deliveries.usp_validate_sscc_for_receive";
+        command.CommandType = CommandType.StoredProcedure;
+
         command.Parameters.AddWithValue("@user_id", _session.UserId);
         command.Parameters.AddWithValue("@session_id", _session.SessionId);
-        command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.Add(
             new SqlParameter("@external_ref", SqlDbType.NVarChar, 50)
@@ -211,37 +313,57 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
             };
         }
 
-        var success = reader.GetBoolean(0);
-        var code = reader.IsDBNull(1) ? "ERRSSCC99" : reader.GetString(1);
+        var colSuccess           = reader.GetOrdinal("success");
+        var colCode              = reader.GetOrdinal("result_code");
+        var colExpectedUnitId    = reader.GetOrdinal("inbound_expected_unit_id");
+        var colLineId            = reader.GetOrdinal("inbound_line_id");
+        var colInboundRef        = reader.GetOrdinal("inbound_ref");
+        var colHeaderStatus      = reader.GetOrdinal("header_status");
+        var colLineState         = reader.GetOrdinal("line_state");
+        var colSkuCode           = reader.GetOrdinal("sku_code");
+        var colSkuDesc           = reader.GetOrdinal("sku_description");
+        var colExpectedUnitQty   = reader.GetOrdinal("expected_unit_qty");
+        var colLineExpectedQty   = reader.GetOrdinal("line_expected_qty");
+        var colLineReceivedQty   = reader.GetOrdinal("line_received_qty");
+        var colOutstandingBefore = reader.GetOrdinal("outstanding_before");
+        var colOutstandingAfter  = reader.GetOrdinal("outstanding_after");
+        var colBatchNumber       = reader.GetOrdinal("batch_number");
+        var colBestBefore        = reader.GetOrdinal("best_before_date");
+        var colClaimExpiresAt    = reader.GetOrdinal("claim_expires_at");
+        var colClaimToken        = reader.GetOrdinal("claim_token");
+        var colArrivalStatus     = reader.GetOrdinal("arrival_stock_status_code");
+
+        var success = reader.GetBoolean(colSuccess);
+        var code    = reader.IsDBNull(colCode) ? "ERRSSCC99" : reader.GetString(colCode);
 
         return new SsccValidationDto
         {
-            Success = success,
-            ResultCode = code,
+            Success         = success,
+            ResultCode      = code,
             FriendlyMessage = _resolver.Resolve(code),
 
-            InboundExpectedUnitId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
-            InboundLineId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
-            InboundRef = reader.IsDBNull(4) ? "" : reader.GetString(4),
-            HeaderStatus = reader.IsDBNull(5) ? "" : reader.GetString(5),
-            LineState = reader.IsDBNull(6) ? "" : reader.GetString(6),
+            InboundExpectedUnitId  = reader.IsDBNull(colExpectedUnitId) ? 0 : reader.GetInt32(colExpectedUnitId),
+            InboundLineId          = reader.IsDBNull(colLineId) ? 0 : reader.GetInt32(colLineId),
+            InboundRef             = reader.IsDBNull(colInboundRef) ? "" : reader.GetString(colInboundRef),
+            HeaderStatus           = reader.IsDBNull(colHeaderStatus) ? "" : reader.GetString(colHeaderStatus),
+            LineState              = reader.IsDBNull(colLineState) ? "" : reader.GetString(colLineState),
 
-            SkuCode = reader.IsDBNull(7) ? "" : reader.GetString(7),
-            SkuDescription = reader.IsDBNull(8) ? "" : reader.GetString(8),
+            SkuCode                = reader.IsDBNull(colSkuCode) ? "" : reader.GetString(colSkuCode),
+            SkuDescription         = reader.IsDBNull(colSkuDesc) ? "" : reader.GetString(colSkuDesc),
 
-            ExpectedUnitQty = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
-            LineExpectedQty = reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
-            LineReceivedQty = reader.IsDBNull(11) ? 0 : reader.GetInt32(11),
+            ExpectedUnitQty        = reader.IsDBNull(colExpectedUnitQty) ? 0 : reader.GetInt32(colExpectedUnitQty),
+            LineExpectedQty        = reader.IsDBNull(colLineExpectedQty) ? 0 : reader.GetInt32(colLineExpectedQty),
+            LineReceivedQty        = reader.IsDBNull(colLineReceivedQty) ? 0 : reader.GetInt32(colLineReceivedQty),
 
-            OutstandingBefore = reader.IsDBNull(12) ? 0 : reader.GetInt32(12),
-            OutstandingAfter = reader.IsDBNull(13) ? 0 : reader.GetInt32(13),
+            OutstandingBefore      = reader.IsDBNull(colOutstandingBefore) ? 0 : reader.GetInt32(colOutstandingBefore),
+            OutstandingAfter       = reader.IsDBNull(colOutstandingAfter) ? 0 : reader.GetInt32(colOutstandingAfter),
 
-            BatchNumber = reader.IsDBNull(14) ? null : reader.GetString(14),
-            BestBeforeDate = reader.IsDBNull(15) ? null : reader.GetDateTime(15),
+            BatchNumber            = reader.IsDBNull(colBatchNumber) ? null : reader.GetString(colBatchNumber),
+            BestBeforeDate         = reader.IsDBNull(colBestBefore) ? null : reader.GetDateTime(colBestBefore),
 
-            ClaimExpiresAt = reader.IsDBNull(18) ? null : reader.GetDateTime(18),
-            ClaimToken = reader.IsDBNull(19) ? null : reader.GetGuid(19),
-            ArrivalStockStatusCode = reader.IsDBNull(20) ? "AV" : reader.GetString(20)
+            ClaimExpiresAt         = reader.IsDBNull(colClaimExpiresAt) ? null : reader.GetDateTime(colClaimExpiresAt),
+            ClaimToken             = reader.IsDBNull(colClaimToken) ? null : reader.GetGuid(colClaimToken),
+            ArrivalStockStatusCode = reader.IsDBNull(colArrivalStatus) ? "AV" : reader.GetString(colArrivalStatus)
         };
     }
 }

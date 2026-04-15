@@ -860,6 +860,14 @@ BEGIN
             N'Inbound delivery activated successfully.',
             N'Inbound.Activate: success'),
 
+        (N'SUCINBCLS01',     N'INB', N'INFO',
+            N'Inbound delivery fully received and closed.',
+            N'Inbound.Header: auto-closed after final receipt'),
+
+        (N'SUCINBREOPEN01',  N'INB', N'INFO',
+            N'Inbound delivery reopened following receipt reversal.',
+            N'Inbound.Header: reopened after reversal'),
+
         (N'ERRINBL01', N'INB', N'ERROR',
             N'Inbound line not found.',
             N'Inbound.Line: inbound_line_id not found'),
@@ -995,6 +1003,26 @@ BEGIN
         (N'ERRINBSTRUCT02', N'INBOUND', N'ERROR',
              N'Expected handling units cannot be modified after activation.',
              N'Inbound.Structure: expected units modification attempted after activation'),
+
+        (N'SUCINBREV01',  N'INB', N'INFO',
+            N'Receipt reversed successfully.',
+            N'Inbound.Reversal: success'),
+
+        (N'ERRINBREV01',  N'INB', N'ERROR',
+            N'Receipt not found or has already been reversed.',
+            N'Inbound.Reversal: receipt_id not found or is_reversal=1'),
+
+        (N'ERRINBREV02',  N'INB', N'ERROR',
+            N'This receipt has already been reversed.',
+            N'Inbound.Reversal: reversed_receipt_id already set'),
+
+        (N'ERRINBREV03',  N'INB', N'ERROR',
+            N'Inventory unit could not be reversed. Unit may have been moved or modified.',
+            N'Inbound.Reversal: inventory_units UPDATE rowcount=0'),
+
+        (N'ERRINBREV99',  N'INB', N'ERROR',
+            N'Unexpected error during reversal. Please contact your supervisor.',
+            N'Inbound.Reversal: unhandled exception in CATCH'),
 
         (N'ERRTASK01', N'TASK', N'ERROR',
              N'Inventory unit not recognised.',
@@ -3909,6 +3937,7 @@ VALUES
 ('RCD', 'RECEIVED', 0),
 ('PTW', 'PUTAWAY', 0),
 ('PKD', 'PICKED', 0),
+('REV', 'REVERSED', 1),
 ('SHP', 'SHIPPED', 1);
 
 CREATE TABLE inventory.stock_statuses
@@ -3940,6 +3969,7 @@ CREATE TABLE inventory.stock_state_transitions
 INSERT INTO inventory.stock_state_transitions
 VALUES
 ('RCD','PTW',0,'Putaway complete'),
+('RCD','REV',1,'Reversed'),
 ('PTW','PKD',0,'Picked'),
 ('PKD','SHP',0,'Shipped');
 
@@ -4027,10 +4057,12 @@ GO
    Indexes
    ============================================================ */
 
--- 1. Unique SSCC (only when provided)
+-- 1. Unique SSCC + status
 CREATE UNIQUE INDEX ux_inventory_units_external_ref
 ON inventory.inventory_units (external_ref)
-WHERE external_ref IS NOT NULL;
+WHERE external_ref IS NOT NULL
+  AND stock_state_code <> 'REV'
+  AND stock_state_code <> 'SHP';
 GO
 
 -- 2. Fast lookup by SKU (stock aggregation, joins)
@@ -4045,6 +4077,7 @@ GO
 
 CREATE INDEX IX_inventory_units_state
 ON inventory.inventory_units (stock_state_code);
+GO
 
 /* ============================================================
    inventory.inventory_placements
@@ -4803,6 +4836,7 @@ INSERT INTO deliveries.inbound_line_state_transitions VALUES
 ('EXP','RCV',0),
 ('EXP','CNL',1),
 ('PRC','CNL',1),
+('PRC', 'EXP', 1),
 ('RCV', 'PRC', 1),
 ('RCV', 'EXP', 1);
 GO
@@ -5731,7 +5765,7 @@ BEGIN
         SET @ttl_seconds = 30;
 
     ----------------------------------------------------------------------
-    -- 0) Cleanup expired claims (short update, no explicit transaction)
+    -- 0) Cleanup expired claims
     ----------------------------------------------------------------------
     UPDATE deliveries.inbound_expected_units
     SET expected_unit_state_code = 'EXP',
@@ -5747,7 +5781,7 @@ BEGIN
 
     BEGIN TRY
         ------------------------------------------------------------------
-        -- 1) Resolve expected unit (read-only preview lookup)
+        -- 1) Resolve expected unit
         ------------------------------------------------------------------
         SELECT TOP (1)
             @inbound_line_id          = l.inbound_line_id,
@@ -5780,10 +5814,19 @@ BEGIN
 
         IF @inbound_line_id IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRSSCC01',
-                   NULL,
-                   NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
-                   NULL,NULL,NULL,NULL;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRSSCC01'    AS result_code,
+                NULL AS inbound_expected_unit_id, NULL AS inbound_line_id,
+                NULL AS inbound_ref,              NULL AS header_status,
+                NULL AS line_state,               NULL AS sku_code,
+                NULL AS sku_description,          NULL AS expected_unit_qty,
+                NULL AS line_expected_qty,        NULL AS line_received_qty,
+                NULL AS outstanding_before,       NULL AS outstanding_after,
+                NULL AS batch_number,             NULL AS best_before_date,
+                NULL AS claimed_session_id,       NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,         NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
@@ -5792,22 +5835,26 @@ BEGIN
         ------------------------------------------------------------------
         IF @received_inventory_id IS NOT NULL
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRSSCC06',
-                   @inbound_expected_unit_id,
-                   @inbound_line_id,
-                   @inbound_ref,
-                   @header_status,
-                   @line_state,
-                   @sku_code,
-                   @sku_description,
-                   @expected_unit_qty,
-                   @line_expected_qty,
-                   @line_received_qty,
-                   (@line_expected_qty - @line_received_qty),
-                   (@line_expected_qty - @line_received_qty),
-                   @batch_number,
-                   @best_before_date,
-                   NULL,NULL,NULL,NULL, NULL;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRSSCC06'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_before,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
@@ -5816,54 +5863,64 @@ BEGIN
         ------------------------------------------------------------------
         IF @header_status NOT IN ('ACT','RCV')
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRINBL04',
-                   @inbound_expected_unit_id,
-                   @inbound_line_id,
-                   @inbound_ref,
-                   @header_status,
-                   @line_state,
-                   @sku_code,
-                   @sku_description,
-                   @expected_unit_qty,
-                   @line_expected_qty,
-                   @line_received_qty,
-                   (@line_expected_qty - @line_received_qty),
-                   (@line_expected_qty - @line_received_qty),
-                   @batch_number,
-                   @best_before_date,
-                   NULL,NULL,NULL,NULL, NULL;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRINBL04'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_before,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
         ------------------------------------------------------------------
-        -- 4) Claim logic (STRICT MODE)
+        -- 4.1) Active claim exists -> reject
         ------------------------------------------------------------------
-
-        -- 4.1 Active claim exists (any session) -> reject
         IF @claimed_session_id IS NOT NULL
            AND @claim_expires_at IS NOT NULL
            AND @claim_expires_at >= DATEADD(SECOND, -1, @now)
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRSSCC07',
-                   @inbound_expected_unit_id,
-                   @inbound_line_id,
-                   @inbound_ref,
-                   @header_status,
-                   @line_state,
-                   @sku_code,
-                   @sku_description,
-                   @expected_unit_qty,
-                   @line_expected_qty,
-                   @line_received_qty,
-                   (@line_expected_qty - @line_received_qty),
-                   (@line_expected_qty - @line_received_qty - @expected_unit_qty),
-                   @batch_number,
-                   @best_before_date,
-                   @claimed_session_id, @claimed_by_user_id, @claim_expires_at, @claim_token;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRSSCC07'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty)                        AS outstanding_before,
+                (@line_expected_qty - @line_received_qty - @expected_unit_qty)   AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                @claimed_session_id       AS claimed_session_id,
+                @claimed_by_user_id       AS claimed_by_user_id,
+                @claim_expires_at         AS claim_expires_at,
+                @claim_token              AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
-        -- 4.2 Transition validation (EXP -> CLM)
+        ------------------------------------------------------------------
+        -- 4.2) Transition validation (EXP -> CLM)
+        ------------------------------------------------------------------
         IF NOT EXISTS
         (
             SELECT 1
@@ -5872,26 +5929,32 @@ BEGIN
               AND t.to_state_code   = 'CLM'
         )
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRSSCCSTATE01',
-                   @inbound_expected_unit_id,
-                   @inbound_line_id,
-                   @inbound_ref,
-                   @header_status,
-                   @line_state,
-                   @sku_code,
-                   @sku_description,
-                   @expected_unit_qty,
-                   @line_expected_qty,
-                   @line_received_qty,
-                   (@line_expected_qty - @line_received_qty),
-                   (@line_expected_qty - @line_received_qty),
-                   @batch_number,
-                   @best_before_date,
-                   NULL,NULL,NULL,NULL, NULL;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRSSCCSTATE01' AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_before,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
-        -- 4.3 Create NEW claim (no reuse)
+        ------------------------------------------------------------------
+        -- 4.3) Create NEW claim
+        ------------------------------------------------------------------
         SET @claim_token      = NEWID();
         SET @claim_expires_at = DATEADD(SECOND, @ttl_seconds, @now);
 
@@ -5909,56 +5972,62 @@ BEGIN
                 OR claim_expires_at < @now
               );
 
-        -- 4.4 Race protection
+        ------------------------------------------------------------------
+        -- 4.4) Race protection
+        ------------------------------------------------------------------
         IF @@ROWCOUNT = 0
         BEGIN
-            SELECT CAST(0 AS BIT), N'ERRSSCC07',
-                   @inbound_expected_unit_id,
-                   @inbound_line_id,
-                   @inbound_ref,
-                   @header_status,
-                   @line_state,
-                   @sku_code,
-                   @sku_description,
-                   @expected_unit_qty,
-                   @line_expected_qty,
-                   @line_received_qty,
-                   (@line_expected_qty - @line_received_qty),
-                   (@line_expected_qty - @line_received_qty),
-                   @batch_number,
-                   @best_before_date,
-                   NULL,NULL,NULL,NULL, NULL;
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRSSCC07'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_before,
+                (@line_expected_qty - @line_received_qty)           AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
             RETURN;
         END;
 
         ------------------------------------------------------------------
         -- 5) Valid preview
         ------------------------------------------------------------------
-        SET @success = 1;
+        SET @success     = 1;
         SET @result_code = N'SUCSSCC01';
 
         SELECT
-            @success,
-            @result_code,
-            @inbound_expected_unit_id,
-            @inbound_line_id,
-            @inbound_ref,
-            @header_status,
-            @line_state,
-            @sku_code,
-            @sku_description,
-            @expected_unit_qty,
-            @line_expected_qty,
-            @line_received_qty,
-            (@line_expected_qty - @line_received_qty),
-            (@line_expected_qty - @line_received_qty - @expected_unit_qty),
-            @batch_number,
-            @best_before_date,
-            @session_id AS claimed_session_id,
-            @user_id    AS claimed_by_user_id,
-            @claim_expires_at,
-            @claim_token,
-            @arrival_status_code;
+            @success                                                          AS success,
+            @result_code                                                      AS result_code,
+            @inbound_expected_unit_id                                         AS inbound_expected_unit_id,
+            @inbound_line_id                                                  AS inbound_line_id,
+            @inbound_ref                                                      AS inbound_ref,
+            @header_status                                                    AS header_status,
+            @line_state                                                       AS line_state,
+            @sku_code                                                         AS sku_code,
+            @sku_description                                                  AS sku_description,
+            @expected_unit_qty                                                AS expected_unit_qty,
+            @line_expected_qty                                                AS line_expected_qty,
+            @line_received_qty                                                AS line_received_qty,
+            (@line_expected_qty - @line_received_qty)                         AS outstanding_before,
+            (@line_expected_qty - @line_received_qty - @expected_unit_qty)    AS outstanding_after,
+            @batch_number                                                     AS batch_number,
+            @best_before_date                                                 AS best_before_date,
+            @session_id                                                       AS claimed_session_id,
+            @user_id                                                          AS claimed_by_user_id,
+            @claim_expires_at                                                 AS claim_expires_at,
+            @claim_token                                                      AS claim_token,
+            @arrival_status_code                                              AS arrival_stock_status_code;
 
     END TRY
     BEGIN CATCH
@@ -5967,73 +6036,21 @@ BEGIN
         DECLARE @err_msg  NVARCHAR(2048) = ERROR_MESSAGE();
 
         SELECT
-            CAST(0 AS BIT)      AS success,
-            N'ERRSSCC99'        AS result_code,
-
-            NULL AS inbound_expected_unit_id,
-            NULL AS inbound_line_id,
-            NULL AS inbound_ref,
-            NULL AS header_status,
-            NULL AS line_state,
-            NULL AS sku_code,
-            NULL AS sku_description,
-            NULL AS expected_unit_qty,
-            NULL AS line_expected_qty,
-            NULL AS line_received_qty,
-            NULL AS outstanding_before,
-            NULL AS outstanding_after,
-            NULL AS batch_number,
-            NULL AS best_before_date,
-            NULL AS claimed_session_id,
-            NULL AS claimed_by_user_id,
-            NULL AS claim_expires_at,
-            NULL AS claim_token,
-
-            @err_no   AS debug_error_number,
-            @err_line AS debug_error_line,
-            @err_msg  AS debug_error_message;
+            CAST(0 AS BIT)  AS success,
+            N'ERRSSCC99'    AS result_code,
+            NULL AS inbound_expected_unit_id, NULL AS inbound_line_id,
+            NULL AS inbound_ref,              NULL AS header_status,
+            NULL AS line_state,               NULL AS sku_code,
+            NULL AS sku_description,          NULL AS expected_unit_qty,
+            NULL AS line_expected_qty,        NULL AS line_received_qty,
+            NULL AS outstanding_before,       NULL AS outstanding_after,
+            NULL AS batch_number,             NULL AS best_before_date,
+            NULL AS claimed_session_id,       NULL AS claimed_by_user_id,
+            NULL AS claim_expires_at,         NULL AS claim_token,
+            NULL AS arrival_stock_status_code;
     END CATCH
 END;
 GO
-
-/********************************************************************************************
-    SECTION: Inbound Structural Guards
-    Purpose : Prevent structural modification after activation
-              - Inbound lines cannot be inserted/updated/deleted once ACT+
-              - Expected units cannot be inserted/updated/deleted once ACT+
-              - Inbound mode cannot be changed once set
-********************************************************************************************/
-GO
-
-
-/* =========================================================================================
-   Trigger: deliveries.trg_inbound_lines_guard
-   Blocks modification of inbound lines after activation
-========================================================================================= */
-CREATE OR ALTER TRIGGER deliveries.trg_inbound_lines_guard
-ON deliveries.inbound_lines
-AFTER INSERT, UPDATE, DELETE
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF EXISTS (
-        SELECT 1
-        FROM deliveries.inbound_deliveries d
-        JOIN (
-            SELECT inbound_id FROM inserted
-            UNION
-            SELECT inbound_id FROM deleted
-        ) x ON x.inbound_id = d.inbound_id
-        WHERE d.inbound_status_code <> 'EXP'
-    )
-    BEGIN
-        THROW 50001, 'ERRINBSTRUCT01', 1;
-    END
-END;
-GO
-
-
 /********************************************************************************************
     SECTION: Inbound Structural Guards (Operationally-aware)
     Purpose : Prevent structural modification after activation while allowing operational flow
@@ -6046,7 +6063,6 @@ GO
               - Inbound mode:
                     * Prevent inbound_mode_code from being changed once set
 ********************************************************************************************/
-GO
 
 /* =========================================================================================
    Trigger: deliveries.trg_inbound_lines_guard
@@ -6479,7 +6495,7 @@ BEGIN
            3) Reverse inventory unit
         -------------------------------------------------------- */
         UPDATE inventory.inventory_units
-        SET stock_state_code = 'EXP',
+        SET stock_state_code = 'REV',
             updated_at       = SYSUTCDATETIME(),
             updated_by       = @user_id
         WHERE inventory_unit_id = @inventory_unit_id;
@@ -6490,6 +6506,96 @@ BEGIN
             ROLLBACK;
             RETURN;
         END
+
+        /* --------------------------------------------------------
+           3) Capture movement data BEFORE touching anything
+        -------------------------------------------------------- */
+        DECLARE
+            @sku_id               INT,
+            @from_bin_id          INT,
+            @unit_status_code     VARCHAR(2),
+            @original_movement_id INT;
+
+        SELECT
+            @sku_id           = iu.sku_id,
+            @unit_status_code = iu.stock_status_code,
+            @from_bin_id      = ip.bin_id
+        FROM inventory.inventory_units iu
+        LEFT JOIN inventory.inventory_placements ip
+            ON ip.inventory_unit_id = iu.inventory_unit_id
+        WHERE iu.inventory_unit_id = @inventory_unit_id;
+
+        SELECT @original_movement_id = movement_id
+        FROM inventory.inventory_movements
+        WHERE inventory_unit_id = @inventory_unit_id
+          AND movement_type     = 'INBOUND'
+          AND is_reversal       = 0;
+
+        /* --------------------------------------------------------
+           3a) Reverse inventory unit
+        -------------------------------------------------------- */
+        UPDATE inventory.inventory_units
+        SET stock_state_code = 'REV',
+            updated_at       = SYSUTCDATETIME(),
+            updated_by       = @user_id
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SELECT CAST(0 AS BIT), N'ERRINBREV03', @inbound_id, @inbound_line_id, @receipt_id, NULL, @inventory_unit_id, NULL;
+            ROLLBACK;
+            RETURN;
+        END
+
+        /* --------------------------------------------------------
+           3b) Remove placement
+        -------------------------------------------------------- */
+        DELETE FROM inventory.inventory_placements
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        /* --------------------------------------------------------
+           3c) Log reversal movement
+        -------------------------------------------------------- */
+        INSERT INTO inventory.inventory_movements
+        (
+            inventory_unit_id,
+            sku_id,
+            moved_qty,
+            from_bin_id,
+            to_bin_id,
+            from_state_code,
+            to_state_code,
+            from_status_code,
+            to_status_code,
+            movement_type,
+            reference_type,
+            reference_id,
+            moved_at,
+            moved_by_user_id,
+            session_id,
+            is_reversal,
+            reversed_movement_id
+        )
+        VALUES
+        (
+            @inventory_unit_id,
+            @sku_id,
+            @received_qty,
+            @from_bin_id,
+            NULL,
+            'RCD',
+            'REV',
+            @unit_status_code,
+            @unit_status_code,
+            'REVERSAL',
+            'INBOUND',
+            @receipt_id,
+            SYSUTCDATETIME(),
+            @user_id,
+            @session_id,
+            1,
+            @original_movement_id
+        );
 
         /* --------------------------------------------------------
            4) Restore expected unit (SSCC mode)
@@ -7282,7 +7388,7 @@ BEGIN
 
         LEFT JOIN warehouse.warehouse_tasks t
             ON t.destination_bin_id = b.bin_id
-           AND t.task_state_code IN ('NEW','CLM','ACT')
+           AND t.task_state_code IN ('CLM','ACT')
 
         LEFT JOIN locations.bin_reservations r
             ON r.bin_id = b.bin_id
@@ -7911,27 +8017,6 @@ BEGIN
         SELECT CAST(0 AS BIT), N'ERRTASK99';
     END CATCH
 END;
-GO
-
-CREATE OR ALTER VIEW inventory.v_units_awaiting_putaway
-AS
-SELECT
-    iu.inventory_unit_id,
-    iu.external_ref,
-    iu.sku_id,
-    iu.quantity,
-    iu.created_at
-FROM inventory.inventory_units iu
-WHERE
-    iu.stock_state_code = 'RCD'
-    AND NOT EXISTS
-    (
-        SELECT 1
-        FROM warehouse.warehouse_tasks wt
-        WHERE wt.inventory_unit_id = iu.inventory_unit_id
-          AND wt.task_type_code = 'PUTAWAY'
-          AND wt.task_state_code IN ('OPN','CLM')
-    );
 GO
 
 CREATE OR ALTER VIEW inventory.v_units_awaiting_putaway

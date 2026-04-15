@@ -51,10 +51,13 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         if (!reader.Read())
             return null;
 
+        var colUnitId      = reader.GetOrdinal("inventory_unit_id");
+        var colExternalRef = reader.GetOrdinal("external_ref");
+
         return new InventoryUnitDto
         {
-            InventoryUnitId = reader.GetInt32(0),
-            ExternalRef = reader.GetString(1)
+            InventoryUnitId = reader.GetInt32(colUnitId),
+            ExternalRef     = reader.GetString(colExternalRef)
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application;
+using PeasyWare.Application;
 
 namespace PeasyWare.Application.Interfaces;
 
@@ -6,7 +6,6 @@ public interface IInboundCommandRepository
 {
     OperationResult ActivateInbound(int inboundId);
 
-    // 🔥 ADD THIS
     OperationResult ActivateInboundByRef(string inboundRef);
 
     OperationResult ReceiveInboundLine(
@@ -18,4 +17,9 @@ public interface IInboundCommandRepository
         string? batchNumber = null,
         DateTime? bestBeforeDate = null,
         Guid? claimToken = null);
+
+    OperationResult ReverseInboundReceipt(
+        int receiptId,
+        string? reasonCode = null,
+        string? reasonText = null);
 }

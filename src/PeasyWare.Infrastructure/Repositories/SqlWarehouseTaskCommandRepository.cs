@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
@@ -59,8 +59,20 @@ public sealed class SqlWarehouseTaskCommandRepository
             throw new InvalidOperationException(
                 "Unexpected empty response from putaway task creation.");
 
-        var success = reader.GetBoolean(0);
-        var code = reader.GetString(1);
+        // Resolve all ordinals by name — never by position
+        var colSuccess         = reader.GetOrdinal("success");
+        var colCode            = reader.GetOrdinal("result_code");
+        var colTaskId          = reader.GetOrdinal("task_id");
+        var colDestBin         = reader.GetOrdinal("destination_bin_code");
+        var colUnitId          = reader.GetOrdinal("inventory_unit_id");
+        var colSourceBin       = reader.GetOrdinal("source_bin_code");
+        var colStockState      = reader.GetOrdinal("stock_state_code");
+        var colStockStatus     = reader.GetOrdinal("stock_status_code");
+        var colExpiresAt       = reader.GetOrdinal("expires_at");
+        var colZone            = reader.GetOrdinal("zone_code");
+
+        var success = reader.GetBoolean(colSuccess);
+        var code    = reader.GetString(colCode);
         var message = _resolver.Resolve(code);
 
         if (!success)
@@ -84,17 +96,17 @@ public sealed class SqlWarehouseTaskCommandRepository
 
         var result = new PutawayTaskResult
         {
-            Success = true,
-            ResultCode = code,
-            TaskId = reader.GetInt32(2),
-            DestinationBinCode = reader.GetString(3),
-            InventoryUnitId = reader.GetInt32(4),
-            SourceBinCode = reader.GetString(5),
-            StockStateCode = reader.GetString(6),
-            StockStatusCode = reader.GetString(7),
-            ExpiresAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
-            ZoneCode = reader.IsDBNull(9) ? null : reader.GetString(9),
-            FriendlyMessage = message
+            Success            = true,
+            ResultCode         = code,
+            FriendlyMessage    = message,
+            TaskId             = reader.GetInt32(colTaskId),
+            DestinationBinCode = reader.GetString(colDestBin),
+            InventoryUnitId    = reader.GetInt32(colUnitId),
+            SourceBinCode      = reader.GetString(colSourceBin),
+            StockStateCode     = reader.GetString(colStockState),
+            StockStatusCode    = reader.GetString(colStockStatus),
+            ExpiresAt          = reader.IsDBNull(colExpiresAt) ? null : reader.GetDateTime(colExpiresAt),
+            ZoneCode           = reader.IsDBNull(colZone) ? null : reader.GetString(colZone)
         };
 
         _logger.Info("WarehouseTask.Create", new
@@ -136,8 +148,11 @@ public sealed class SqlWarehouseTaskCommandRepository
             throw new InvalidOperationException(
                 "Unexpected empty response from putaway confirmation.");
 
-        var success = reader.GetBoolean(0);
-        var code = reader.GetString(1);
+        var colSuccess = reader.GetOrdinal("success");
+        var colCode    = reader.GetOrdinal("result_code");
+
+        var success = reader.GetBoolean(colSuccess);
+        var code    = reader.GetString(colCode);
         var message = _resolver.Resolve(code);
 
         var result = OperationResult.Create(success, code, message);

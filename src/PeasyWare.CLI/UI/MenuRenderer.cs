@@ -1,4 +1,4 @@
-﻿namespace PeasyWare.CLI.UI;
+namespace PeasyWare.CLI.UI;
 
 public static class MenuRenderer
 {
@@ -27,7 +27,7 @@ public static class MenuRenderer
     // Inbound
     // ==========================================================
 
-    public static string ShowInboundMenu()
+    public static string ShowInboundMenu(bool canReverse = false)
     {
         Console.WriteLine();
         Console.WriteLine("Inbound");
@@ -35,7 +35,10 @@ public static class MenuRenderer
         Console.WriteLine("1. Activate inbound");
         Console.WriteLine("2. Receive stock");
         Console.WriteLine("3. Putaway from inbound");
-        Console.WriteLine("4. View expected inbounds");
+
+        if (canReverse)
+            Console.WriteLine("4. Reverse receipt");
+
         Console.WriteLine("0. Back");
         Console.WriteLine();
 
