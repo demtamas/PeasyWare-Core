@@ -28,6 +28,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
     // --------------------------------------------------
     // Inventory by external ref (SSCC / HU)
     // Excludes terminal states (REV, SHP) — same rule as the unique index.
+    // Parameter size matches the column definition (NVARCHAR(100)).
     // --------------------------------------------------
 
     public InventoryUnitDto? GetInventoryUnitByExternalRef(string externalRef)
@@ -43,9 +44,9 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         """;
 
         command.Parameters.Add(
-            new SqlParameter("@external_ref", SqlDbType.NVarChar, 50)
+            new SqlParameter("@external_ref", SqlDbType.NVarChar, 100)
             {
-                Value = externalRef
+                Value = externalRef.Trim()
             });
 
         using var reader = command.ExecuteReader();

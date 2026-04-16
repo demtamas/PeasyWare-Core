@@ -1,5 +1,6 @@
 using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Scanning;
 using PeasyWare.Infrastructure.Bootstrap;
 using System;
 using System.Threading;
@@ -9,7 +10,7 @@ namespace PeasyWare.CLI.Flows
 {
     public class PutawayFromInboundFlow
     {
-        private readonly AppRuntime _runtime;
+        private readonly AppRuntime     _runtime;
         private readonly SessionContext _session;
 
         public PutawayFromInboundFlow(AppRuntime runtime, SessionContext session)
@@ -26,12 +27,10 @@ namespace PeasyWare.CLI.Flows
             while (true)
             {
                 Console.Clear();
-
                 Console.WriteLine("──────────────────────────");
                 Console.WriteLine("Putaway from inbound");
                 Console.WriteLine("──────────────────────────");
 
-                // Standard and above — show awaiting count
                 if (_session.UiMode >= UiMode.Standard)
                 {
                     var awaiting = queryRepo.GetUnitsAwaitingPutawayCount();
@@ -39,11 +38,39 @@ namespace PeasyWare.CLI.Flows
                     Console.WriteLine();
                 }
 
+                // ------------------------------------------------
+                // Step 1 — Pallet scan
+                // Accepts GS1-128 pallet label or plain SSCC string.
+                // ------------------------------------------------
                 Console.Write("Scan pallet SSCC (0=exit): ");
-                var sscc = Console.ReadLine()?.Trim();
+                var rawSscc = Console.ReadLine()?.Trim();
 
-                if (string.IsNullOrWhiteSpace(sscc) || sscc == "0")
+                if (string.IsNullOrWhiteSpace(rawSscc) || rawSscc == "0")
                     return;
+
+                var ssccScan = GtinParser.Parse(rawSscc);
+
+                string sscc;
+
+                if (ssccScan.IsValid && ssccScan.Sscc is not null)
+                {
+                    sscc = ssccScan.Sscc;
+
+                    if (_session.UiMode == UiMode.Trace)
+                    {
+                        Console.WriteLine($"[SCAN] IsPallet={ssccScan.IsPalletScan}  SSCC={sscc}");
+                        if (ssccScan.BestBefore is not null)
+                            Console.WriteLine($"[SCAN] BBE: {ssccScan.BestBefore:dd-MM-yyyy}");
+                    }
+                }
+                else
+                {
+                    // Plain Code-128 SSCC label or manual entry — use as-is
+                    sscc = rawSscc;
+
+                    if (_session.UiMode == UiMode.Trace)
+                        Console.WriteLine($"[SCAN] No GS1 SSCC — using raw: '{sscc}'");
+                }
 
                 try
                 {
@@ -66,13 +93,12 @@ namespace PeasyWare.CLI.Flows
                     }
 
                     Console.WriteLine();
-                    Console.WriteLine("------------------------------------------------------------");
+                    Console.WriteLine("────────────────────────────────────────────");
                     Console.WriteLine("PUTAWAY TASK CREATED");
                     Console.WriteLine($"Pallet  : {sscc}");
                     Console.WriteLine($"Task ID : {result.TaskId}");
                     Console.WriteLine($"Bin     : {result.DestinationBinCode}");
 
-                    // Standard and above — operational task detail
                     if (_session.UiMode >= UiMode.Standard)
                     {
                         Console.WriteLine();
@@ -82,7 +108,6 @@ namespace PeasyWare.CLI.Flows
                         Console.WriteLine($"Stock Status : {result.StockStatusCode}");
                     }
 
-                    // Trace only — internal IDs and expiry
                     if (_session.UiMode == UiMode.Trace)
                     {
                         Console.WriteLine();
@@ -93,26 +118,44 @@ namespace PeasyWare.CLI.Flows
                             Console.WriteLine($"Task Expires : {result.ExpiresAt.Value:HH:mm:ss} UTC");
                     }
 
-                    Console.WriteLine("------------------------------------------------------------");
+                    Console.WriteLine("────────────────────────────────────────────");
                     Console.WriteLine();
 
+                    // ------------------------------------------------
+                    // Step 2 — Destination bin scan
+                    //
+                    // Bin labels are virtually always plain Code-128 with
+                    // the bin code as the raw value (e.g. "R0201B").
+                    // Some sites encode the bin code inside an SSCC-18
+                    // (AI 00) — if so, the parsed SSCC value is used.
+                    // GTIN is not a valid bin identifier and is not used.
+                    // ------------------------------------------------
                     while (true)
                     {
-                        Console.Write("Scan destination bin (C=cancel): ");
-                        var destination = Console.ReadLine()?.Trim();
+                        Console.Write($"Scan destination bin [{result.DestinationBinCode}] (C=cancel): ");
+                        var rawBin = Console.ReadLine()?.Trim();
 
-                        if (string.IsNullOrWhiteSpace(destination))
+                        if (string.IsNullOrWhiteSpace(rawBin))
                             continue;
 
-                        if (destination.Equals("C", StringComparison.OrdinalIgnoreCase))
+                        if (rawBin.Equals("C", StringComparison.OrdinalIgnoreCase))
                         {
                             Console.WriteLine("Putaway cancelled.");
-                            Thread.Sleep(2000);
+                            Thread.Sleep(1500);
                             break;
                         }
 
-                        // Client-side pre-check — catches mistype before round trip
-                        if (!string.Equals(destination, result.DestinationBinCode,
+                        // Resolve bin code: SSCC-encoded label or plain Code-128
+                        var binScan = GtinParser.Parse(rawBin);
+
+                        var resolvedBin = binScan.IsValid && binScan.Sscc is not null
+                            ? binScan.Sscc   // SSCC-encoded bin label (uncommon)
+                            : rawBin;        // Plain Code-128 bin label (standard)
+
+                        if (_session.UiMode == UiMode.Trace)
+                            Console.WriteLine($"[SCAN] Bin resolved: '{resolvedBin}'");
+
+                        if (!string.Equals(resolvedBin, result.DestinationBinCode,
                             StringComparison.OrdinalIgnoreCase))
                         {
                             Console.WriteLine($"Wrong location. Expected: {result.DestinationBinCode}");
@@ -121,18 +164,14 @@ namespace PeasyWare.CLI.Flows
 
                         var confirmResult = commandRepo.ConfirmPutawayTask(
                             result.TaskId,
-                            destination);
+                            resolvedBin);
 
                         Console.WriteLine(confirmResult.FriendlyMessage);
 
                         if (confirmResult.Success)
-                        {
                             Thread.Sleep(1000);
-                        }
                         else
-                        {
                             Console.ReadKey(true);
-                        }
 
                         break;
                     }
@@ -140,6 +179,8 @@ namespace PeasyWare.CLI.Flows
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Putaway failed: {ex.Message}");
+                    if (_session.UiMode == UiMode.Trace)
+                        Console.WriteLine($"[TRACE] {ex}");
                     Console.ReadKey(true);
                 }
             }

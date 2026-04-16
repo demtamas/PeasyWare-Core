@@ -1,6 +1,6 @@
 using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
-using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Scanning;
 using PeasyWare.Application.Services;
 using PeasyWare.CLI.UI;
 using PeasyWare.Infrastructure.Bootstrap;
@@ -8,11 +8,24 @@ using System;
 
 namespace PeasyWare.Application.Flows
 {
+    /// <summary>
+    /// SSCC mode inbound receiving flow.
+    ///
+    /// This flow is strictly for inbounds with pre-advised handling units
+    /// (inbound_expected_units rows). Every receive goes through:
+    ///   1. ValidateSscc  — claim the expected unit, return preview
+    ///   2. ConfirmSscc   — rescan to confirm, write inventory
+    ///
+    /// SSCC mode = expected-unit, claim-token, pallet-level confirmation.
+    /// There is no product-only (GTIN) receive path here.
+    /// If a GTIN-only label is scanned, the operator is told to scan the
+    /// pallet SSCC — the SSCC is always required in this flow.
+    /// </summary>
     public sealed class ReceiveInboundFlow
     {
-        private readonly AppRuntime _runtime;
+        private readonly AppRuntime     _runtime;
         private readonly SessionContext _session;
-        private readonly ILogger? _logger;
+        private readonly string?        _inboundRef;
 
         public ReceiveInboundFlow(AppRuntime runtime, SessionContext session)
         {
@@ -20,22 +33,24 @@ namespace PeasyWare.Application.Flows
             _session = session;
         }
 
-        public ReceiveInboundFlow(
-            AppRuntime runtime,
-            SessionContext session,
-            ILogger logger)
+        public ReceiveInboundFlow(AppRuntime runtime, SessionContext session, string inboundRef)
         {
-            _runtime = runtime;
-            _session = session;
-            _logger = logger;
+            _runtime    = runtime;
+            _session    = session;
+            _inboundRef = inboundRef;
         }
 
         public void Run()
         {
             Console.Clear();
 
-            Console.Write("Enter inbound ref: ");
-            var inboundRef = Console.ReadLine()?.Trim();
+            string? inboundRef = _inboundRef;
+
+            if (string.IsNullOrWhiteSpace(inboundRef))
+            {
+                Console.Write("Enter inbound ref: ");
+                inboundRef = Console.ReadLine()?.Trim();
+            }
 
             if (string.IsNullOrWhiteSpace(inboundRef))
                 return;
@@ -48,27 +63,30 @@ namespace PeasyWare.Application.Flows
                 commandRepo,
                 _runtime.ErrorMessageResolver);
 
-            var summary = queryRepo.GetInboundSummary(inboundRef);
-
-            if (!summary.Exists)
+            if (_inboundRef is null)
             {
-                Console.WriteLine("Inbound not found.");
-                Console.ReadKey(true);
-                return;
-            }
+                var summary = queryRepo.GetInboundSummary(inboundRef);
 
-            if (!summary.IsReceivable)
-            {
-                Console.WriteLine("Inbound is not in a receivable state.");
-                Console.ReadKey(true);
-                return;
-            }
+                if (!summary.Exists)
+                {
+                    Console.WriteLine("Inbound not found.");
+                    Console.ReadKey(true);
+                    return;
+                }
 
-            if (!summary.HasExpectedUnits)
-            {
-                Console.WriteLine("Inbound is not pre-advised (no SSCCs found).");
-                Console.ReadKey(true);
-                return;
+                if (!summary.IsReceivable)
+                {
+                    Console.WriteLine("Inbound is not in a receivable state.");
+                    Console.ReadKey(true);
+                    return;
+                }
+
+                if (!summary.HasExpectedUnits)
+                {
+                    Console.WriteLine("Inbound is not pre-advised (no SSCCs found).");
+                    Console.ReadKey(true);
+                    return;
+                }
             }
 
             Console.Write("Enter receiving bin: ");
@@ -90,29 +108,55 @@ namespace PeasyWare.Application.Flows
 
                 Console.WriteLine();
                 Console.WriteLine($"Outstanding SSCCs: {remaining}");
-                Console.Write("Scan SSCC (B=change bin, 0=exit): ");
+                Console.Write("Scan pallet SSCC (B=change bin, 0=exit): ");
 
-                var scanInput = Console.ReadLine()?.Trim();
+                var rawInput = Console.ReadLine()?.Trim();
 
-                if (string.Equals(scanInput, "0"))
+                if (string.Equals(rawInput, "0"))
                     return;
 
-                if (string.Equals(scanInput, "B", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(rawInput, "B", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Write("Enter new receiving bin: ");
                     bin = Console.ReadLine()?.Trim() ?? "";
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(scanInput))
+                if (string.IsNullOrWhiteSpace(rawInput))
                     continue;
+
+                var scan = GtinParser.Parse(rawInput);
+
+                if (_session.UiMode == UiMode.Trace && scan.IsValid)
+                {
+                    Console.WriteLine($"[SCAN] IsPallet={scan.IsPalletScan} IsProduct={scan.IsProductScan}");
+                    if (scan.Sscc       is not null) Console.WriteLine($"[SCAN] SSCC:  {scan.Sscc}");
+                    if (scan.Gtin       is not null) Console.WriteLine($"[SCAN] GTIN:  {scan.Gtin}");
+                    if (scan.Batch      is not null) Console.WriteLine($"[SCAN] Batch: {scan.Batch}");
+                    if (scan.BestBefore is not null) Console.WriteLine($"[SCAN] BBE:   {scan.BestBefore:dd-MM-yyyy}");
+                }
+
+                // -------------------------------------------------------
+                // SSCC mode requires a pallet SSCC. A product-only scan
+                // (GTIN, no SSCC) is not a valid receive input in this flow.
+                // The operator must scan the pallet barcode.
+                // -------------------------------------------------------
+                if (scan.IsValid && scan.IsProductScan && !scan.IsPalletScan)
+                {
+                    Console.WriteLine("Please scan the pallet SSCC barcode, not the product label.");
+                    continue;
+                }
+
+                var scanInput = scan.IsValid && scan.Sscc is not null
+                    ? scan.Sscc
+                    : rawInput;
 
                 var validation = service.ValidateSscc(scanInput, bin);
 
                 if (_session.UiMode == UiMode.Trace)
                 {
-                    Console.WriteLine($"DEBUG -> ExpectedUnitId: {validation.InboundExpectedUnitId}");
-                    Console.WriteLine($"DEBUG -> ClaimToken: {validation.ClaimToken}");
+                    Console.WriteLine($"[DEBUG] ExpectedUnitId: {validation.InboundExpectedUnitId}");
+                    Console.WriteLine($"[DEBUG] ClaimToken:     {validation.ClaimToken}");
                 }
 
                 if (!validation.Success)
@@ -122,25 +166,27 @@ namespace PeasyWare.Application.Flows
                 }
 
                 ReceiveInboundScreen.RenderSsccPreview(
-                    validation,
-                    _session.UiMode,
-                    scanInput,
-                    bin);
+                    validation, _session.UiMode, scanInput, bin);
 
                 if (validation.ClaimExpiresAt.HasValue &&
                     validation.ClaimExpiresAt.Value < DateTime.UtcNow)
                 {
-                    Console.WriteLine("Claim expired. Please rescan SSCC.");
+                    Console.WriteLine("Claim expired. Please rescan.");
                     continue;
                 }
 
                 Console.Write("Scan SSCC again to confirm (0=cancel): ");
-                var confirm = Console.ReadLine()?.Trim();
+                var confirmRaw = Console.ReadLine()?.Trim();
 
-                if (confirm == "0")
+                if (confirmRaw == "0")
                     continue;
 
-                if (!string.Equals(confirm, scanInput, StringComparison.OrdinalIgnoreCase))
+                var confirmScan  = GtinParser.Parse(confirmRaw);
+                var confirmInput = confirmScan.IsValid && confirmScan.Sscc is not null
+                    ? confirmScan.Sscc
+                    : confirmRaw;
+
+                if (!string.Equals(confirmInput, scanInput, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine("Confirmation scan mismatch.");
                     continue;

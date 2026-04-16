@@ -70,7 +70,8 @@ public static class GtinParser
 
     /// <summary>
     /// Converts "(01)value(10)value..." to a flat string the parser can walk.
-    /// Variable-length AIs get a FNC1 appended after their value.
+    /// Variable-length AIs get a FNC1 appended after their value so the parser
+    /// always terminates on FNC1 rather than relying on AI boundary heuristics.
     /// </summary>
     private static string ExpandParenthesisNotation(string raw)
     {
@@ -96,6 +97,9 @@ public static class GtinParser
                 sb.Append(value);
                 i += value.Length;
 
+                // Always append FNC1 after variable-length fields.
+                // This means ReadVariable will stop on FNC1 every time —
+                // no need for AI boundary heuristics in parenthesis format.
                 if (IsVariableLength(ai))
                     sb.Append(Fnc1);
             }
@@ -171,7 +175,7 @@ public static class GtinParser
                     if (pos + 6 <= data.Length)
                     {
                         var dateStr = data.Substring(pos, 6);
-                        bbe = ParseGs1Date(dateStr, lastDayOfMonth: ai == "15");
+                        bbe = ParseGs1Date(dateStr);
                         pos += 6;
                         if (bbe is not null) recognised++;
                     }
@@ -210,6 +214,15 @@ public static class GtinParser
     // Helpers
     // --------------------------------------------------
 
+    /// <summary>
+    /// Reads a variable-length field up to maxLength characters.
+    /// Stops on FNC1 (the correct GS1 terminator) or end of string.
+    /// Does NOT use AI boundary heuristics — those cause false stops on
+    /// batch values that happen to contain digit sequences like "003".
+    /// In parenthesis format, ExpandParenthesisNotation guarantees FNC1
+    /// is present after each variable-length field.
+    /// In raw flat format, reads to maxLength (best effort without delimiters).
+    /// </summary>
     private static string? ReadVariable(string data, ref int pos, int maxLength)
     {
         var start = pos;
@@ -218,7 +231,6 @@ public static class GtinParser
         while (end < data.Length && end - start < maxLength)
         {
             if (data[end] == Fnc1) break;
-            if (end > start && end + 1 < data.Length && IsKnownAiAt(data, end)) break;
             end++;
         }
 
@@ -227,6 +239,7 @@ public static class GtinParser
         var value = data.Substring(start, end - start);
         pos = end;
 
+        // Consume the FNC1 terminator if present
         if (pos < data.Length && data[pos] == Fnc1)
             pos++;
 
@@ -235,10 +248,18 @@ public static class GtinParser
 
     /// <summary>
     /// Parses a GS1 date string (YYMMDD).
-    /// Year: YY 00-49 → 2000+YY, YY 50-99 → 1900+YY.
-    /// Day 00 or AI 15 → last day of month.
+    ///
+    /// GS1 year mapping: YY 00-49 → 2000+YY, YY 50-99 → 1900+YY.
+    ///
+    /// Day handling (GS1 spec, applies to all date AIs including 15 and 17):
+    ///   DD = 00  → last day of the month (supplier may not know exact day)
+    ///   DD = 01+ → literal day value, used as-is
+    ///
+    /// Note: the former lastDayOfMonth parameter has been removed.
+    /// The GS1 spec does NOT say AI 15 always means last day — it says DD=00
+    /// means last day. A label with (15)270101 means 1 January 2027, not 31st.
     /// </summary>
-    private static DateOnly? ParseGs1Date(string yymmdd, bool lastDayOfMonth = false)
+    private static DateOnly? ParseGs1Date(string yymmdd)
     {
         if (yymmdd.Length != 6) return null;
 
@@ -250,7 +271,8 @@ public static class GtinParser
 
         var year = yy <= 49 ? 2000 + yy : 1900 + yy;
 
-        if (dd == 0 || lastDayOfMonth)
+        // DD = 00 means last day of month (GS1 spec)
+        if (dd == 0)
             dd = DateTime.DaysInMonth(year, mm);
 
         if (dd < 1 || dd > DateTime.DaysInMonth(year, mm)) return null;
@@ -264,6 +286,7 @@ public static class GtinParser
         if (fixedLen > 0)
             return Math.Min(pos + fixedLen, data.Length);
 
+        // Variable-length unknown AI: read to FNC1 or end
         while (pos < data.Length && data[pos] != Fnc1)
             pos++;
         if (pos < data.Length && data[pos] == Fnc1)
@@ -304,14 +327,4 @@ public static class GtinParser
         "20" => 2,
         _    => 0
     };
-
-    private static bool IsKnownAiAt(string data, int pos)
-    {
-        foreach (var len in new[] { 2, 3, 4 })
-        {
-            if (pos + len > data.Length) continue;
-            if (IsKnownAi(data.Substring(pos, len))) return true;
-        }
-        return false;
-    }
 }

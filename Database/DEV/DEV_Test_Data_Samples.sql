@@ -132,11 +132,11 @@ INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_
 /* ============================================================
    inventory.skus
    ============================================================ */
-INSERT INTO inventory.skus (sku_code, sku_description, ean, uom_code, weight_per_unit, standard_hu_quantity, is_full_hu_required, preferred_storage_type_id, preferred_storage_section_id, is_hazardous, is_active, created_at, created_by)
+INSERT INTO inventory.skus (sku_code, sku_description, ean, uom_code, weight_per_unit, standard_hu_quantity, is_full_hu_required, preferred_storage_type_id, preferred_storage_section_id, is_hazardous,is_active, created_at, created_by)
 	VALUES
 	('SKU001', 'First test SKU', '01234567899', 'UNIT', 600, 1, 0, @RackId, @FloorId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
 	('SKU002', 'Second test SKU', '11223344556',  'Each', 800, 120, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('SKU003', 'Third test SKU', '55568998745', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
+	('SKU003', 'Third test SKU', '05556899874510', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
 
 
 /* ============================================================

@@ -34,23 +34,20 @@ var loginFlow = new LoginFlow(
 // LOGIN LOOP
 // --------------------------------------------------
 
-Guid? sessionId           = null;
-int? userId               = null;
-string? username          = null;
-string? password          = null;
-string? displayName       = null;
-string? roleName          = null;
-UiMode uiMode             = UiMode.Minimal;
-int sessionTimeoutMinutes = 480;
+Guid?  sessionId           = null;
+int?   userId              = null;
+string? username           = null;
+string? password           = null;
+string? displayName        = null;
+string? roleName           = null;
+UiMode  uiMode             = UiMode.Minimal;
+int     sessionTimeoutMinutes = 480;
 
 while (true)
 {
     try
     {
-        HeaderRenderer.Render(
-            runtime.Settings,
-            diagnosticsEnabled,
-            sessionId: null);
+        HeaderRenderer.Render(runtime.Settings, diagnosticsEnabled, sessionId: null);
 
         Console.WriteLine("Please log in to continue.\n");
 
@@ -60,8 +57,7 @@ while (true)
         Console.Write("Password: ");
         password = ReadMaskedPassword();
 
-        if (string.IsNullOrWhiteSpace(username) ||
-            string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         {
             Console.WriteLine("Username and password are required.");
             Console.ReadKey(true);
@@ -70,19 +66,15 @@ while (true)
 
         var context = new LoginContext
         {
-            ClientApp  = "PeasyWare.CLI",
-            ClientInfo = Environment.MachineName,
-            OsInfo     = Environment.OSVersion.ToString(),
-            IpAddress  = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
-            ForceLogin = false,
+            ClientApp     = "PeasyWare.CLI",
+            ClientInfo    = Environment.MachineName,
+            OsInfo        = Environment.OSVersion.ToString(),
+            IpAddress     = IpResolver.GetLocalIPv4() ?? "UNKNOWN",
+            ForceLogin    = false,
             CorrelationId = Guid.NewGuid()
         };
 
-        var result = loginFlow.Run(
-            username,
-            password,
-            context,
-            diagnosticsEnabled);
+        var result = loginFlow.Run(username, password, context, diagnosticsEnabled);
 
         switch (result.Outcome)
         {
@@ -100,31 +92,20 @@ while (true)
                 Console.WriteLine();
 
                 bool changed = false;
-
                 for (int i = 0; i < 3; i++)
                 {
                     var newPassword = ReadConfirmedPassword();
                     var change = loginFlow.ChangePassword(username, newPassword);
-
-                    if (change.Success)
-                    {
-                        password = newPassword;
-                        changed  = true;
-                        break;
-                    }
-
+                    if (change.Success) { password = newPassword; changed = true; break; }
                     Console.WriteLine(change.FriendlyMessage);
                 }
 
-                if (!changed)
-                    return;
-
+                if (!changed) return;
                 continue;
 
             case LoginOutcome.AlreadyLoggedIn:
                 Console.WriteLine(result.Message);
                 Console.Write("Terminate the other session and continue? (y/N): ");
-
                 var answer = Console.ReadLine();
 
                 if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
@@ -140,11 +121,7 @@ while (true)
                     CorrelationId = Guid.NewGuid()
                 };
 
-                var retry = loginFlow.Run(
-                    username,
-                    password,
-                    forcedContext,
-                    diagnosticsEnabled);
+                var retry = loginFlow.Run(username, password, forcedContext, diagnosticsEnabled);
 
                 if (retry.Outcome != LoginOutcome.Success)
                 {
@@ -178,17 +155,17 @@ while (true)
 LoginSucceeded:
 
 var session = new SessionContext(
-    sessionId:            sessionId!.Value,
-    userId:               userId!.Value,
-    username:             username!,
-    displayName:          displayName ?? username!,
-    sourceApp:            "PeasyWare.CLI",
-    sourceClient:         Environment.MachineName,
-    sourceIp:             IpResolver.GetLocalIPv4(),
-    correlationId:        Guid.NewGuid(),
-    osInfo:               Environment.OSVersion.ToString(),
-    roleName:             roleName,
-    uiMode:               uiMode,
+    sessionId:             sessionId!.Value,
+    userId:                userId!.Value,
+    username:              username!,
+    displayName:           displayName ?? username!,
+    sourceApp:             "PeasyWare.CLI",
+    sourceClient:          Environment.MachineName,
+    sourceIp:              IpResolver.GetLocalIPv4(),
+    correlationId:         Guid.NewGuid(),
+    osInfo:                Environment.OSVersion.ToString(),
+    roleName:              roleName,
+    uiMode:                uiMode,
     sessionTimeoutMinutes: sessionTimeoutMinutes
 );
 
@@ -204,11 +181,7 @@ runtime.Logger.Info("Session.Start", new
     session.SourceClient
 });
 
-HeaderRenderer.Render(
-    runtime.Settings,
-    diagnosticsEnabled,
-    session.SessionId);
-
+HeaderRenderer.Render(runtime.Settings, diagnosticsEnabled, session.SessionId);
 Console.WriteLine("Login successful. Welcome back!\n");
 
 try
@@ -225,9 +198,7 @@ try
 
             case "7":
                 {
-                    var sessionCommand =
-                        runtime.Repositories.CreateSessionCommand(session);
-
+                    var sessionCommand = runtime.Repositories.CreateSessionCommand(session);
                     var logout = sessionCommand.LogoutSession(
                         session.SessionId,
                         sourceApp:    "PeasyWare.CLI",
@@ -264,7 +235,6 @@ finally
 
 static void RunInbound(AppRuntime runtime, SessionContext session)
 {
-    // Reversal is available to manager (Standard) and admin (Trace) only
     bool canReverse = session.UiMode >= UiMode.Standard;
 
     var inboundQuery   = runtime.Repositories.CreateInboundQuery(session);
@@ -282,10 +252,9 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                     var refInput    = ActivateInboundScreen.PromptInboundRef(activatable);
 
                     if (string.IsNullOrWhiteSpace(refInput))
-                        return;
+                        break;
 
                     var result = inboundCommand.ActivateInboundByRef(refInput);
-
                     Console.WriteLine();
                     Console.WriteLine(result.FriendlyMessage);
                     Console.ReadKey(true);
@@ -294,8 +263,43 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
 
             case "2":
                 {
-                    var flow = new ReceiveInboundFlow(runtime, session);
-                    flow.Run();
+                    // Ask for ref first, then route to the correct flow based on mode
+                    Console.Write("Enter inbound ref: ");
+                    var inboundRef = Console.ReadLine()?.Trim();
+
+                    if (string.IsNullOrWhiteSpace(inboundRef))
+                        break;
+
+                    var summary = inboundQuery.GetInboundSummary(inboundRef);
+
+                    if (!summary.Exists)
+                    {
+                        Console.WriteLine("Inbound not found.");
+                        Console.ReadKey(true);
+                        break;
+                    }
+
+                    if (!summary.IsReceivable)
+                    {
+                        Console.WriteLine("Inbound is not in a receivable state.");
+                        Console.ReadKey(true);
+                        break;
+                    }
+
+                    // Route: SSCC mode → ReceiveInboundFlow
+                    //        MANUAL or no mode yet → ReceiveManualFlow
+                    if (string.Equals(summary.InboundMode, "SSCC", StringComparison.OrdinalIgnoreCase)
+                        || summary.HasExpectedUnits)
+                    {
+                        var flow = new ReceiveInboundFlow(runtime, session, inboundRef);
+                        flow.Run();
+                    }
+                    else
+                    {
+                        var flow = new ReceiveManualFlow(runtime, session, inboundRef);
+                        flow.Run();
+                    }
+
                     break;
                 }
 
@@ -354,11 +358,7 @@ static string ReadMaskedPassword()
     {
         var key = Console.ReadKey(intercept: true);
 
-        if (key.Key == ConsoleKey.Enter)
-        {
-            Console.WriteLine();
-            break;
-        }
+        if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
 
         if (key.Key == ConsoleKey.Backspace && buffer.Count > 0)
         {
