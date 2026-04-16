@@ -1,0 +1,188 @@
+// ============================================================
+// GtinParser unit tests — xUnit
+//
+// These tests belong in a dedicated test project.
+// To use: create PeasyWare.Tests, add xunit + xunit.runner.visualstudio,
+// reference PeasyWare.Application, then move this file there.
+//
+// Test data derived from a real Britvic GS1-128 label:
+//   SSCC:  150101027125056378
+//   EAN:   05010102200142
+//   BBE:   11 2026 → encoded as (15)261130
+//   Batch: 001440487A
+//
+//   Top barcode:    (01)05010102200142(10)001440487A
+//   Bottom barcode: (00)150101027125056378(15)261130
+// ============================================================
+
+using PeasyWare.Application.Scanning;
+using Xunit;
+
+namespace PeasyWare.Tests.Scanning;
+
+public sealed class GtinParserTests
+{
+    [Fact]
+    public void Parse_BottomBarcode_ParenthesisFormat_ExtractsSsccAndBbe()
+    {
+        var raw = "(00)150101027125056378(15)261130";
+        var result = GtinParser.Parse(raw);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("150101027125056378", result.Sscc);
+        Assert.Equal(new DateOnly(2026, 11, 30), result.BestBefore);
+        Assert.Null(result.Gtin);
+        Assert.Null(result.Batch);
+        Assert.True(result.IsPalletScan);
+        Assert.False(result.IsProductScan);
+    }
+
+    [Fact]
+    public void Parse_BottomBarcode_RawFlatFormat_ExtractsSsccAndBbe()
+    {
+        var raw = "00150101027125056378" + "15261130";
+        var result = GtinParser.Parse(raw);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("150101027125056378", result.Sscc);
+        Assert.Equal(new DateOnly(2026, 11, 30), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_TopBarcode_ParenthesisFormat_ExtractsGtinAndBatch()
+    {
+        var raw = "(01)05010102200142(10)001440487A";
+        var result = GtinParser.Parse(raw);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("05010102200142", result.Gtin);
+        Assert.Equal("001440487A", result.Batch);
+        Assert.Null(result.Sscc);
+        Assert.False(result.IsPalletScan);
+        Assert.True(result.IsProductScan);
+    }
+
+    [Fact]
+    public void Parse_TopBarcode_RawFormatWithFnc1_ExtractsGtinAndBatch()
+    {
+        var raw = "0105010102200142" + "\x1D" + "10001440487A";
+        var result = GtinParser.Parse(raw);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("05010102200142", result.Gtin);
+        Assert.Equal("001440487A", result.Batch);
+    }
+
+    [Fact]
+    public void Parse_BbeDate_261130_ParsesAsNovember2026LastDay()
+    {
+        var raw = "(00)150101027125056378(15)261130";
+        var result = GtinParser.Parse(raw);
+        Assert.Equal(new DateOnly(2026, 11, 30), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_BbeDate_AI15_DayZero_UsesLastDayOfMonth()
+    {
+        var raw = "(15)261100";
+        var result = GtinParser.Parse(raw);
+        Assert.True(result.IsValid);
+        Assert.Equal(new DateOnly(2026, 11, 30), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_BbeDate_AI15_AlwaysUsesLastDay()
+    {
+        var raw = "(15)260615";
+        var result = GtinParser.Parse(raw);
+        Assert.True(result.IsValid);
+        Assert.Equal(new DateOnly(2026, 6, 30), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_ExpiryDate_AI17_UsesExactDate()
+    {
+        var raw = "(17)260615";
+        var result = GtinParser.Parse(raw);
+        Assert.True(result.IsValid);
+        Assert.Equal(new DateOnly(2026, 6, 15), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_BbeDate_YY50Plus_Interprets19xx()
+    {
+        var raw = "(15)991230";
+        var result = GtinParser.Parse(raw);
+        Assert.True(result.IsValid);
+        Assert.Equal(new DateOnly(1999, 12, 31), result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_NullInput_ReturnsInvalid()
+    {
+        var result = GtinParser.Parse(null);
+        Assert.False(result.IsValid);
+        Assert.NotNull(result.ErrorReason);
+    }
+
+    [Fact]
+    public void Parse_EmptyString_ReturnsInvalid()
+    {
+        Assert.False(GtinParser.Parse("").IsValid);
+    }
+
+    [Fact]
+    public void Parse_RandomString_ReturnsInvalidWithNoException()
+    {
+        Assert.False(GtinParser.Parse("NOTABARCODE12345").IsValid);
+    }
+
+    [Fact]
+    public void Parse_TildeAsFnc1_HandledCorrectly()
+    {
+        var raw = "0105010102200142~10001440487A";
+        var result = GtinParser.Parse(raw);
+        Assert.True(result.IsValid);
+        Assert.Equal("05010102200142", result.Gtin);
+        Assert.Equal("001440487A", result.Batch);
+    }
+
+    [Fact]
+    public void Parse_SsccOnly_IsValid()
+    {
+        var result = GtinParser.Parse("(00)150101027125056378");
+        Assert.True(result.IsValid);
+        Assert.Equal("150101027125056378", result.Sscc);
+        Assert.Null(result.BestBefore);
+    }
+
+    [Fact]
+    public void Parse_GtinOnly_IsValid()
+    {
+        var result = GtinParser.Parse("(01)05010102200142");
+        Assert.True(result.IsValid);
+        Assert.Equal("05010102200142", result.Gtin);
+    }
+
+    [Fact]
+    public void Parse_AllFieldsInOneScan_ParsesAll()
+    {
+        var raw = "(00)150101027125056378(01)05010102200142(10)001440487A(15)261130(37)24";
+        var result = GtinParser.Parse(raw);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("150101027125056378", result.Sscc);
+        Assert.Equal("05010102200142", result.Gtin);
+        Assert.Equal("001440487A", result.Batch);
+        Assert.Equal(new DateOnly(2026, 11, 30), result.BestBefore);
+        Assert.Equal(24, result.Quantity);
+    }
+
+    [Fact]
+    public void Parse_BatchWithAlphanumericChars_ParsesCorrectly()
+    {
+        var result = GtinParser.Parse("(10)001440487A");
+        Assert.True(result.IsValid);
+        Assert.Equal("001440487A", result.Batch);
+    }
+}

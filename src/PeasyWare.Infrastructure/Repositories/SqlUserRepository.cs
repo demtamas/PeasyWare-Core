@@ -29,14 +29,18 @@ public sealed class SqlUserRepository : IUserRepository
         command.Parameters.AddWithValue("@username", username);
 
         using var reader = command.ExecuteReader();
+
         if (!reader.Read())
             return null;
 
+        var colId       = reader.GetOrdinal("id");
+        var colUsername = reader.GetOrdinal("username");
+        var colActive   = reader.GetOrdinal("is_active");
+
         return new User(
-            reader.GetInt32(0),
-            reader.GetString(1),
-            reader.GetBoolean(2)
+            reader.GetInt32(colId),
+            reader.GetString(colUsername),
+            reader.GetBoolean(colActive)
         );
     }
 }
-

@@ -14,5 +14,9 @@
 		<ProjectReference Include="..\PeasyWare.Domain\PeasyWare.Domain.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Scanning\" />
+	</ItemGroup>
+
 
 </Project>

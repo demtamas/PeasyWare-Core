@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
@@ -67,12 +67,16 @@ public sealed class SqlInboundCommandRepository
                 data: new { InboundId = inboundId });
         }
 
-        var code = reader.GetString(1);
+        var colCode      = reader.GetOrdinal("result_code");
+        var colInboundId = reader.GetOrdinal("inbound_id");
+
+        var code           = reader.GetString(colCode);
+        var resolvedId     = reader.IsDBNull(colInboundId) ? inboundId : reader.GetInt32(colInboundId);
 
         return BuildResult(
             action: "Inbound.Activate",
             resultCode: code,
-            data: new { InboundId = inboundId });
+            data: new { InboundId = resolvedId });
     }
 
     // --------------------------------------------------
@@ -141,27 +145,31 @@ public sealed class SqlInboundCommandRepository
                 data: new
                 {
                     InboundLineId = inboundLineId,
-                    ExternalRef = externalRef,
-                    BinCode = stagingBinCode
+                    ExternalRef   = externalRef,
+                    BinCode       = stagingBinCode
                 });
         }
 
-        var code = reader.GetString(1);
+        var colCode      = reader.GetOrdinal("result_code");
+        var colLineId    = reader.GetOrdinal("inbound_line_id");
+        var colInboundId = reader.GetOrdinal("inbound_id");
+        var colIsClosed  = reader.GetOrdinal("is_closed");
 
-        int resolvedLineId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-        int inboundId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
-        bool isClosed = !reader.IsDBNull(4) && reader.GetBoolean(4);
+        var code           = reader.GetString(colCode);
+        var resolvedLineId = reader.IsDBNull(colLineId)    ? 0     : reader.GetInt32(colLineId);
+        var inboundId      = reader.IsDBNull(colInboundId) ? 0     : reader.GetInt32(colInboundId);
+        var isClosed       = !reader.IsDBNull(colIsClosed) && reader.GetBoolean(colIsClosed);
 
         var result = BuildResult(
             action: "Inbound.ReceiveLine",
             resultCode: code,
             data: new
             {
-                InboundId = inboundId,
-                InboundLineId = resolvedLineId,
+                InboundId             = inboundId,
+                InboundLineId         = resolvedLineId,
                 InboundExpectedUnitId = inboundExpectedUnitId,
-                ExternalRef = externalRef,
-                BinCode = stagingBinCode
+                ExternalRef           = externalRef,
+                BinCode               = stagingBinCode
             });
 
         if (result.Success && isClosed)
@@ -172,10 +180,10 @@ public sealed class SqlInboundCommandRepository
                 _session.SessionId,
                 _session.CorrelationId,
                 ResultCode = "SUCINBCLS01",
-                Success = true,
+                Success    = true,
                 Data = new
                 {
-                    InboundId = inboundId,
+                    InboundId   = inboundId,
                     FinalStatus = "CLS"
                 }
             });
@@ -185,7 +193,7 @@ public sealed class SqlInboundCommandRepository
     }
 
     // --------------------------------------------------
-    // 🔥 Reverse inbound receipt
+    // Reverse inbound receipt
     // --------------------------------------------------
 
     public OperationResult ReverseInboundReceipt(
@@ -201,11 +209,11 @@ public sealed class SqlInboundCommandRepository
         command.CommandText = "deliveries.usp_reverse_inbound_receipt";
         command.CommandType = CommandType.StoredProcedure;
 
-        command.Parameters.AddWithValue("@receipt_id", receiptId);
-        command.Parameters.AddWithValue("@reason_code", (object?)reasonCode ?? DBNull.Value);
-        command.Parameters.AddWithValue("@reason_text", (object?)reasonText ?? DBNull.Value);
-        command.Parameters.AddWithValue("@user_id", _session.UserId);
-        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+        command.Parameters.AddWithValue("@receipt_id",   receiptId);
+        command.Parameters.AddWithValue("@reason_code",  (object?)reasonCode  ?? DBNull.Value);
+        command.Parameters.AddWithValue("@reason_text",  (object?)reasonText  ?? DBNull.Value);
+        command.Parameters.AddWithValue("@user_id",      _session.UserId);
+        command.Parameters.AddWithValue("@session_id",   _session.SessionId);
 
         using var reader = command.ExecuteReader();
 
@@ -217,26 +225,33 @@ public sealed class SqlInboundCommandRepository
                 data: new { ReceiptId = receiptId });
         }
 
-        var code = reader.GetString(1);
+        var colCode              = reader.GetOrdinal("result_code");
+        var colInboundId         = reader.GetOrdinal("inbound_id");
+        var colLineId            = reader.GetOrdinal("inbound_line_id");
+        var colReceiptId         = reader.GetOrdinal("receipt_id");
+        var colReversalReceiptId = reader.GetOrdinal("reversal_receipt_id");
+        var colInventoryUnitId   = reader.GetOrdinal("inventory_unit_id");
+        var colHeaderReopened    = reader.GetOrdinal("header_reopened");
 
-        int inboundId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-        int inboundLineId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
-        int originalReceiptId = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
-        int reversalReceiptId = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
-        int inventoryUnitId = reader.IsDBNull(6) ? 0 : reader.GetInt32(6);
-        bool headerReopened = !reader.IsDBNull(7) && reader.GetBoolean(7);
+        var code              = reader.GetString(colCode);
+        var inboundId         = reader.IsDBNull(colInboundId)         ? 0     : reader.GetInt32(colInboundId);
+        var inboundLineId     = reader.IsDBNull(colLineId)            ? 0     : reader.GetInt32(colLineId);
+        var originalReceiptId = reader.IsDBNull(colReceiptId)         ? 0     : reader.GetInt32(colReceiptId);
+        var reversalReceiptId = reader.IsDBNull(colReversalReceiptId) ? 0     : reader.GetInt32(colReversalReceiptId);
+        var inventoryUnitId   = reader.IsDBNull(colInventoryUnitId)   ? 0     : reader.GetInt32(colInventoryUnitId);
+        var headerReopened    = !reader.IsDBNull(colHeaderReopened)   && reader.GetBoolean(colHeaderReopened);
 
         var result = BuildResult(
             action: "Inbound.ReceiveLine.Reversed",
             resultCode: code,
             data: new
             {
-                InboundId = inboundId,
-                InboundLineId = inboundLineId,
-                ReceiptId = originalReceiptId,
+                InboundId         = inboundId,
+                InboundLineId     = inboundLineId,
+                ReceiptId         = originalReceiptId,
                 ReversalReceiptId = reversalReceiptId,
-                InventoryUnitId = inventoryUnitId,
-                ReasonCode = reasonCode
+                InventoryUnitId   = inventoryUnitId,
+                ReasonCode        = reasonCode
             });
 
         if (result.Success && headerReopened)
@@ -247,12 +262,12 @@ public sealed class SqlInboundCommandRepository
                 _session.SessionId,
                 _session.CorrelationId,
                 ResultCode = "SUCINBREOPEN01",
-                Success = true,
+                Success    = true,
                 Data = new
                 {
-                    InboundId = inboundId,
-                    PreviousStatus = "CLS",
-                    NewStatus = "RCV",
+                    InboundId        = inboundId,
+                    PreviousStatus   = "CLS",
+                    NewStatus        = "RCV",
                     TriggerReceiptId = originalReceiptId
                 }
             });
@@ -302,8 +317,8 @@ public sealed class SqlInboundCommandRepository
             _session.SessionId,
             _session.CorrelationId,
             ResultCode = resultCode,
-            Success = success,
-            Data = data
+            Success    = success,
+            Data       = data
         };
 
         if (success)

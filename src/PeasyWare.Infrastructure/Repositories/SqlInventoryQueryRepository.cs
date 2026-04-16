@@ -27,6 +27,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
 
     // --------------------------------------------------
     // Inventory by external ref (SSCC / HU)
+    // Excludes terminal states (REV, SHP) — same rule as the unique index.
     // --------------------------------------------------
 
     public InventoryUnitDto? GetInventoryUnitByExternalRef(string externalRef)
@@ -37,7 +38,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         command.CommandText = """
             SELECT inventory_unit_id, external_ref
             FROM inventory.inventory_units
-            WHERE external_ref = @external_ref
+            WHERE external_ref      = @external_ref
+              AND stock_state_code NOT IN ('REV', 'SHP')
         """;
 
         command.Parameters.Add(
