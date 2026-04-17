@@ -34,13 +34,13 @@ var loginFlow = new LoginFlow(
 // LOGIN LOOP
 // --------------------------------------------------
 
-Guid?  sessionId           = null;
-int?   userId              = null;
-string? username           = null;
-string? password           = null;
-string? displayName        = null;
-string? roleName           = null;
-UiMode  uiMode             = UiMode.Minimal;
+Guid?  sessionId              = null;
+int?   userId                 = null;
+string? username              = null;
+string? password              = null;
+string? displayName           = null;
+string? roleName              = null;
+UiMode  uiMode                = UiMode.Minimal;
 int     sessionTimeoutMinutes = 480;
 
 while (true)
@@ -196,6 +196,10 @@ try
                 RunInbound(runtime, session);
                 break;
 
+            case "2":
+                RunInventory(runtime, session);
+                break;
+
             case "7":
                 {
                     var sessionCommand = runtime.Repositories.CreateSessionCommand(session);
@@ -263,7 +267,6 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
 
             case "2":
                 {
-                    // Ask for ref first, then route to the correct flow based on mode
                     Console.Write("Enter inbound ref: ");
                     var inboundRef = Console.ReadLine()?.Trim();
 
@@ -286,8 +289,6 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                         break;
                     }
 
-                    // Route: SSCC mode → ReceiveInboundFlow
-                    //        MANUAL or no mode yet → ReceiveManualFlow
                     if (string.Equals(summary.InboundMode, "SSCC", StringComparison.OrdinalIgnoreCase)
                         || summary.HasExpectedUnits)
                     {
@@ -322,6 +323,73 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
 
             default:
                 Console.WriteLine("Invalid option.");
+                break;
+        }
+    }
+}
+
+// --------------------------------------------------
+// INVENTORY MENU
+// --------------------------------------------------
+
+static void RunInventory(AppRuntime runtime, SessionContext session)
+{
+    while (true)
+    {
+        var input = MenuRenderer.ShowInventoryMenu();
+
+        switch (input)
+        {
+            case "4":
+                RunMove(runtime, session);
+                break;
+
+            case "0":
+                return;
+
+            default:
+                // Query stock (1), Query bin (2), Query pallet (3), Count (5)
+                // — not yet implemented, placeholder
+                Console.WriteLine("Coming soon.");
+                Console.ReadKey(true);
+                break;
+        }
+    }
+}
+
+// --------------------------------------------------
+// MOVE MENU
+// --------------------------------------------------
+
+static void RunMove(AppRuntime runtime, SessionContext session)
+{
+    while (true)
+    {
+        var input = MenuRenderer.ShowMoveMenu();
+
+        switch (input)
+        {
+            case "1":
+                {
+                    // Guided putaway — reuses PutawayFromInboundFlow
+                    var flow = new PutawayFromInboundFlow(runtime, session);
+                    flow.RunAsync().Wait();
+                    break;
+                }
+
+            case "2":
+                {
+                    var flow = new BinToBinMoveFlow(runtime, session);
+                    flow.RunAsync().Wait();
+                    break;
+                }
+
+            case "0":
+                return;
+
+            default:
+                Console.WriteLine("Coming soon.");
+                Console.ReadKey(true);
                 break;
         }
     }
