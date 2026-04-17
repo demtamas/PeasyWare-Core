@@ -30,10 +30,6 @@ var loginFlow = new LoginFlow(
     runtime.UserSecurityRepository,
     runtime.Settings.DefaultUiMode);
 
-// --------------------------------------------------
-// LOGIN LOOP
-// --------------------------------------------------
-
 Guid?  sessionId              = null;
 int?   userId                 = null;
 string? username              = null;
@@ -254,9 +250,7 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                 {
                     var activatable = inboundQuery.GetActivatableInbounds();
                     var refInput    = ActivateInboundScreen.PromptInboundRef(activatable);
-
-                    if (string.IsNullOrWhiteSpace(refInput))
-                        break;
+                    if (string.IsNullOrWhiteSpace(refInput)) break;
 
                     var result = inboundCommand.ActivateInboundByRef(refInput);
                     Console.WriteLine();
@@ -269,9 +263,7 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                 {
                     Console.Write("Enter inbound ref: ");
                     var inboundRef = Console.ReadLine()?.Trim();
-
-                    if (string.IsNullOrWhiteSpace(inboundRef))
-                        break;
+                    if (string.IsNullOrWhiteSpace(inboundRef)) break;
 
                     var summary = inboundQuery.GetInboundSummary(inboundRef);
 
@@ -292,31 +284,22 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                     if (string.Equals(summary.InboundMode, "SSCC", StringComparison.OrdinalIgnoreCase)
                         || summary.HasExpectedUnits)
                     {
-                        var flow = new ReceiveInboundFlow(runtime, session, inboundRef);
-                        flow.Run();
+                        new ReceiveInboundFlow(runtime, session, inboundRef).Run();
                     }
                     else
                     {
-                        var flow = new ReceiveManualFlow(runtime, session, inboundRef);
-                        flow.Run();
+                        new ReceiveManualFlow(runtime, session, inboundRef).Run();
                     }
-
                     break;
                 }
 
             case "3":
-                {
-                    var flow = new PutawayFromInboundFlow(runtime, session);
-                    flow.RunAsync().Wait();
-                    break;
-                }
+                new PutawayFromInboundFlow(runtime, session).RunAsync().Wait();
+                break;
 
             case "4" when canReverse:
-                {
-                    var flow = new ReverseInboundReceiptFlow(runtime, session);
-                    flow.Run();
-                    break;
-                }
+                new ReverseInboundReceiptFlow(runtime, session).Run();
+                break;
 
             case "0":
                 return;
@@ -340,12 +323,13 @@ static void RunInventory(AppRuntime runtime, SessionContext session)
 
         switch (input)
         {
+            case "2":
+                new BinQueryFlow(runtime, session).Run();
+                break;
+
             case "3":
-                {
-                    var flow = new SsccQueryFlow(runtime, session);
-                    flow.Run();
-                    break;
-                }
+                new SsccQueryFlow(runtime, session).Run();
+                break;
 
             case "4":
                 RunMove(runtime, session);
@@ -375,18 +359,12 @@ static void RunMove(AppRuntime runtime, SessionContext session)
         switch (input)
         {
             case "1":
-                {
-                    var flow = new PutawayFromInboundFlow(runtime, session);
-                    flow.RunAsync().Wait();
-                    break;
-                }
+                new PutawayFromInboundFlow(runtime, session).RunAsync().Wait();
+                break;
 
             case "2":
-                {
-                    var flow = new BinToBinMoveFlow(runtime, session);
-                    flow.RunAsync().Wait();
-                    break;
-                }
+                new BinToBinMoveFlow(runtime, session).RunAsync().Wait();
+                break;
 
             case "0":
                 return;
@@ -409,42 +387,32 @@ static string ReadConfirmedPassword(int maxTries = 3)
     {
         Console.Write("Enter new password: ");
         var p1 = ReadMaskedPassword();
-
         Console.Write("Confirm new password: ");
         var p2 = ReadMaskedPassword();
-
-        if (!string.IsNullOrWhiteSpace(p1) && p1 == p2)
-            return p1;
-
+        if (!string.IsNullOrWhiteSpace(p1) && p1 == p2) return p1;
         Console.WriteLine("Passwords do not match.");
     }
-
     throw new InvalidOperationException("Password change failed.");
 }
 
 static string ReadMaskedPassword()
 {
     var buffer = new List<char>();
-
     while (true)
     {
         var key = Console.ReadKey(intercept: true);
-
         if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
-
         if (key.Key == ConsoleKey.Backspace && buffer.Count > 0)
         {
             buffer.RemoveAt(buffer.Count - 1);
             Console.Write("\b \b");
             continue;
         }
-
         if (!char.IsControl(key.KeyChar))
         {
             buffer.Add(key.KeyChar);
             Console.Write("*");
         }
     }
-
     return new string(buffer.ToArray());
 }

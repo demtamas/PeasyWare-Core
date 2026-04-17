@@ -9,4 +9,8 @@ public interface IInventoryQueryRepository
     int GetUnitsAwaitingPutawayCount();
 
     ActiveInventoryDto? GetActiveInventoryBySscc(string sscc);
+
+    IReadOnlyList<ActiveInventoryDto> GetActiveInventoryByBin(string binCode);
+
+    bool BinExists(string binCode);
 }

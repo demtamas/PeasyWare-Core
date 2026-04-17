@@ -4,14 +4,11 @@ using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Infrastructure.Sql;
 using System;
+using System.Collections.Generic;
 using System.Data;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
-/// <summary>
-/// QUERY repository for inventory.
-/// Read-only, uses SessionContext for DB tracing.
-/// </summary>
 public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
 {
     private readonly SqlConnectionFactory _factory;
@@ -24,11 +21,6 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
         _session = session ?? throw new ArgumentNullException(nameof(session));
     }
-
-    // --------------------------------------------------
-    // Inventory by external ref (SSCC / HU)
-    // Excludes terminal states (REV, SHP).
-    // --------------------------------------------------
 
     public InventoryUnitDto? GetInventoryUnitByExternalRef(string externalRef)
     {
@@ -60,10 +52,6 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         };
     }
 
-    // --------------------------------------------------
-    // Units awaiting putaway count
-    // --------------------------------------------------
-
     public int GetUnitsAwaitingPutawayCount()
     {
         using var connection = _factory.CreateForCommand(_session);
@@ -81,11 +69,6 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
             : Convert.ToInt32(result);
     }
 
-    // --------------------------------------------------
-    // SSCC query — reads from v_active_inventory
-    // Returns null if SSCC not found or is in a terminal state.
-    // --------------------------------------------------
-
     public ActiveInventoryDto? GetActiveInventoryBySscc(string sscc)
     {
         using var connection = _factory.CreateForCommand(_session);
@@ -93,22 +76,12 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
 
         command.CommandText = """
             SELECT
-                sscc,
-                sku_code,
-                sku_description,
-                batch_number,
-                best_before_date,
-                quantity,
-                stock_state,
-                stock_status,
-                bin_code,
-                zone_code,
-                storage_type_code,
-                received_at,
-                received_by,
-                last_movement_type,
-                last_movement_at,
-                last_moved_by
+                sscc, sku_code, sku_description,
+                batch_number, best_before_date, quantity,
+                stock_state, stock_status,
+                bin_code, zone_code, storage_type_code,
+                received_at, received_by,
+                last_movement_type, last_movement_at, last_moved_by
             FROM inventory.v_active_inventory
             WHERE sscc = @sscc
         """;
@@ -121,9 +94,76 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
 
         using var reader = command.ExecuteReader();
 
-        if (!reader.Read())
-            return null;
+        return reader.Read() ? ReadRow(reader) : null;
+    }
 
+    public IReadOnlyList<ActiveInventoryDto> GetActiveInventoryByBin(string binCode)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                sscc, sku_code, sku_description,
+                batch_number, best_before_date, quantity,
+                stock_state, stock_status,
+                bin_code, zone_code, storage_type_code,
+                received_at, received_by,
+                last_movement_type, last_movement_at, last_moved_by
+            FROM inventory.v_active_inventory
+            WHERE bin_code = @bin_code
+            ORDER BY received_at
+        """;
+
+        command.Parameters.Add(
+            new SqlParameter("@bin_code", SqlDbType.NVarChar, 100)
+            {
+                Value = binCode.Trim()
+            });
+
+        using var reader = command.ExecuteReader();
+
+        var results = new List<ActiveInventoryDto>();
+
+        while (reader.Read())
+            results.Add(ReadRow(reader));
+
+        return results;
+    }
+
+    // --------------------------------------------------
+    // Check whether a bin code exists in locations.bins
+    // Used to distinguish "bin empty" from "bin does not exist"
+    // --------------------------------------------------
+
+    public bool BinExists(string binCode)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT COUNT(1)
+            FROM locations.bins
+            WHERE bin_code = @bin_code
+        """;
+
+        command.Parameters.Add(
+            new SqlParameter("@bin_code", SqlDbType.NVarChar, 100)
+            {
+                Value = binCode.Trim()
+            });
+
+        var result = command.ExecuteScalar();
+
+        return result != null && result != DBNull.Value && Convert.ToInt32(result) > 0;
+    }
+
+    // --------------------------------------------------
+    // Shared row mapper
+    // --------------------------------------------------
+
+    private static ActiveInventoryDto ReadRow(SqlDataReader reader)
+    {
         var colSscc        = reader.GetOrdinal("sscc");
         var colSkuCode     = reader.GetOrdinal("sku_code");
         var colSkuDesc     = reader.GetOrdinal("sku_description");
@@ -146,8 +186,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
             Sscc             = reader.GetString(colSscc),
             SkuCode          = reader.GetString(colSkuCode),
             SkuDescription   = reader.GetString(colSkuDesc),
-            BatchNumber      = reader.IsDBNull(colBatch)   ? null : reader.GetString(colBatch),
-            BestBeforeDate   = reader.IsDBNull(colBbe)     ? null
+            BatchNumber      = reader.IsDBNull(colBatch)       ? null : reader.GetString(colBatch),
+            BestBeforeDate   = reader.IsDBNull(colBbe)         ? null
                                : DateOnly.FromDateTime(reader.GetDateTime(colBbe)),
             Quantity         = reader.GetInt32(colQty),
             StockState       = reader.GetString(colState),
