@@ -340,6 +340,13 @@ static void RunInventory(AppRuntime runtime, SessionContext session)
 
         switch (input)
         {
+            case "3":
+                {
+                    var flow = new SsccQueryFlow(runtime, session);
+                    flow.Run();
+                    break;
+                }
+
             case "4":
                 RunMove(runtime, session);
                 break;
@@ -348,8 +355,6 @@ static void RunInventory(AppRuntime runtime, SessionContext session)
                 return;
 
             default:
-                // Query stock (1), Query bin (2), Query pallet (3), Count (5)
-                // — not yet implemented, placeholder
                 Console.WriteLine("Coming soon.");
                 Console.ReadKey(true);
                 break;
@@ -371,7 +376,6 @@ static void RunMove(AppRuntime runtime, SessionContext session)
         {
             case "1":
                 {
-                    // Guided putaway — reuses PutawayFromInboundFlow
                     var flow = new PutawayFromInboundFlow(runtime, session);
                     flow.RunAsync().Wait();
                     break;
