@@ -221,3 +221,126 @@ VALUES
     (@Line4BL, 'SSCC0000000000000018', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
     (@Line4BL, 'SSCC0000000000000019', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId);
 
+
+/********************************************************************************************
+    OUTBOUND TEST DATA
+    Two test orders + one shipment covering:
+      - Single-line order (SKU001, 2 units, any batch)
+      - Multi-line order (SKU001 + SKU001 blocked, specific batches)
+      - Shipment with both orders linked
+    Orders are created in NEW status — run usp_allocate_order after
+    stock has been received and put away to allocate them.
+*********************************************************************************************/
+
+PRINT '------------------------------------------------------------';
+PRINT 'Outbound test data';
+PRINT '------------------------------------------------------------';
+
+DECLARE @OutboundSystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @OutboundCustomerId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
+DECLARE @OutboundHaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @OutboundAddrId       INT = (SELECT TOP 1 address_id FROM core.party_addresses
+                                     WHERE party_id = (SELECT party_id FROM core.parties
+                                                       WHERE party_code = 'PW_WAREHOUSE01'));
+
+-- ── Test order 1: single line, any batch ──────────────────────────────────────
+DECLARE @TestOrd1Ref NVARCHAR(50) = 'TESTORD001';
+
+IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = @TestOrd1Ref)
+BEGIN
+    DECLARE @TestOrd1Lines NVARCHAR(MAX) = N'[
+        {"line_no":1,"sku_code":"SKU001","ordered_qty":2,
+         "requested_batch":null,"requested_bbe":null,"notes":"Test order line 1"}
+    ]';
+
+    EXEC outbound.usp_create_order
+        @order_ref         = @TestOrd1Ref,
+        @customer_party_id = @OutboundCustomerId,
+        @haulier_party_id  = @OutboundHaulierId,
+        @required_date     = '2027-06-30',
+        @order_source      = 'MANUAL',
+        @notes             = 'Test order — single line, any batch',
+        @lines_json        = @TestOrd1Lines,
+        @user_id           = @OutboundSystemUserId;
+
+    PRINT 'TESTORD001 created.';
+END
+ELSE
+    PRINT 'TESTORD001 already exists — skipped.';
+GO
+
+-- ── Test order 2: two lines, specific batches ─────────────────────────────────
+DECLARE @OutboundSystemUserId2 INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @OutboundCustomerId2   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
+DECLARE @OutboundHaulierId2    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @TestOrd2Ref NVARCHAR(50) = 'TESTORD002';
+
+IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = @TestOrd2Ref)
+BEGIN
+    DECLARE @TestOrd2Lines NVARCHAR(MAX) = N'[
+        {"line_no":1,"sku_code":"SKU001","ordered_qty":2,
+         "requested_batch":"SKU001BATCH_AV","requested_bbe":null,"notes":"Available stock line"},
+        {"line_no":2,"sku_code":"SKU001","ordered_qty":2,
+         "requested_batch":"SKU001BATCH_BL","requested_bbe":null,"notes":"Blocked stock line"}
+    ]';
+
+    EXEC outbound.usp_create_order
+        @order_ref         = @TestOrd2Ref,
+        @customer_party_id = @OutboundCustomerId2,
+        @haulier_party_id  = @OutboundHaulierId2,
+        @required_date     = '2027-06-30',
+        @order_source      = 'MANUAL',
+        @notes             = 'Test order — two lines with specific batch requests',
+        @lines_json        = @TestOrd2Lines,
+        @user_id           = @OutboundSystemUserId2;
+
+    PRINT 'TESTORD002 created.';
+END
+ELSE
+    PRINT 'TESTORD002 already exists — skipped.';
+GO
+
+-- ── Test shipment ─────────────────────────────────────────────────────────────
+DECLARE @OutboundAddrId2 INT = (SELECT TOP 1 address_id FROM core.party_addresses
+                                WHERE party_id = (SELECT party_id FROM core.parties
+                                                  WHERE party_code = 'PW_WAREHOUSE01'));
+DECLARE @OutboundHaulierId3 INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @TestShipRef NVARCHAR(50) = 'TESTSHIP001';
+
+IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = @TestShipRef)
+BEGIN
+    EXEC outbound.usp_create_shipment
+        @shipment_ref         = @TestShipRef,
+        @haulier_party_id     = @OutboundHaulierId3,
+        @vehicle_ref          = 'TEST-VEHICLE-01',
+        @ship_from_address_id = @OutboundAddrId2,
+        @planned_departure    = NULL,
+        @notes                = 'Test shipment for TESTORD001 and TESTORD002',
+        @user_id              = (SELECT id FROM auth.users WHERE username = 'system');
+
+    -- Link both orders to the shipment
+    DECLARE @TestShipId  INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = @TestShipRef);
+    DECLARE @TestOrd1Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD001');
+    DECLARE @TestOrd2Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD002');
+    DECLARE @SysUserId   INT = (SELECT id FROM auth.users WHERE username = 'system');
+
+    EXEC outbound.usp_add_order_to_shipment
+        @outbound_order_id = @TestOrd1Id,
+        @shipment_id       = @TestShipId,
+        @user_id           = @SysUserId;
+
+    EXEC outbound.usp_add_order_to_shipment
+        @outbound_order_id = @TestOrd2Id,
+        @shipment_id       = @TestShipId,
+        @user_id           = @SysUserId;
+
+    PRINT 'TESTSHIP001 created and linked to TESTORD001 + TESTORD002.';
+END
+ELSE
+    PRINT 'TESTSHIP001 already exists — skipped.';
+GO
+
+PRINT '------------------------------------------------------------';
+PRINT 'Outbound test data complete.';
+PRINT '------------------------------------------------------------';
+GO
