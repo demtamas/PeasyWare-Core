@@ -85,7 +85,6 @@ while (true)
             case LoginOutcome.PasswordChangeRequired:
                 Console.WriteLine(result.Message);
                 Console.WriteLine();
-
                 bool changed = false;
                 for (int i = 0; i < 3; i++)
                 {
@@ -94,7 +93,6 @@ while (true)
                     if (change.Success) { password = newPassword; changed = true; break; }
                     Console.WriteLine(change.FriendlyMessage);
                 }
-
                 if (!changed) return;
                 continue;
 
@@ -102,22 +100,17 @@ while (true)
                 Console.WriteLine(result.Message);
                 Console.Write("Terminate the other session and continue? (y/N): ");
                 var answer = Console.ReadLine();
-
                 if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
                     return;
 
                 var forcedContext = new LoginContext
                 {
-                    ClientApp     = context.ClientApp,
-                    ClientInfo    = context.ClientInfo,
-                    OsInfo        = context.OsInfo,
-                    IpAddress     = context.IpAddress,
-                    ForceLogin    = true,
-                    CorrelationId = Guid.NewGuid()
+                    ClientApp = context.ClientApp, ClientInfo = context.ClientInfo,
+                    OsInfo = context.OsInfo, IpAddress = context.IpAddress,
+                    ForceLogin = true, CorrelationId = Guid.NewGuid()
                 };
 
                 var retry = loginFlow.Run(username, password, forcedContext, diagnosticsEnabled);
-
                 if (retry.Outcome != LoginOutcome.Success)
                 {
                     Console.WriteLine(retry.Message);
@@ -165,15 +158,10 @@ var session = new SessionContext(
 );
 
 runtime.Logger.SetSession(session);
-
 runtime.Logger.Info("Session.Start", new
 {
-    session.UserId,
-    session.Username,
-    session.RoleName,
-    UiMode = session.UiMode.ToString(),
-    session.SourceApp,
-    session.SourceClient
+    session.UserId, session.Username, session.RoleName,
+    UiMode = session.UiMode.ToString(), session.SourceApp, session.SourceClient
 });
 
 HeaderRenderer.Render(runtime.Settings, diagnosticsEnabled, session.SessionId);
@@ -187,27 +175,16 @@ try
 
         switch (input)
         {
-            case "1":
-                RunInbound(runtime, session);
-                break;
-
-            case "2":
-                RunInventory(runtime, session);
-                break;
-
-            case "3":
-                RunOrders(runtime, session);
-                break;
+            case "1": RunInbound(runtime, session);  break;
+            case "2": RunInventory(runtime, session); break;
+            case "3": RunOrders(runtime, session);   break;
 
             case "7":
                 {
                     var sessionCommand = runtime.Repositories.CreateSessionCommand(session);
                     var logout = sessionCommand.LogoutSession(
-                        session.SessionId,
-                        sourceApp:    "PeasyWare.CLI",
-                        sourceClient: Environment.MachineName,
-                        sourceIp:     IpResolver.GetLocalIPv4());
-
+                        session.SessionId, sourceApp: "PeasyWare.CLI",
+                        sourceClient: Environment.MachineName, sourceIp: IpResolver.GetLocalIPv4());
                     Console.WriteLine(logout.FriendlyMessage);
                     return;
                 }
@@ -233,13 +210,12 @@ finally
 }
 
 // --------------------------------------------------
-// INBOUND MENU
+// INBOUND
 // --------------------------------------------------
 
 static void RunInbound(AppRuntime runtime, SessionContext session)
 {
     bool canReverse = session.UiMode >= UiMode.Standard;
-
     var inboundQuery   = runtime.Repositories.CreateInboundQuery(session);
     var inboundCommand = runtime.Repositories.CreateInboundCommand(session);
 
@@ -254,10 +230,8 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                     var activatable = inboundQuery.GetActivatableInbounds();
                     var refInput    = ActivateInboundScreen.PromptInboundRef(activatable);
                     if (string.IsNullOrWhiteSpace(refInput)) break;
-
                     var result = inboundCommand.ActivateInboundByRef(refInput);
-                    Console.WriteLine();
-                    Console.WriteLine(result.FriendlyMessage);
+                    Console.WriteLine(); Console.WriteLine(result.FriendlyMessage);
                     Console.ReadKey(true);
                     break;
                 }
@@ -267,55 +241,26 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                     Console.Write("Enter inbound ref: ");
                     var inboundRef = Console.ReadLine()?.Trim();
                     if (string.IsNullOrWhiteSpace(inboundRef)) break;
-
                     var summary = inboundQuery.GetInboundSummary(inboundRef);
-
-                    if (!summary.Exists)
-                    {
-                        Console.WriteLine("Inbound not found.");
-                        Console.ReadKey(true);
-                        break;
-                    }
-
-                    if (!summary.IsReceivable)
-                    {
-                        Console.WriteLine("Inbound is not in a receivable state.");
-                        Console.ReadKey(true);
-                        break;
-                    }
-
-                    if (string.Equals(summary.InboundMode, "SSCC", StringComparison.OrdinalIgnoreCase)
-                        || summary.HasExpectedUnits)
-                    {
+                    if (!summary.Exists) { Console.WriteLine("Inbound not found."); Console.ReadKey(true); break; }
+                    if (!summary.IsReceivable) { Console.WriteLine("Inbound is not in a receivable state."); Console.ReadKey(true); break; }
+                    if (string.Equals(summary.InboundMode, "SSCC", StringComparison.OrdinalIgnoreCase) || summary.HasExpectedUnits)
                         new ReceiveInboundFlow(runtime, session, inboundRef).Run();
-                    }
                     else
-                    {
                         new ReceiveManualFlow(runtime, session, inboundRef).Run();
-                    }
                     break;
                 }
 
-            case "3":
-                new PutawayFromInboundFlow(runtime, session).RunAsync().Wait();
-                break;
-
-            case "4" when canReverse:
-                new ReverseInboundReceiptFlow(runtime, session).Run();
-                break;
-
-            case "0":
-                return;
-
-            default:
-                Console.WriteLine("Invalid option.");
-                break;
+            case "3": new PutawayFromInboundFlow(runtime, session).RunAsync().Wait(); break;
+            case "4" when canReverse: new ReverseInboundReceiptFlow(runtime, session).Run(); break;
+            case "0": return;
+            default: Console.WriteLine("Invalid option."); break;
         }
     }
 }
 
 // --------------------------------------------------
-// INVENTORY MENU
+// INVENTORY
 // --------------------------------------------------
 
 static void RunInventory(AppRuntime runtime, SessionContext session)
@@ -323,65 +268,34 @@ static void RunInventory(AppRuntime runtime, SessionContext session)
     while (true)
     {
         var input = MenuRenderer.ShowInventoryMenu();
-
         switch (input)
         {
-            case "2":
-                new BinQueryFlow(runtime, session).Run();
-                break;
-
-            case "3":
-                new SsccQueryFlow(runtime, session).Run();
-                break;
-
-            case "4":
-                RunMove(runtime, session);
-                break;
-
-            case "0":
-                return;
-
-            default:
-                Console.WriteLine("Coming soon.");
-                Console.ReadKey(true);
-                break;
+            case "2": new BinQueryFlow(runtime, session).Run();  break;
+            case "3": new SsccQueryFlow(runtime, session).Run(); break;
+            case "4": RunMove(runtime, session);                 break;
+            case "0": return;
+            default: Console.WriteLine("Coming soon."); Console.ReadKey(true); break;
         }
     }
 }
-
-// --------------------------------------------------
-// MOVE MENU
-// --------------------------------------------------
 
 static void RunMove(AppRuntime runtime, SessionContext session)
 {
     while (true)
     {
         var input = MenuRenderer.ShowMoveMenu();
-
         switch (input)
         {
-            case "1":
-                new PutawayFromInboundFlow(runtime, session).RunAsync().Wait();
-                break;
-
-            case "2":
-                new BinToBinMoveFlow(runtime, session).RunAsync().Wait();
-                break;
-
-            case "0":
-                return;
-
-            default:
-                Console.WriteLine("Coming soon.");
-                Console.ReadKey(true);
-                break;
+            case "1": new PutawayFromInboundFlow(runtime, session).RunAsync().Wait(); break;
+            case "2": new BinToBinMoveFlow(runtime, session).RunAsync().Wait();       break;
+            case "0": return;
+            default: Console.WriteLine("Coming soon."); Console.ReadKey(true); break;
         }
     }
 }
 
 // --------------------------------------------------
-// ORDERS MENU
+// ORDERS
 // --------------------------------------------------
 
 static void RunOrders(AppRuntime runtime, SessionContext session)
@@ -389,20 +303,13 @@ static void RunOrders(AppRuntime runtime, SessionContext session)
     while (true)
     {
         var input = MenuRenderer.ShowOrdersMenu();
-
         switch (input)
         {
-            case "2":
-                new PickFlow(runtime, session).Run();
-                break;
-
-            case "0":
-                return;
-
-            default:
-                Console.WriteLine("Coming soon.");
-                Console.ReadKey(true);
-                break;
+            case "2": new PickFlow(runtime, session).Run(); break;
+            case "4": new LoadFlow(runtime, session).Run(); break;
+            case "5": new ShipFlow(runtime, session).Run(); break;
+            case "0": return;
+            default: Console.WriteLine("Coming soon."); Console.ReadKey(true); break;
         }
     }
 }
@@ -432,17 +339,8 @@ static string ReadMaskedPassword()
     {
         var key = Console.ReadKey(intercept: true);
         if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
-        if (key.Key == ConsoleKey.Backspace && buffer.Count > 0)
-        {
-            buffer.RemoveAt(buffer.Count - 1);
-            Console.Write("\b \b");
-            continue;
-        }
-        if (!char.IsControl(key.KeyChar))
-        {
-            buffer.Add(key.KeyChar);
-            Console.Write("*");
-        }
+        if (key.Key == ConsoleKey.Backspace && buffer.Count > 0) { buffer.RemoveAt(buffer.Count - 1); Console.Write("\b \b"); continue; }
+        if (!char.IsControl(key.KeyChar)) { buffer.Add(key.KeyChar); Console.Write("*"); }
     }
     return new string(buffer.ToArray());
 }

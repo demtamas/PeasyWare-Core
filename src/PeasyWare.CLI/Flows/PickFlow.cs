@@ -121,7 +121,6 @@ public sealed class PickFlow
                     Console.WriteLine($"[SCAN] Destination staging bin: '{destinationBinCode}'");
             }
 
-            // ── Picking starts immediately after destination confirmed ──
             var pendingAllocations = allocations
                 .Where(a => a.AllocationStatus == "PENDING")
                 .ToList();
@@ -153,6 +152,15 @@ public sealed class PickFlow
                     Console.WriteLine($"Could not create pick task: {taskResult.FriendlyMessage}");
                     if (_session.UiMode == UiMode.Trace)
                         Console.WriteLine($"[TRACE] ResultCode: {taskResult.ResultCode}");
+
+                    // TODO: Re-allocation request
+                    // When CreatePickTask fails (unit damaged, obstructed, not found etc.),
+                    // offer the operator an option to request a new allocation for this line.
+                    // This would cancel the current allocation and call usp_allocate_order
+                    // for the specific line with the next eligible unit. Requires:
+                    //   - outbound.usp_cancel_allocation (cancel single allocation row)
+                    //   - outbound.usp_reallocate_line (re-run allocation engine per line)
+                    //   - CLI: prompt "R=request new allocation, S=skip, 0=abort"
                     Console.WriteLine("Press any key to skip this unit.");
                     Console.ReadKey(true);
                     skipped++;
@@ -172,7 +180,6 @@ public sealed class PickFlow
 
                 while (!unitPicked)
                 {
-                    // ── Bin scan — validated before SSCC prompt ──────────
                     Console.Write($"Scan source bin [{taskResult.SourceBinCode}] (S=skip, 0=abort): ");
                     var rawBin = Console.ReadLine()?.Trim();
 
@@ -184,6 +191,13 @@ public sealed class PickFlow
 
                     if (string.Equals(rawBin, "S", StringComparison.OrdinalIgnoreCase))
                     {
+                        // TODO: Re-allocation request
+                        // Operator found the allocated unit inaccessible, damaged, or missing.
+                        // Instead of silently skipping, offer R=request new allocation.
+                        // Flow: cancel current allocation row → re-run allocation engine
+                        // for this line → if new unit found, loop back and retry pick.
+                        // If no substitute available, order line remains partially picked
+                        // and supervisor must resolve manually.
                         Console.WriteLine("Unit skipped.");
                         Thread.Sleep(800);
                         skipped++;
@@ -195,21 +209,18 @@ public sealed class PickFlow
                         ? binScan.Sscc
                         : rawBin;
 
-                    // Pallet label scanned at bin prompt — wrong barcode
                     if (binScan.IsValid && binScan.IsPalletScan && !binScan.IsProductScan)
                     {
                         Console.WriteLine($"That looks like a pallet label. Please scan the bin barcode for {taskResult.SourceBinCode}.");
                         continue;
                     }
 
-                    // Wrong bin scanned
                     if (!string.Equals(resolvedBin, taskResult.SourceBinCode, StringComparison.OrdinalIgnoreCase))
                     {
                         Console.WriteLine($"Wrong bin. Expected: {taskResult.SourceBinCode}");
                         continue;
                     }
 
-                    // ── SSCC scan ────────────────────────────────────────
                     Console.Write($"Scan pallet SSCC [{alloc.Sscc}]: ");
                     var rawSscc = Console.ReadLine()?.Trim();
 
@@ -253,7 +264,7 @@ public sealed class PickFlow
             Console.WriteLine($"Pick session complete — Order: {order.OrderRef}");
             Console.WriteLine($"Picked:  {picked}");
             if (skipped > 0)
-                Console.WriteLine($"Skipped: {skipped}");
+                Console.WriteLine($"Skipped: {skipped}  ← re-allocation required");
             Console.WriteLine("────────────────────────────────────────────────────────────");
             Console.WriteLine();
             Console.WriteLine("Press any key to return.");
