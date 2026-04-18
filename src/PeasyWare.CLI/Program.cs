@@ -44,7 +44,6 @@ while (true)
     try
     {
         HeaderRenderer.Render(runtime.Settings, diagnosticsEnabled, sessionId: null);
-
         Console.WriteLine("Please log in to continue.\n");
 
         Console.Write("Username: ");
@@ -194,6 +193,10 @@ try
 
             case "2":
                 RunInventory(runtime, session);
+                break;
+
+            case "3":
+                RunOrders(runtime, session);
                 break;
 
             case "7":
@@ -364,6 +367,33 @@ static void RunMove(AppRuntime runtime, SessionContext session)
 
             case "2":
                 new BinToBinMoveFlow(runtime, session).RunAsync().Wait();
+                break;
+
+            case "0":
+                return;
+
+            default:
+                Console.WriteLine("Coming soon.");
+                Console.ReadKey(true);
+                break;
+        }
+    }
+}
+
+// --------------------------------------------------
+// ORDERS MENU
+// --------------------------------------------------
+
+static void RunOrders(AppRuntime runtime, SessionContext session)
+{
+    while (true)
+    {
+        var input = MenuRenderer.ShowOrdersMenu();
+
+        switch (input)
+        {
+            case "2":
+                new PickFlow(runtime, session).Run();
                 break;
 
             case "0":

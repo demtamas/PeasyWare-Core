@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Security;
 using PeasyWare.Infrastructure.Repositories;
@@ -25,14 +25,8 @@ public sealed class RepositoryFactory
         _sessionGuard = sessionGuard;
     }
 
-    // --------------------------------------------------
-    // INTERNAL HELPER (single place to bind session)
-    // --------------------------------------------------
-
-    private void BindSession(SessionContext session)
-    {
+    private void BindSession(SessionContext session) =>
         _logger.SetSession(session);
-    }
 
     // --------------------------------------------------
     // SESSION
@@ -41,12 +35,7 @@ public sealed class RepositoryFactory
     public ISessionCommandRepository CreateSessionCommand(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlSessionCommandRepository(
-            _factory,
-            session,
-            _resolver,
-            _logger);
+        return new SqlSessionCommandRepository(_factory, session, _resolver, _logger);
     }
 
     // --------------------------------------------------
@@ -56,22 +45,13 @@ public sealed class RepositoryFactory
     public IUserCommandRepository CreateUserCommand(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlUserCommandRepository(
-            _factory,
-            session,
-            _resolver,
-            _logger,
-            _sessionGuard);
+        return new SqlUserCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
     public IUserQueryRepository CreateUserQuery(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlUserQueryRepository(
-            _factory,
-            session);
+        return new SqlUserQueryRepository(_factory, session);
     }
 
     // --------------------------------------------------
@@ -81,23 +61,13 @@ public sealed class RepositoryFactory
     public IInboundCommandRepository CreateInboundCommand(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlInboundCommandRepository(
-            _factory,
-            session,
-            _resolver,
-            _logger,
-            _sessionGuard);
+        return new SqlInboundCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
     public IInboundQueryRepository CreateInboundQuery(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlInboundQueryRepository(
-            _factory,
-            session,
-            _resolver);
+        return new SqlInboundQueryRepository(_factory, session, _resolver);
     }
 
     // --------------------------------------------------
@@ -107,10 +77,23 @@ public sealed class RepositoryFactory
     public IInventoryQueryRepository CreateInventoryQuery(SessionContext session)
     {
         BindSession(session);
+        return new SqlInventoryQueryRepository(_factory, session);
+    }
 
-        return new SqlInventoryQueryRepository(
-            _factory,
-            session);
+    // --------------------------------------------------
+    // OUTBOUND
+    // --------------------------------------------------
+
+    public IOutboundQueryRepository CreateOutboundQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlOutboundQueryRepository(_factory, session);
+    }
+
+    public IOutboundCommandRepository CreateOutboundCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlOutboundCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
     // --------------------------------------------------
@@ -120,33 +103,22 @@ public sealed class RepositoryFactory
     public ISettingsCommandRepository CreateSettingsCommand(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlSettingsCommandRepository(
-            _factory,
-            session,
-            _resolver,
-            _logger,
-            _sessionGuard);
+        return new SqlSettingsCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
     public ISettingsQueryRepository CreateSettingsQuery(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlSettingsQueryRepository(
-            _factory,
-            session);
+        return new SqlSettingsQueryRepository(_factory, session);
     }
+
+    // --------------------------------------------------
+    // WAREHOUSE TASKS
+    // --------------------------------------------------
 
     public IWarehouseTaskCommandRepository CreateWarehouseTaskCommand(SessionContext session)
     {
         BindSession(session);
-
-        return new SqlWarehouseTaskCommandRepository(
-            _factory,
-            session,
-            _resolver,
-            _logger,
-            _sessionGuard);
+        return new SqlWarehouseTaskCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 }
