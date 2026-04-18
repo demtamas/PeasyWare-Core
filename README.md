@@ -2,270 +2,221 @@
 
 ![PeasyWare Logo](src/Assets/peasyware-logo.svg)
 
-Core architecture of **PeasyWare** — an experimental **Warehouse Management System (WMS)** built to model real warehouse operations including inbound receiving, inventory management, putaway, and outbound logistics.
+Core architecture of **PeasyWare** — a professional-grade **Warehouse Management System (WMS)** built in C#/.NET Core with SQL Server, modelling real warehouse operations end to end.
 
-PeasyWare explores how real warehouse systems operate by implementing simplified versions of concepts used in enterprise platforms such as **SAP EWM**, **Manhattan WMS**, and **Blue Yonder**.
-
----
-
-# Overview
-
-**PeasyWare** is a learning and architecture project designed to model real warehouse operations in software.
-
-The project is built using:
-
-- **C# (.NET)**
-- **SQL Server**
-- **Layered / Clean Architecture**
-
-The system models how inventory moves through a warehouse and how software coordinates those movements.
-
-Core warehouse concepts implemented include:
-
-- inbound receiving  
-- SSCC / inventory unit tracking  
-- warehouse locations and bins  
-- putaway strategies  
-- warehouse task generation  
-- outbound inventory availability  
+PeasyWare implements the core domain concepts found in enterprise platforms such as **SAP EWM**, **Manhattan WMS**, and **Blue Yonder** — built from the ground up with production-quality design principles.
 
 ---
 
-# Architecture
+## Overview
 
-PeasyWare follows a layered architecture inspired by Clean Architecture and real-world warehouse systems.
+PeasyWare is a WMS architecture project demonstrating how inventory moves through a warehouse and how software coordinates those movements. It is designed as a standalone system capable of operating independently or integrating with external platforms (ERP, EDI, API).
+
+**Tech stack:**
+- C# / .NET 10
+- SQL Server (thick-DB — all business logic in stored procedures)
+- No ORM — raw ADO.NET with named parameter mapping
+- Event-stream audit trail (`audit.trace_logs`)
+- Cross-platform — runs on Windows and macOS
+
+---
+
+## Architecture
 
 ```
-User Interfaces
-   CLI (RF-style terminal)
-   Desktop Application
-        │
-        ▼
-Application Layer
-   Use Cases / Flows
-   Services
-   DTOs
-        │
-        ▼
-Domain Layer
-   Core Warehouse Logic
-   Inventory Units
-   Warehouse Tasks
-   Locations / Bins
-        │
-        ▼
-Infrastructure Layer
-   SQL Repositories
-   Configuration
-   External Integrations
-        │
-        ▼
-Database
-   SQL Server
-   Warehouses / Inventory
-   Deliveries / Tasks
+CLI (RF-style terminal)     Desktop Application (future)
+         │                             │
+         └──────────────┬──────────────┘
+                        ▼
+            Application Layer
+          Flows / Services / DTOs
+                        │
+                        ▼
+           Infrastructure Layer
+         SQL Repositories / Bootstrap
+                        │
+                        ▼
+              SQL Server Database
+         Schemas: inventory, deliveries,
+         outbound, warehouse, locations,
+         operations, auth, audit, core
+```
+
+**Design principles:**
+- Every process has a Reversal Path
+- Every operation carries a Correlation ID
+- All SPs use `SET XACT_ABORT ON` + `BEGIN CATCH`
+- Error codes follow `ERRAUTH01` pattern (prefix ERR/WAR/SUC, no hyphens)
+- `UPDLOCK, HOLDLOCK` on concurrent reads
+- `SCOPE_IDENTITY()` ordering discipline enforced throughout
+
+---
+
+## Warehouse Lifecycle
+
+```
+Supplier ASN / Manual Receive
+         │
+         ▼
+Inbound Receiving (SSCC or Manual mode)
+         │
+         ▼
+Inventory Unit Created (RCD state)
+         │
+         ▼
+Putaway Task Generated → Operator confirms → PTW state
+         │
+         ▼
+Bin-to-Bin Movement (MOV state, operator or system)
+         │
+         ▼
+Outbound Order Created → Allocation Engine (FEFO/FIFO/NONE)
+         │
+         ▼
+Pick Task Generated → Operator scans bin + SSCC → PKD state
+         │
+         ▼
+Load Confirmation → Ship Confirmation → SHP state
+         │
+         ▼
+Unit removed from warehouse, audit trail complete
 ```
 
 ---
 
-# Warehouse Flow Model
+## Quick Start
 
-A simplified representation of how inventory moves through the system.
+### 1 — Clone
 
-```
-Inbound Delivery
-      │
-      ▼
-Receive SSCC
-      │
-      ▼
-Inventory Unit Created
-      │
-      ▼
-Putaway Task Generated
-      │
-      ▼
-Inventory Moved To Location
-      │
-      ▼
-Stock Available For Outbound
-```
-
-These movements eventually translate into **Warehouse Tasks**, representing physical work performed in the warehouse such as:
-
-- moving a pallet  
-- picking inventory  
-- replenishing storage locations  
-
----
-
-# Quick Start
-
-## 1 — Clone the repository
-
-```
+```bash
 git clone https://github.com/demtamas/PeasyWare-Core.git
+cd PeasyWare-Core
 ```
 
----
+### 2 — Database
 
-## 2 — Initialize the database
-
-Development helper scripts are currently provided to quickly create a working development environment.
-
-Run the following scripts:
+Run these scripts in SSMS against your SQL Server instance, in order:
 
 ```
-Database/DEV/DEV_AllInOneGo.sql
-Database/DEV/DEV_WIP.sql
-Database/DEV/DEV_Test_Data_Samples.sql
+Database/DEV/DEV_AllInOneInOneGo.sql   ← full schema + seed data
+Database/DEV/DEV_Test_Data_Samples.sql ← test inbounds, orders, shipment
 ```
 
-Running these scripts will:
+### 3 — Connection string
 
-- create the **PW_Core_DEV** database  
-- create all required schemas and tables  
-- load sample development data  
+The app resolves the connection string in this order:
 
-These scripts currently support **Microsoft SQL Server**.
+1. **Environment variable** `PEASYWARE_DB` ← preferred for all machines
+2. Hardcoded fallback: `localhost` (for local dev)
 
-In future versions they will be replaced by consolidated migration scripts located in:
+Set the environment variable on your machine:
 
+**Windows (PowerShell):**
+```powershell
+$env:PEASYWARE_DB = "Server=192.168.x.x;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;"
 ```
-Database/Scripts
+Add to your PowerShell profile to make it permanent.
+
+**macOS / Linux:**
+```bash
+export PEASYWARE_DB="Server=192.168.x.x;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;"
 ```
+Add to `~/.zshrc` or `~/.bash_profile` to make it permanent.
 
----
+No code changes needed between machines.
 
-## 3 — Configure the connection string
+### 4 — Build and run
 
-Before building the project, update the database connection string.
-
-Edit the file:
-
-```
-src/PeasyWare.Infrastructure/Bootstrap/BootstrapLoader
-```
-
-Adjust the connection string so it points to your SQL Server instance.
-
-Example:
-
-```
-Server=localhost;
-Database=PeasyWare_DEV;
-Trusted_Connection=True;
-```
-
----
-
-## 4 — Build the project
-
-From the repository root:
-
-```
+```bash
 dotnet build
+dotnet run --project src/PeasyWare.CLI
 ```
 
----
+Initial credentials: `admin` / `admin0` — you will be prompted to change the password on first login (min 8 chars, must contain uppercase, lowercase, and a number).
 
-## 5 — Run the CLI
+### 5 — Tests
 
-The CLI simulates a **warehouse RF terminal**, similar to handheld scanners used on warehouse shop floors.
-
-Run the application by either
-
-```
-dotnet run --project src/PeasyWare.CLI or
-dotnet run --project src/PeasyWare.Desktop
-
-Initial credentials are admin / admin0, you'll be propmpted to update to a password at least 8 characters long and containing letter, capital and number at least one of each.
-
+```bash
+dotnet test
 ```
 
----
-
-# Project Status
-
-PeasyWare is an **experimental architecture project** exploring the design of warehouse management systems.
-
-The goal of the project is to model the core concepts behind real WMS platforms while demonstrating an understanding of both:
-
-- the **under-the-hood system architecture** that drives warehouse software  
-- the **physical realities of warehouse shop-floor operations**
-
-Rather than focusing only on code, PeasyWare attempts to represent how inventory actually moves through a warehouse and how software coordinates those movements.
-
-The project explores concepts such as:
-
-- inbound receiving and handling units (SSCC)
-- inventory unit lifecycle
-- warehouse locations and bins
-- putaway logic and storage strategies
-- warehouse task generation
-- inventory availability for outbound operations
-
-PeasyWare is intentionally developed as a **learning and architecture exercise**, where the domain model and operational workflows evolve as the system grows.
+76 tests covering GS1-128 barcode parsing, UiMode ordering, and inbound receiving service delegation.
 
 ---
 
-# Development Status
+## Features Implemented
 
-### Currently Implemented
+### Inbound
+- Delivery advice (ASN) with expected units (SSCC mode)
+- Manual receive mode — two-label scan (product + pallet)
+- GS1-128 barcode parser — parenthesis, raw FNC1, tilde formats
+- Claim token pattern — prevents concurrent SSCC receives
+- Receipt reversal with full audit chain
+- `is_batch_required` and `standard_hu_quantity` per SKU
 
-- database schema foundation
-- user and session management  
-- inbound delivery structures  
-- SSCC / inventory unit model  
-- warehouse locations and bins  
-- initial putaway logic  
-- CLI terminal foundation  
+### Inventory
+- Inventory units with state machine (RCD → PTW → MOV/PKD → SHP/REV)
+- Bin placements — rack (capacity 1) and bulk (capacity-based mixing)
+- `v_active_inventory` — canonical active stock view
+- SSCC enquiry with UiMode-tiered display (Minimal / Standard / Trace)
+- Bin enquiry — single unit detail or multi-unit summary with drill-down
 
-### In Progress
+### Warehouse Tasks
+- Putaway tasks — zone load balancing, bin reservation, TTL expiry
+- Bin-to-bin movement — operator or system initiated, MOV state lock
+- Pick tasks — allocation-driven, operator-specified staging bay
+- All tasks: source bin, destination bin, timestamps, completed by
 
-- inbound receiving workflows  
-- warehouse task generation  
-- inventory movement logic  
-- CLI warehouse process flows  
+### Outbound
+- Customer orders with lines (requested batch / BBE per line)
+- Allocation engine — FEFO / FIFO / LIFO / NONE (settings-driven)
+- Full-pallet allocation, all-or-nothing rollback
+- Pick flow — bin scan validated client-side before SSCC prompt
+- Load confirmation — order-level, no SSCC scanning required
+- Ship confirmation — transitions all units to SHP, closes shipment
+- One shipment → many orders; one order → one shipment
 
-### Planned
-
-- GTIN resolver
-- outbound picking   
-- replenishment logic  
-- warehouse task orchestration  
-- API layer  
-- improved desktop interface  
+### Infrastructure
+- Role-based UiMode (Minimal / Standard / Trace) — system ceiling enforced
+- Session management — TTL, force login, concurrent session guard
+- Structured audit log (`audit.trace_logs`) with JSON payload
+- Error message resolver — all error/success codes in DB, operator-facing + tech note
+- Cross-platform — tested on Windows and macOS
 
 ---
 
-# Documentation
-
-More detailed technical documentation will be available in the **docs** folder.
+## Documentation
 
 ```
 docs/
-   architecture.md
-   domain-model.md
-   warehouse-flows.md
+  inbound-receiving.md   ← SSCC and Manual mode, data flow, traceability
+  outbound.md            ← Order → allocate → pick → load → ship
+  putaway-strategy.md
+  warehouse-model.md
+  architecture.md
 ```
 
-These documents describe the internal design of PeasyWare in greater depth.
+---
+
+## Project Status
+
+**v0.9 — Core warehouse lifecycle complete (CLI)**
+
+The full warehouse loop is operational:
+Receive → Putaway → Move → Query → Pick → Load → Ship
+
+Next milestones:
+- v1.0 — API layer (REST endpoints over existing SPs)
+- v1.x — Desktop application (order management, stock enquiry dashboard)
 
 ---
 
-# Inspiration
+## Inspiration
 
-PeasyWare is inspired by real warehouse management systems such as:
-
-- SAP EWM  
-- Manhattan WMS  
-- Blue Yonder  
-
-combined with real warehouse shop-floor experience across facilities of different sizes and operational models handling a wide variety of merchandise.
+Built with reference to real warehouse operations across multiple sites and enterprise systems including SAP EWM, RedPrairie/JDA Dispatcher, Reflex, and legacy DOS-based WMS platforms.
 
 ---
 
-# License
+## License
 
 MIT License
