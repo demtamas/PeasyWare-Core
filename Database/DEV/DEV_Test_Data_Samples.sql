@@ -2,361 +2,529 @@ USE PW_Core_DEV;
 GO
 
 /********************************************************************************************
-    IUTPUT
+    PW Core — Minimal Test Data
+    ----------------------------
+    Stripped to bare minimum for API development and label testing.
+
+    Covers:
+      - 1 test SKU (real Britvic label format)
+      - 2 inbounds: 1 SSCC pre-advised, 1 manual (blind)
+      - 3 outbound orders
+      - 2 shipments: 1 single-order, 1 two-order
+
+    Roles, users, parties, locations, and SKUs are seeded here.
+    Further test data will be inserted via API once available.
 ********************************************************************************************/
+
 PRINT '------------------------------------------------------------';
-PRINT 'PW Core Test Data Load v1.0';
+PRINT 'PW Core Test Data v2.0';
 PRINT '------------------------------------------------------------';
+GO
+
+-- ============================================================
+-- Auth: roles + admin user
+-- ============================================================
 
 DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @OutputId INT;
 
-EXEC auth.usp_add_role 
-    @RoleName = 'admin', 
-    @Description = 'System administrator', 
-    @CreatedBy = @SystemUserId,
-    @NewRoleId = @OutputId OUTPUT;
-
-EXEC auth.usp_add_role 
-    @RoleName = 'manager', 
-    @Description = 'Manager with elevated access', 
-    @CreatedBy = @SystemUserId,
-    @NewRoleId = @OutputId OUTPUT;
-
-EXEC auth.usp_add_role 
-    @RoleName = 'operator', 
-    @Description = 'Operator with basic access', 
-    @CreatedBy = @SystemUserId,
-    @NewRoleId = @OutputId OUTPUT;
-
-EXEC auth.usp_create_user
-    @username = 'admin',
-    @display_name = 'Wannabee WMS Engineer',
-    @role_name = 'admin',
-    @email = 'tamas.demjen@pw.local',
-    @password = 'admin0',
-    @result_code = NULL,
-    @friendly_msg = NULL;
-
-/* ============================================================
-   Seed: dummy supplier, customer, haulier, party
-   ------------------------------------------------------------
-   Minimal data to allow early testing without full population.
-   ============================================================ */
-
-INSERT INTO core.parties (party_code, legal_name, display_name, country_code, tax_id, is_active, created_at, created_by) VALUES
-    ('PW_WAREHOUSE01', 'Peasy WH', 'Dummy Own Place', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('DUMMY_SUPPLIER', 'Dummy Supplier PLC', 'Dummy Supplier', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('DUMMY_CUSTOMER', 'Dummy Customer LTD', 'Dummy Customer', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('DUMMY_HAULIER', 'Dummy Haulage CORP', 'Dummy Haulier', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
-
-    DECLARE @Own INT = (SELECT party_id FROM core.parties WHERE display_name = 'Dummy Own Place');
-	DECLARE @SupplierId INT = (SELECT party_id FROM core.parties WHERE display_name = 'Dummy Supplier');
-	DECLARE @CustomerId INT = (SELECT party_id FROM core.parties WHERE display_name = 'Dummy Customer');
-	DECLARE @HaulierId INT = (SELECT party_id FROM core.parties WHERE display_name = 'Dummy Haulier');
-
-INSERT INTO core.party_roles (party_id, role_code, assigned_at, assigned_by) VALUES
-    (@Own, 'WAREHOUSE', SYSUTCDATETIME(), @SystemUserId),
-	(@SupplierId, 'SUPPLIER', SYSUTCDATETIME(), @SystemUserId),
-	(@CustomerId, 'CUSTOMER', SYSUTCDATETIME(), @SystemUserId),
-	(@HaulierId, 'HAULIER', SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO core.party_addresses (party_id, address_type, line_1, line_2, city, region, postal_code, country_code, dock_info, instructions, is_primary, is_active, created_at, created_by) VALUES
-    (@Own, 'WAREHOUSE', '1 Peasy Ware Ind Est', NULL, 'Peasy', NULL, 'PW5 5PW', 'GB', NULL, 'Warehouse', 1, 1, SYSUTCDATETIME(), @SystemUserId),
-	(@SupplierId, 'YARD', '1 Dummy Logistics Park', NULL, 'Testville', NULL, 'TE5 7ST', 'GB', NULL, 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId),
-	(@CustomerId, 'YARD', '19 Dummy Logistics Park', NULL, 'Testvillage', NULL, 'TE6 7ST', 'GB', NULL, 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId),
-	(@HaulierId, 'YARD', '1 Dummy Logistics Park', NULL, 'Testing', NULL, 'TE7 7ST', 'GB', NULL, 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO core.party_contacts (party_id, contact_role, contact_name, email, phone, is_primary, is_active, created_at, created_by) VALUES
-	(@SupplierId, 'SUPPLIER', 'Dummy SUpplier Desk', 'transport@dummysupplier.local', '+44 0000 0001', 1, 1, SYSUTCDATETIME(), @SystemUserId),
-	(@CustomerId, 'Customer', 'Dummy Customer Desk', 'contact@dummycustomer.local', '+44 0000 0002', 1, 1, SYSUTCDATETIME(), @SystemUserId),
-	(@HaulierId, 'TRANSPORT', 'Dummy Transport Desk', 'admin@dummyhaulage.local', '+44 0000 0003', 1, 1, SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO customers.customers (party_id, customer_type, default_delivery_days, preferred_haulier_id, allow_crossdock, created_at, created_by) VALUES
-	(@CustomerId, 'RETAIL', 0, NULL, 0, SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO suppliers.suppliers (party_id, supplier_type, default_lead_days, preferred_haulier_id, created_at, created_by) VALUES 
-	(@SupplierId, 'OWNER', 0, NULL, SYSUTCDATETIME(), @SystemUserId);
-
-/* ============================================================
-   locations.**
-   ============================================================ */
-INSERT INTO locations.storage_types (storage_type_code, storage_type_name, description, is_active, created_at, created_by) VALUES
-	('STAGE', 'Staging area', 'Inbound / outbound staging area', 1, SYSUTCDATETIME(), @SystemUserId),
-	('RACK', 'Pallet racking', 'Standard pallet racking', 1, SYSUTCDATETIME(), @SystemUserId),
-	('BULK', 'Bulk storage', 'Bulk storage on the floor', 1, SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO locations.storage_sections (section_code, section_name, description, is_active, created_at, created_by) VALUES
-	('BULK', 'Bulk', 'Floor level', 1, SYSUTCDATETIME(), @SystemUserId),
-	('FLOOR', 'Floor level', 'Racking floor level', 1, SYSUTCDATETIME(), @SystemUserId),
-	('MID', 'Middle level(s)', 'Middle level', 1, SYSUTCDATETIME(), @SystemUserId),
-	('TOP', 'Top level', 'Top level', 1, SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by) VALUES
-	('1', 'Aisle 1', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('2', 'Aisle 2', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('3', 'Aisle 3', NULL, 1, SYSUTCDATETIME(), @SystemUserId),
-	('4', 'Aisle 4', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
-
-DECLARE @StageId INT = (SELECT storage_type_id from locations.storage_types WHERE storage_type_code = 'STAGE');
-DECLARE @RackId INT = (SELECT storage_type_id from locations.storage_types WHERE storage_type_code = 'RACK');
-DECLARE @BulkId INT = (SELECT storage_type_id from locations.storage_types WHERE storage_type_code = 'BULK');
-
-DECLARE @BulkSection INT = (SELECT storage_section_id from locations.storage_sections WHERE section_code = 'BULK');
-DECLARE @FloorId INT = (SELECT storage_section_id from locations.storage_sections WHERE section_code = 'FLOOR');
-DECLARE @MidId INT = (SELECT storage_section_id from locations.storage_sections WHERE section_code = 'MID');
-DECLARE @TopId INT = (SELECT storage_section_id from locations.storage_sections WHERE section_code = 'TOP');
-
-INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, notes, created_at, created_by) VALUES
-	('BAY01', @StageId, @FloorId, NULL, 999, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('BAY02', @StageId, @FloorId, NULL, 999, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('BULK01', @BulkId, @BulkSection, NULL, 999, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('BULK02', @BulkId, @BulkSection, NULL, 999, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0101A', @RackId, @FloorId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0101B', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0101C', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0101D', @RackId, @TopId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0201A', @RackId, @FloorId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0201B', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0201C', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0201D', @RackId, @TopId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0301A', @RackId, @FloorId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0301B', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0301C', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0301D', @RackId, @TopId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0401A', @RackId, @FloorId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0401B', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0401C', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0401D', @RackId, @TopId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-    ('R0501A', @RackId, @FloorId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0501B', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0501C', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0501D', @RackId, @TopId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0601A', @RackId, @FloorId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0601B', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0601C', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0601D', @RackId, @TopId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0701A', @RackId, @FloorId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0701B', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0701C', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0701D', @RackId, @TopId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0801A', @RackId, @FloorId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0801B', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0801C', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0801D', @RackId, @TopId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId);
-
-/* ============================================================
-   inventory.skus
-   ============================================================ */
-INSERT INTO inventory.skus (sku_code, sku_description, ean, uom_code, weight_per_unit, standard_hu_quantity, is_full_hu_required, preferred_storage_type_id, preferred_storage_section_id, is_hazardous,is_active, created_at, created_by)
-	VALUES
-	('SKU001', 'First test SKU', '01234567899', 'UNIT', 600, 1, 0, @RackId, @FloorId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('251130', '7UP ZERO 330ML CAN MP18X1', '05010102322523',  'Each', 800, 120, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('290812', 'PEPSI MAX 2L PET X6 P2.19', '04062139024766', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
-
-
-/* ============================================================
-   Seed inbound header #1 (SSCC-based)
-   ============================================================ */
-DECLARE @Shipto INT = (SELECT address_id FROM core.party_addresses WHERE party_id = @Own);
-
-INSERT INTO deliveries.inbound_deliveries (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id, ship_to_address_id, expected_arrival_at, created_at, created_by) VALUES
-	('TESTINB001', @SupplierId, @SupplierId, @HaulierId, @Shipto, (SELECT DATEADD(day, 1, SYSUTCDATETIME())), SYSUTCDATETIME(), @SystemUserId),
-	('TESTINB002', @SupplierId, @SupplierId, @HaulierId, @Shipto, (SELECT DATEADD(day, 1, SYSUTCDATETIME())), SYSUTCDATETIME(), @SystemUserId),
-	('TESTINB003', @SupplierId, @SupplierId, @HaulierId, @Shipto, (SELECT DATEADD(day, 1, SYSUTCDATETIME())), SYSUTCDATETIME(), @SystemUserId);
-
-INSERT INTO deliveries.inbound_lines (inbound_id, line_no, sku_id, expected_qty, received_qty, batch_number, best_before_date, created_at, created_by) VALUES
-	((SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB001'), 10, (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU001'), 2, 0, 'SKU001BATCH', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-	((SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB002'), 10, (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU002'), 240, 0, 'SKU002BATCH', '2027-01-31', SYSUTCDATETIME(), @SystemUserId),
-	((SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB002'), 20, (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU003'), 800, 0, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	((SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB003'), 10, (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU003'), 880, 0, 'SKU001BATCH', '2027-03-08', SYSUTCDATETIME(), @SystemUserId);
-
-DECLARE @Line11 INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = (SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB001') AND sku_id = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU001'));
-DECLARE @Line21 INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = (SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB002') AND sku_id = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU002'));
-DECLARE @Line22 INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = (SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB002') AND sku_id = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU003'));
-
-INSERT INTO deliveries.inbound_expected_units (inbound_line_id, expected_external_ref, expected_quantity,batch_number, best_before_date, created_at, created_by) VALUES
-	(@Line11, 'SSCC0000000000000001', 1, 'SKU001BATCH', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-	(@Line11, 'SSCC0000000000000003', 1, 'SKU001BATCH', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-	(@Line21, 'SKU00200000000000001', 120, 'SKU002BATCH', '2027-01-31', SYSUTCDATETIME(), @SystemUserId),
-	(@Line21, 'SKU00200000000000003', 120, 'SKU002BATCH', '2027-01-31', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000001', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000002', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000003', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000004', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000005', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000006', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000007', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000008', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000009', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId),
-	(@Line22, 'SKU00300000000000010', 80, 'SKU003BATCH', '2027-02-28', SYSUTCDATETIME(), @SystemUserId);
-
-
-/* ============================================================
-   TESTINB004 — arrival status test
-   Two lines, same SKU, different arrival_stock_status_code
-   Line 10: 5 units AV  (normal stock)
-   Line 20: 5 units BL  (blocked — e.g. supplier quality hold)
-   Both SSCC mode with pre-advised units
-   ============================================================ */
-
-DECLARE @Sku001       INT = (SELECT sku_id FROM inventory.skus WHERE sku_code = 'SKU001');
-
-
-INSERT INTO deliveries.inbound_deliveries
-    (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id,
-     ship_to_address_id, expected_arrival_at, created_at, created_by)
-VALUES
-    ('TESTINB004', @SupplierId, @SupplierId, @HaulierId,
-     @Shipto, DATEADD(DAY, 1, SYSUTCDATETIME()), SYSUTCDATETIME(), @SystemUserId);
-
-DECLARE @Inb4 INT = (SELECT inbound_id FROM deliveries.inbound_deliveries WHERE inbound_ref = 'TESTINB004');
-
-INSERT INTO deliveries.inbound_lines
-    (inbound_id, line_no, sku_id, expected_qty, received_qty,
-     batch_number, best_before_date, arrival_stock_status_code, created_at, created_by)
-VALUES
-    (@Inb4, 10, @Sku001, 5, 0, 'SKU001BATCH_AV', '2027-03-31', 'AV', SYSUTCDATETIME(), @SystemUserId),
-    (@Inb4, 20, @Sku001, 5, 0, 'SKU001BATCH_BL', '2027-03-31', 'BL', SYSUTCDATETIME(), @SystemUserId);
-
-DECLARE @Line4AV INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = @Inb4 AND line_no = 10);
-DECLARE @Line4BL INT = (SELECT inbound_line_id FROM deliveries.inbound_lines WHERE inbound_id = @Inb4 AND line_no = 20);
-
-INSERT INTO deliveries.inbound_expected_units
-    (inbound_line_id, expected_external_ref, expected_quantity,
-     batch_number, best_before_date, created_at, created_by)
-VALUES
-    (@Line4AV, 'SSCC0000000000000010', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4AV, 'SSCC0000000000000011', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4AV, 'SSCC0000000000000012', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4AV, 'SSCC0000000000000013', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4AV, 'SSCC0000000000000014', 1, 'SKU001BATCH_AV', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4BL, 'SSCC0000000000000015', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4BL, 'SSCC0000000000000016', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4BL, 'SSCC0000000000000017', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4BL, 'SSCC0000000000000018', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId),
-    (@Line4BL, 'SSCC0000000000000019', 1, 'SKU001BATCH_BL', '2027-03-31', SYSUTCDATETIME(), @SystemUserId);
-
-
-/********************************************************************************************
-    OUTBOUND TEST DATA
-    Two test orders + one shipment covering:
-      - Single-line order (SKU001, 2 units, any batch)
-      - Multi-line order (SKU001 + SKU001 blocked, specific batches)
-      - Shipment with both orders linked
-    Orders are created in NEW status — run usp_allocate_order after
-    stock has been received and put away to allocate them.
-*********************************************************************************************/
-
-PRINT '------------------------------------------------------------';
-PRINT 'Outbound test data';
-PRINT '------------------------------------------------------------';
-
-DECLARE @OutboundSystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @OutboundCustomerId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
-DECLARE @OutboundHaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @OutboundAddrId       INT = (SELECT TOP 1 address_id FROM core.party_addresses
-                                     WHERE party_id = (SELECT party_id FROM core.parties
-                                                       WHERE party_code = 'PW_WAREHOUSE01'));
-
--- ── Test order 1: single line, any batch ──────────────────────────────────────
-DECLARE @TestOrd1Ref NVARCHAR(50) = 'TESTORD001';
-
-IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = @TestOrd1Ref)
+IF NOT EXISTS (SELECT 1 FROM auth.roles WHERE role_name = 'admin')
 BEGIN
-    DECLARE @TestOrd1Lines NVARCHAR(MAX) = N'[
-        {"line_no":1,"sku_code":"SKU001","ordered_qty":2,
-         "requested_batch":null,"requested_bbe":null,"notes":"Test order line 1"}
-    ]';
-
-    EXEC outbound.usp_create_order
-        @order_ref         = @TestOrd1Ref,
-        @customer_party_id = @OutboundCustomerId,
-        @haulier_party_id  = @OutboundHaulierId,
-        @required_date     = '2027-06-30',
-        @order_source      = 'MANUAL',
-        @notes             = 'Test order — single line, any batch',
-        @lines_json        = @TestOrd1Lines,
-        @user_id           = @OutboundSystemUserId;
-
-    PRINT 'TESTORD001 created.';
+    DECLARE @AdminRoleId INT;
+    EXEC auth.usp_add_role
+        @RoleName    = 'admin',
+        @Description = 'System administrator',
+        @CreatedBy   = @SystemUserId,
+        @NewRoleId   = @AdminRoleId OUTPUT;
+    PRINT 'Role admin created.';
 END
-ELSE
-    PRINT 'TESTORD001 already exists — skipped.';
+ELSE PRINT 'Role admin already exists — skipped.';
+
+IF NOT EXISTS (SELECT 1 FROM auth.roles WHERE role_name = 'manager')
+BEGIN
+    DECLARE @ManagerRoleId INT;
+    EXEC auth.usp_add_role
+        @RoleName    = 'manager',
+        @Description = 'Manager with elevated access',
+        @CreatedBy   = @SystemUserId,
+        @NewRoleId   = @ManagerRoleId OUTPUT;
+    PRINT 'Role manager created.';
+END
+ELSE PRINT 'Role manager already exists — skipped.';
+
+IF NOT EXISTS (SELECT 1 FROM auth.roles WHERE role_name = 'operator')
+BEGIN
+    DECLARE @OperatorRoleId INT;
+    EXEC auth.usp_add_role
+        @RoleName    = 'operator',
+        @Description = 'Operator with basic access',
+        @CreatedBy   = @SystemUserId,
+        @NewRoleId   = @OperatorRoleId OUTPUT;
+    PRINT 'Role operator created.';
+END
+ELSE PRINT 'Role operator already exists — skipped.';
+
+IF NOT EXISTS (SELECT 1 FROM auth.users WHERE username = 'admin')
+BEGIN
+    EXEC auth.usp_create_user
+        @username     = 'admin',
+        @display_name = 'Wannabee WMS Engineer',
+        @role_name    = 'admin',
+        @email        = 'tamas.demjen@pw.local',
+        @password     = 'admin0',
+        @result_code  = NULL,
+        @friendly_msg = NULL;
+    PRINT 'User admin created.';
+END
+ELSE PRINT 'User admin already exists — skipped.';
 GO
 
--- ── Test order 2: two lines, specific batches ─────────────────────────────────
-DECLARE @OutboundSystemUserId2 INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @OutboundCustomerId2   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
-DECLARE @OutboundHaulierId2    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @TestOrd2Ref NVARCHAR(50) = 'TESTORD002';
+-- ============================================================
+-- Parties
+-- ============================================================
 
-IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = @TestOrd2Ref)
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+
+IF NOT EXISTS (SELECT 1 FROM core.parties WHERE party_code = 'PW_WAREHOUSE01')
 BEGIN
-    DECLARE @TestOrd2Lines NVARCHAR(MAX) = N'[
-        {"line_no":1,"sku_code":"SKU001","ordered_qty":2,
-         "requested_batch":"SKU001BATCH_AV","requested_bbe":null,"notes":"Available stock line"},
-        {"line_no":2,"sku_code":"SKU001","ordered_qty":2,
-         "requested_batch":"SKU001BATCH_BL","requested_bbe":null,"notes":"Blocked stock line"}
-    ]';
-
-    EXEC outbound.usp_create_order
-        @order_ref         = @TestOrd2Ref,
-        @customer_party_id = @OutboundCustomerId2,
-        @haulier_party_id  = @OutboundHaulierId2,
-        @required_date     = '2027-06-30',
-        @order_source      = 'MANUAL',
-        @notes             = 'Test order — two lines with specific batch requests',
-        @lines_json        = @TestOrd2Lines,
-        @user_id           = @OutboundSystemUserId2;
-
-    PRINT 'TESTORD002 created.';
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, tax_id, is_active, created_at, created_by)
+    VALUES ('PW_WAREHOUSE01', 'Peasy WH', 'Dummy Own Place', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
 END
-ELSE
-    PRINT 'TESTORD002 already exists — skipped.';
+
+IF NOT EXISTS (SELECT 1 FROM core.parties WHERE party_code = 'DUMMY_SUPPLIER')
+BEGIN
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, tax_id, is_active, created_at, created_by)
+    VALUES ('DUMMY_SUPPLIER', 'Dummy Supplier PLC', 'Dummy Supplier', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+END
+
+IF NOT EXISTS (SELECT 1 FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER')
+BEGIN
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, tax_id, is_active, created_at, created_by)
+    VALUES ('DUMMY_CUSTOMER', 'Dummy Customer LTD', 'Dummy Customer', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+END
+
+IF NOT EXISTS (SELECT 1 FROM core.parties WHERE party_code = 'DUMMY_HAULIER')
+BEGIN
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, tax_id, is_active, created_at, created_by)
+    VALUES ('DUMMY_HAULIER', 'Dummy Haulage CORP', 'Dummy Haulier', 'GB', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+END
+
+DECLARE @Own        INT = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01');
+DECLARE @SupplierId INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_SUPPLIER');
+DECLARE @CustomerId INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
+DECLARE @HaulierId  INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+
+IF NOT EXISTS (SELECT 1 FROM core.party_roles WHERE party_id = @Own AND role_code = 'WAREHOUSE')
+    INSERT INTO core.party_roles (party_id, role_code, assigned_at, assigned_by)
+    VALUES (@Own, 'WAREHOUSE', SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_roles WHERE party_id = @SupplierId AND role_code = 'SUPPLIER')
+    INSERT INTO core.party_roles (party_id, role_code, assigned_at, assigned_by)
+    VALUES (@SupplierId, 'SUPPLIER', SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_roles WHERE party_id = @CustomerId AND role_code = 'CUSTOMER')
+    INSERT INTO core.party_roles (party_id, role_code, assigned_at, assigned_by)
+    VALUES (@CustomerId, 'CUSTOMER', SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_roles WHERE party_id = @HaulierId AND role_code = 'HAULIER')
+    INSERT INTO core.party_roles (party_id, role_code, assigned_at, assigned_by)
+    VALUES (@HaulierId, 'HAULIER', SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_addresses WHERE party_id = @Own)
+    INSERT INTO core.party_addresses (party_id, address_type, line_1, city, postal_code, country_code, dock_info, instructions, is_primary, is_active, created_at, created_by)
+    VALUES (@Own, 'WAREHOUSE', '1 Peasy Ware Ind Est', 'Peasy', 'PW5 5PW', 'GB', NULL, 'Warehouse', 1, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_addresses WHERE party_id = @SupplierId)
+    INSERT INTO core.party_addresses (party_id, address_type, line_1, city, postal_code, country_code, instructions, is_primary, is_active, created_at, created_by)
+    VALUES (@SupplierId, 'YARD', '1 Dummy Logistics Park', 'Testville', 'TE5 7ST', 'GB', 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_addresses WHERE party_id = @CustomerId)
+    INSERT INTO core.party_addresses (party_id, address_type, line_1, city, postal_code, country_code, instructions, is_primary, is_active, created_at, created_by)
+    VALUES (@CustomerId, 'YARD', '19 Dummy Logistics Park', 'Testvillage', 'TE6 7ST', 'GB', 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM core.party_addresses WHERE party_id = @HaulierId)
+    INSERT INTO core.party_addresses (party_id, address_type, line_1, city, postal_code, country_code, instructions, is_primary, is_active, created_at, created_by)
+    VALUES (@HaulierId, 'YARD', '1 Dummy Logistics Park', 'Testing', 'TE7 7ST', 'GB', 'Report to gatehouse on arrival', 1, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM customers.customers WHERE party_id = @CustomerId)
+    INSERT INTO customers.customers (party_id, customer_type, default_delivery_days, preferred_haulier_id, allow_crossdock, created_at, created_by)
+    VALUES (@CustomerId, 'RETAIL', 0, NULL, 0, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM suppliers.suppliers WHERE party_id = @SupplierId)
+    INSERT INTO suppliers.suppliers (party_id, supplier_type, default_lead_days, preferred_haulier_id, created_at, created_by)
+    VALUES (@SupplierId, 'OWNER', 0, NULL, SYSUTCDATETIME(), @SystemUserId);
+
+PRINT 'Parties done.';
 GO
 
--- ── Test shipment ─────────────────────────────────────────────────────────────
-DECLARE @OutboundAddrId2 INT = (SELECT TOP 1 address_id FROM core.party_addresses
-                                WHERE party_id = (SELECT party_id FROM core.parties
-                                                  WHERE party_code = 'PW_WAREHOUSE01'));
-DECLARE @OutboundHaulierId3 INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @TestShipRef NVARCHAR(50) = 'TESTSHIP001';
+-- ============================================================
+-- Locations
+-- ============================================================
 
-IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = @TestShipRef)
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = 'STAGE')
+    INSERT INTO locations.storage_types (storage_type_code, storage_type_name, description, is_active, created_at, created_by)
+    VALUES ('STAGE', 'Staging area', 'Inbound / outbound staging area', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = 'RACK')
+    INSERT INTO locations.storage_types (storage_type_code, storage_type_name, description, is_active, created_at, created_by)
+    VALUES ('RACK', 'Pallet racking', 'Standard pallet racking', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = 'BULK')
+    INSERT INTO locations.storage_types (storage_type_code, storage_type_name, description, is_active, created_at, created_by)
+    VALUES ('BULK', 'Bulk storage', 'Bulk storage on the floor', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = 'BULK')
+    INSERT INTO locations.storage_sections (section_code, section_name, description, is_active, created_at, created_by)
+    VALUES ('BULK', 'Bulk', 'Floor level', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = 'FLOOR')
+    INSERT INTO locations.storage_sections (section_code, section_name, description, is_active, created_at, created_by)
+    VALUES ('FLOOR', 'Floor level', 'Racking floor level', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = 'MID')
+    INSERT INTO locations.storage_sections (section_code, section_name, description, is_active, created_at, created_by)
+    VALUES ('MID', 'Middle level(s)', 'Middle level', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = 'TOP')
+    INSERT INTO locations.storage_sections (section_code, section_name, description, is_active, created_at, created_by)
+    VALUES ('TOP', 'Top level', 'Top level', 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '1')
+    INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
+    VALUES ('1', 'Aisle 1', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '2')
+    INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
+    VALUES ('2', 'Aisle 2', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '3')
+    INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
+    VALUES ('3', 'Aisle 3', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '4')
+    INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
+    VALUES ('4', 'Aisle 4', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+
+DECLARE @StageId    INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'STAGE');
+DECLARE @RackId     INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'RACK');
+DECLARE @BulkTypeId INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'BULK');
+DECLARE @BulkSecId  INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'BULK');
+DECLARE @FloorId    INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'FLOOR');
+DECLARE @MidId      INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'MID');
+DECLARE @TopId      INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'TOP');
+DECLARE @Z1 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '1');
+DECLARE @Z2 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '2');
+DECLARE @Z3 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '3');
+DECLARE @Z4 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '4');
+
+-- Staging bays
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY01')
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BAY01', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY02')
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BAY02', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+-- Bulk bins
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BULK01')
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BULK01', @BulkTypeId, @BulkSecId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BULK02')
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BULK02', @BulkTypeId, @BulkSecId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+-- Rack bins — 8 bays x 4 levels (A=floor, B=mid, C=mid, D=top)
+DECLARE @Bins TABLE (bin_code NVARCHAR(10), sec_id INT, zone_id INT);
+INSERT INTO @Bins VALUES
+    ('R0101A',@FloorId,@Z1),('R0101B',@MidId,@Z1),('R0101C',@MidId,@Z1),('R0101D',@TopId,@Z1),
+    ('R0201A',@FloorId,@Z2),('R0201B',@MidId,@Z2),('R0201C',@MidId,@Z2),('R0201D',@TopId,@Z2),
+    ('R0301A',@FloorId,@Z3),('R0301B',@MidId,@Z3),('R0301C',@MidId,@Z3),('R0301D',@TopId,@Z3),
+    ('R0401A',@FloorId,@Z4),('R0401B',@MidId,@Z4),('R0401C',@MidId,@Z4),('R0401D',@TopId,@Z4),
+    ('R0501A',@FloorId,@Z1),('R0501B',@MidId,@Z1),('R0501C',@MidId,@Z1),('R0501D',@TopId,@Z1),
+    ('R0601A',@FloorId,@Z2),('R0601B',@MidId,@Z2),('R0601C',@MidId,@Z2),('R0601D',@TopId,@Z2),
+    ('R0701A',@FloorId,@Z3),('R0701B',@MidId,@Z3),('R0701C',@MidId,@Z3),('R0701D',@TopId,@Z3),
+    ('R0801A',@FloorId,@Z4),('R0801B',@MidId,@Z4),('R0801C',@MidId,@Z4),('R0801D',@TopId,@Z4);
+
+INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+SELECT b.bin_code, @RackId, b.sec_id, b.zone_id, 1, 1, SYSUTCDATETIME(), @SystemUserId
+FROM @Bins b
+WHERE NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = b.bin_code);
+
+PRINT 'Locations done.';
+GO
+
+-- ============================================================
+-- SKUs
+-- Seeding only the real Britvic SKU used in label testing.
+-- Additional SKUs will be inserted via API.
+-- ============================================================
+
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @RackId  INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'RACK');
+DECLARE @MidId   INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'MID');
+DECLARE @TopId   INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'TOP');
+
+IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = '290812')
+BEGIN
+    INSERT INTO inventory.skus
+        (sku_code, sku_description, ean, uom_code, weight_per_unit,
+         standard_hu_quantity, is_full_hu_required,
+         preferred_storage_type_id, preferred_storage_section_id,
+         is_hazardous, is_active, created_at, created_by)
+    VALUES
+        ('290812', 'PEPSI MAX 2L PET X6 P2.19', '04062139024766',
+         'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
+    PRINT 'SKU 290812 created.';
+END
+ELSE PRINT 'SKU 290812 already exists — skipped.';
+
+IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = '251130')
+BEGIN
+    INSERT INTO inventory.skus
+        (sku_code, sku_description, ean, uom_code, weight_per_unit,
+         standard_hu_quantity, is_full_hu_required,
+         preferred_storage_type_id, preferred_storage_section_id,
+         is_hazardous, is_active, created_at, created_by)
+    VALUES
+        ('251130', '7UP ZERO 330ML CAN MP18X1', '05010102322523',
+         'Each', 800, 180, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
+    PRINT 'SKU 251130 created.';
+END
+ELSE PRINT 'SKU 251130 already exists — skipped.';
+GO
+
+-- ============================================================
+-- Inbound 1 — SSCC pre-advised
+-- 13 pallets of 290812, matching real Britvic label format
+-- BBE: 31-01-2027, Batch: 001442331A
+-- ============================================================
+
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @SupplierId   INT = (SELECT party_id  FROM core.parties        WHERE party_code  = 'DUMMY_SUPPLIER');
+DECLARE @HaulierId    INT = (SELECT party_id  FROM core.parties        WHERE party_code  = 'DUMMY_HAULIER');
+DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id  = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
+DECLARE @Sku290812    INT = (SELECT sku_id    FROM inventory.skus       WHERE sku_code   = '290812');
+
+IF NOT EXISTS (SELECT 1 FROM inbound.inbound_deliveries WHERE inbound_ref = 'TESTINB01')
+BEGIN
+    INSERT INTO inbound.inbound_deliveries
+        (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id,
+         ship_to_address_id, expected_arrival_at, created_at, created_by)
+    VALUES
+        ('TESTINB01', @SupplierId, @SupplierId, @HaulierId,
+         @OwnAddrId, DATEADD(DAY, 1, SYSUTCDATETIME()), SYSUTCDATETIME(), @SystemUserId);
+
+    DECLARE @Inb1Id INT = SCOPE_IDENTITY();
+
+    INSERT INTO inbound.inbound_lines
+        (inbound_id, line_no, sku_id, expected_qty, received_qty,
+         batch_number, best_before_date, created_at, created_by)
+    VALUES
+        (@Inb1Id, 10, @Sku290812, 1040, 0, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId);
+
+    DECLARE @Inb1LineId INT = SCOPE_IDENTITY();
+
+    -- 13 SSCCs matching real Britvic pallet label sequence
+    INSERT INTO inbound.inbound_expected_units
+        (inbound_line_id, expected_external_ref, expected_quantity,
+         batch_number, best_before_date, created_at, created_by)
+    VALUES
+        (@Inb1LineId, '250101027140166844', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166851', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166868', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166875', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166882', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166899', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166905', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166912', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166929', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166936', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166943', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166950', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId),
+        (@Inb1LineId, '250101027140166967', 80, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId);
+
+    PRINT 'TESTINB01 created (SSCC pre-advised, 13 units).';
+END
+ELSE PRINT 'TESTINB01 already exists — skipped.';
+GO
+
+-- ============================================================
+-- Inbound 2 — Manual (blind)
+-- 5 pallets of 251130, no pre-advised units
+-- Operator scans product + SSCC labels at receipt
+-- ============================================================
+
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @SupplierId   INT = (SELECT party_id  FROM core.parties         WHERE party_code = 'DUMMY_SUPPLIER');
+DECLARE @HaulierId    INT = (SELECT party_id  FROM core.parties         WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id  = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
+DECLARE @Sku251130    INT = (SELECT sku_id    FROM inventory.skus        WHERE sku_code  = '251130');
+
+IF NOT EXISTS (SELECT 1 FROM inbound.inbound_deliveries WHERE inbound_ref = 'TESTINB02')
+BEGIN
+    INSERT INTO inbound.inbound_deliveries
+        (inbound_ref, supplier_party_id, owner_party_id, haulier_party_id,
+         ship_to_address_id, expected_arrival_at, created_at, created_by)
+    VALUES
+        ('TESTINB02', @SupplierId, @SupplierId, @HaulierId,
+         @OwnAddrId, DATEADD(DAY, 1, SYSUTCDATETIME()), SYSUTCDATETIME(), @SystemUserId);
+
+    DECLARE @Inb2Id INT = SCOPE_IDENTITY();
+
+    INSERT INTO inbound.inbound_lines
+        (inbound_id, line_no, sku_id, expected_qty, received_qty,
+         batch_number, best_before_date, created_at, created_by)
+    VALUES
+        (@Inb2Id, 10, @Sku251130, 1080, 0, NULL, NULL, SYSUTCDATETIME(), @SystemUserId);
+
+    PRINT 'TESTINB02 created (manual/blind, 600 units expected).';
+END
+ELSE PRINT 'TESTINB02 already exists — skipped.';
+GO
+
+-- ============================================================
+-- Outbound orders + shipments
+--
+-- Order 1: 160 units 290812 (2 pallets), any batch
+-- Order 2: 240 units 290812 (3 pallets), any batch
+-- Order 3: 400 units 290812 (5 pallets), any batch
+--
+-- Shipment 1: carries Order 1 only
+-- Shipment 2: carries Order 2 + Order 3
+--
+-- Run usp_allocate_order after stock is received and put away.
+-- ============================================================
+
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @CustomerId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
+DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
+
+-- Order 1
+IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD01')
+BEGIN
+    DECLARE @Ord1Lines NVARCHAR(MAX) = N'[
+        {"line_no":1,"sku_code":"290812","ordered_qty":160,
+         "requested_batch":null,"requested_bbe":null,"notes":"2 pallets"}
+    ]';
+    EXEC outbound.usp_create_order
+        @order_ref         = 'TESTORD01',
+        @customer_party_id = @CustomerId,
+        @haulier_party_id  = @HaulierId,
+        @required_date     = '2027-06-30',
+        @order_source      = 'MANUAL',
+        @notes             = 'Test order 1 — 2 pallets 290812',
+        @lines_json        = @Ord1Lines,
+        @user_id           = @SystemUserId;
+    PRINT 'TESTORD01 created.';
+END
+ELSE PRINT 'TESTORD01 already exists — skipped.';
+
+-- Order 2
+IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD02')
+BEGIN
+    DECLARE @Ord2Lines NVARCHAR(MAX) = N'[
+        {"line_no":1,"sku_code":"290812","ordered_qty":240,
+         "requested_batch":null,"requested_bbe":null,"notes":"3 pallets"}
+    ]';
+    EXEC outbound.usp_create_order
+        @order_ref         = 'TESTORD02',
+        @customer_party_id = @CustomerId,
+        @haulier_party_id  = @HaulierId,
+        @required_date     = '2027-06-30',
+        @order_source      = 'MANUAL',
+        @notes             = 'Test order 2 — 3 pallets 290812',
+        @lines_json        = @Ord2Lines,
+        @user_id           = @SystemUserId;
+    PRINT 'TESTORD02 created.';
+END
+ELSE PRINT 'TESTORD02 already exists — skipped.';
+
+-- Order 3
+IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD03')
+BEGIN
+    DECLARE @Ord3Lines NVARCHAR(MAX) = N'[
+        {"line_no":1,"sku_code":"290812","ordered_qty":400,
+         "requested_batch":null,"requested_bbe":null,"notes":"5 pallets"}
+    ]';
+    EXEC outbound.usp_create_order
+        @order_ref         = 'TESTORD03',
+        @customer_party_id = @CustomerId,
+        @haulier_party_id  = @HaulierId,
+        @required_date     = '2027-06-30',
+        @order_source      = 'MANUAL',
+        @notes             = 'Test order 3 — 5 pallets 290812',
+        @lines_json        = @Ord3Lines,
+        @user_id           = @SystemUserId;
+    PRINT 'TESTORD03 created.';
+END
+ELSE PRINT 'TESTORD03 already exists — skipped.';
+GO
+
+-- Shipments (separate batch — orders must exist first)
+DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
+DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
+DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
+
+-- Shipment 1: Order 1 only
+IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP01')
 BEGIN
     EXEC outbound.usp_create_shipment
-        @shipment_ref         = @TestShipRef,
-        @haulier_party_id     = @OutboundHaulierId3,
-        @vehicle_ref          = 'TEST-VEHICLE-01',
-        @ship_from_address_id = @OutboundAddrId2,
+        @shipment_ref         = 'TESTSHIP01',
+        @haulier_party_id     = @HaulierId,
+        @vehicle_ref          = 'TEST-VEH-01',
+        @ship_from_address_id = @OwnAddrId,
         @planned_departure    = NULL,
-        @notes                = 'Test shipment for TESTORD001 and TESTORD002',
-        @user_id              = (SELECT id FROM auth.users WHERE username = 'system');
+        @notes                = 'Test shipment 1 — single order',
+        @user_id              = @SystemUserId;
 
-    -- Link both orders to the shipment
-    DECLARE @TestShipId  INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = @TestShipRef);
-    DECLARE @TestOrd1Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD001');
-    DECLARE @TestOrd2Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD002');
-    DECLARE @SysUserId   INT = (SELECT id FROM auth.users WHERE username = 'system');
+    DECLARE @Ship1Id INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP01');
+    DECLARE @Ord1Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD01');
 
     EXEC outbound.usp_add_order_to_shipment
-        @outbound_order_id = @TestOrd1Id,
-        @shipment_id       = @TestShipId,
-        @user_id           = @SysUserId;
+        @outbound_order_id = @Ord1Id,
+        @shipment_id       = @Ship1Id,
+        @user_id           = @SystemUserId;
 
-    EXEC outbound.usp_add_order_to_shipment
-        @outbound_order_id = @TestOrd2Id,
-        @shipment_id       = @TestShipId,
-        @user_id           = @SysUserId;
-
-    PRINT 'TESTSHIP001 created and linked to TESTORD001 + TESTORD002.';
+    PRINT 'TESTSHIP01 created — linked to TESTORD01.';
 END
-ELSE
-    PRINT 'TESTSHIP001 already exists — skipped.';
+ELSE PRINT 'TESTSHIP01 already exists — skipped.';
+
+-- Shipment 2: Orders 2 + 3
+IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP02')
+BEGIN
+    EXEC outbound.usp_create_shipment
+        @shipment_ref         = 'TESTSHIP02',
+        @haulier_party_id     = @HaulierId,
+        @vehicle_ref          = 'TEST-VEH-02',
+        @ship_from_address_id = @OwnAddrId,
+        @planned_departure    = NULL,
+        @notes                = 'Test shipment 2 — two orders',
+        @user_id              = @SystemUserId;
+
+    DECLARE @Ship2Id INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP02');
+    DECLARE @Ord2Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD02');
+    DECLARE @Ord3Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD03');
+
+    EXEC outbound.usp_add_order_to_shipment
+        @outbound_order_id = @Ord2Id,
+        @shipment_id       = @Ship2Id,
+        @user_id           = @SystemUserId;
+
+    EXEC outbound.usp_add_order_to_shipment
+        @outbound_order_id = @Ord3Id,
+        @shipment_id       = @Ship2Id,
+        @user_id           = @SystemUserId;
+
+    PRINT 'TESTSHIP02 created — linked to TESTORD02 + TESTORD03.';
+END
+ELSE PRINT 'TESTSHIP02 already exists — skipped.';
 GO
 
 PRINT '------------------------------------------------------------';
-PRINT 'Outbound test data complete.';
+PRINT 'Test data load complete.';
 PRINT '------------------------------------------------------------';
 GO

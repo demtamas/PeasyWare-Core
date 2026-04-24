@@ -51,7 +51,7 @@ public sealed class SqlInboundCommandRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
 
-        command.CommandText = "deliveries.usp_activate_inbound";
+        command.CommandText = "inbound.usp_activate_inbound";
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@inbound_id", inboundId);
         command.Parameters.AddWithValue("@user_id", _session.UserId);
@@ -121,7 +121,7 @@ public sealed class SqlInboundCommandRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
 
-        command.CommandText = "deliveries.usp_receive_inbound_line";
+        command.CommandText = "inbound.usp_receive_inbound_line";
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.AddWithValue("@inbound_line_id", inboundLineId);
@@ -206,7 +206,7 @@ public sealed class SqlInboundCommandRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command = connection.CreateCommand();
 
-        command.CommandText = "deliveries.usp_reverse_inbound_receipt";
+        command.CommandText = "inbound.usp_reverse_inbound_receipt";
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.AddWithValue("@receipt_id",   receiptId);
@@ -286,7 +286,7 @@ public sealed class SqlInboundCommandRepository
 
         command.CommandText = """
             SELECT inbound_id
-            FROM deliveries.inbound_deliveries
+            FROM inbound.inbound_deliveries
             WHERE inbound_ref = @ref
         """;
 

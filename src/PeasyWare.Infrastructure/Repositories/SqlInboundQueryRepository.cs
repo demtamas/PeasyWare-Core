@@ -36,7 +36,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         command.CommandText = """
             SELECT inbound_id, inbound_ref, expected_arrival_at, line_count
-            FROM deliveries.vw_inbounds_activatable
+            FROM inbound.vw_inbounds_activatable
             ORDER BY expected_arrival_at, inbound_ref
         """;
 
@@ -71,7 +71,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
         command.CommandText = """
             SELECT inbound_line_id, line_no, sku_code, sku_description,
                    expected_qty, received_qty, outstanding_qty
-            FROM deliveries.vw_inbound_lines_receivable
+            FROM inbound.vw_inbound_lines_receivable
             WHERE inbound_ref = @ref
             ORDER BY line_no
         """;
@@ -112,7 +112,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
 
-        command.CommandText = "deliveries.usp_get_inbound_summary";
+        command.CommandText = "inbound.usp_get_inbound_summary";
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.Add(new SqlParameter("@inbound_ref", SqlDbType.NVarChar, 50) { Value = inboundRef });
@@ -147,9 +147,9 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         command.CommandText = """
             SELECT COUNT(1)
-            FROM deliveries.inbound_expected_units eu
-            JOIN deliveries.inbound_lines l  ON eu.inbound_line_id = l.inbound_line_id
-            JOIN deliveries.inbound_deliveries d ON l.inbound_id = d.inbound_id
+            FROM inbound.inbound_expected_units eu
+            JOIN inbound.inbound_lines l  ON eu.inbound_line_id = l.inbound_line_id
+            JOIN inbound.inbound_deliveries d ON l.inbound_id = d.inbound_id
             WHERE d.inbound_ref = @ref
               AND eu.received_inventory_unit_id IS NULL
         """;
@@ -176,10 +176,10 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
                    iu.external_ref, iu.stock_state_code,
                    b.bin_code AS current_bin_code,
                    d.inbound_ref, l.line_state_code
-            FROM deliveries.inbound_receipts r
+            FROM inbound.inbound_receipts r
             JOIN inventory.inventory_units iu   ON iu.inventory_unit_id = r.inventory_unit_id
-            JOIN deliveries.inbound_lines l      ON l.inbound_line_id = r.inbound_line_id
-            JOIN deliveries.inbound_deliveries d ON d.inbound_id = l.inbound_id
+            JOIN inbound.inbound_lines l      ON l.inbound_line_id = r.inbound_line_id
+            JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
             LEFT JOIN inventory.inventory_placements p ON p.inventory_unit_id = r.inventory_unit_id
             LEFT JOIN locations.bins b           ON b.bin_id = p.bin_id
             WHERE d.inbound_ref         = @ref
@@ -257,10 +257,10 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
                 s.is_batch_required,
                 s.standard_hu_quantity,
                 CASE WHEN s.ean = @input THEN 'EAN' ELSE 'SKU' END AS matched_by
-            FROM deliveries.inbound_lines l
+            FROM inbound.inbound_lines l
             JOIN inventory.skus s
                 ON s.sku_id = l.sku_id
-            JOIN deliveries.inbound_deliveries d
+            JOIN inbound.inbound_deliveries d
                 ON d.inbound_id = l.inbound_id
             WHERE d.inbound_ref      = @ref
               AND (s.ean = @input OR s.sku_code = @input)
@@ -320,7 +320,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
 
-        command.CommandText = "deliveries.usp_validate_sscc_for_receive";
+        command.CommandText = "inbound.usp_validate_sscc_for_receive";
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.AddWithValue("@user_id",    _session.UserId);

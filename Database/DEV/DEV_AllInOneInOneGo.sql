@@ -85,8 +85,8 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'inventory')
     EXEC('CREATE SCHEMA inventory');
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'deliveries')
-    EXEC('CREATE SCHEMA deliveries');
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'inbound')
+    EXEC('CREATE SCHEMA inbound');
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'locations')
     EXEC('CREATE SCHEMA locations');
@@ -4548,21 +4548,21 @@ BEGIN
 END;
 GO
 
-CREATE TABLE deliveries.inbound_statuses
+CREATE TABLE inbound.inbound_statuses
 (
     status_code VARCHAR(3) PRIMARY KEY,   -- EXP, ACT, RCV, CLS, CNL
     description NVARCHAR(50) NOT NULL,
     is_terminal BIT NOT NULL DEFAULT(0)
 );
 
-INSERT INTO deliveries.inbound_statuses VALUES
+INSERT INTO inbound.inbound_statuses VALUES
 ('EXP', 'Expected', 0),
 ('ACT', 'Activated', 0),
 ('RCV', 'Receiving', 0),
 ('CLS', 'Closed', 1),
 ('CNL', 'Cancelled', 1);
 
-CREATE TABLE deliveries.inbound_status_transitions
+CREATE TABLE inbound.inbound_status_transitions
 (
     from_status_code VARCHAR(3) NOT NULL,
     to_status_code   VARCHAR(3) NOT NULL,
@@ -4573,14 +4573,14 @@ CREATE TABLE deliveries.inbound_status_transitions
 
     CONSTRAINT FK_inbound_transition_from
         FOREIGN KEY (from_status_code)
-        REFERENCES deliveries.inbound_statuses(status_code),
+        REFERENCES inbound.inbound_statuses(status_code),
 
     CONSTRAINT FK_inbound_transition_to
         FOREIGN KEY (to_status_code)
-        REFERENCES deliveries.inbound_statuses(status_code)
+        REFERENCES inbound.inbound_statuses(status_code)
 );
 
-INSERT INTO deliveries.inbound_status_transitions VALUES
+INSERT INTO inbound.inbound_status_transitions VALUES
 ('EXP','ACT',0),
 ('ACT','RCV',0),
 ('RCV','CLS',0),
@@ -4591,7 +4591,7 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
 
 
 /* ============================================================
-   deliveries.inbound_deliveries
+   inbound.inbound_deliveries
    ------------------------------------------------------------
    Canonical inbound advice header table.
 
@@ -4607,7 +4607,7 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
    - Linking parties before warehouse activity begins
    ============================================================ */
    /********************************************************************************************
-    Table: deliveries.inbound_modes
+    Table: inbound.inbound_modes
     Purpose: Reference table defining structural inbound receiving modes
              - SSCC   : Fully pre-advised handling units
              - MANUAL : Loose / quantity-based receiving
@@ -4617,10 +4617,10 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
         FROM sys.tables t
         JOIN sys.schemas s ON s.schema_id = t.schema_id
         WHERE t.name = 'inbound_modes'
-          AND s.name = 'deliveries'
+          AND s.name = 'inbound'
     )
     BEGIN
-        CREATE TABLE deliveries.inbound_modes
+        CREATE TABLE inbound.inbound_modes
         (
             mode_code   VARCHAR(6)  NOT NULL PRIMARY KEY,
             mode_name   NVARCHAR(50) NOT NULL,
@@ -4635,23 +4635,23 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
     -------------------------------------------------------- */
 
     IF NOT EXISTS (
-        SELECT 1 FROM deliveries.inbound_modes WHERE mode_code = 'SSCC'
+        SELECT 1 FROM inbound.inbound_modes WHERE mode_code = 'SSCC'
     )
     BEGIN
-        INSERT INTO deliveries.inbound_modes (mode_code, mode_name, description)
+        INSERT INTO inbound.inbound_modes (mode_code, mode_name, description)
         VALUES ('SSCC', 'SSCC Controlled', 'Fully pre-advised handling units');
     END;
 
     IF NOT EXISTS (
-        SELECT 1 FROM deliveries.inbound_modes WHERE mode_code = 'MANUAL'
+        SELECT 1 FROM inbound.inbound_modes WHERE mode_code = 'MANUAL'
     )
     BEGIN
-        INSERT INTO deliveries.inbound_modes (mode_code, mode_name, description)
+        INSERT INTO inbound.inbound_modes (mode_code, mode_name, description)
         VALUES ('MANUAL', 'Manual Quantity', 'Loose or bulk quantity receiving');
     END;
     GO
 
-    CREATE TABLE deliveries.inbound_deliveries
+    CREATE TABLE inbound.inbound_deliveries
     (
         inbound_id           INT IDENTITY(1,1) PRIMARY KEY,
 
@@ -4678,11 +4678,11 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
 
         CONSTRAINT FK_inbound_status
             FOREIGN KEY (inbound_status_code)
-            REFERENCES deliveries.inbound_statuses(status_code),
+            REFERENCES inbound.inbound_statuses(status_code),
 
         CONSTRAINT FK_inbound_mode
             FOREIGN KEY (inbound_mode_code)
-            REFERENCES deliveries.inbound_modes(mode_code),
+            REFERENCES inbound.inbound_modes(mode_code),
 
         CONSTRAINT fk_inbound_supplier
             FOREIGN KEY (supplier_party_id)
@@ -4703,11 +4703,11 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
     GO
 
     CREATE INDEX IX_inbound_status_mode
-    ON deliveries.inbound_deliveries (inbound_status_code, inbound_mode_code);
+    ON inbound.inbound_deliveries (inbound_status_code, inbound_mode_code);
     GO
 
 /* ============================================================
-   View: deliveries.vw_inbound_overview
+   View: inbound.vw_inbound_overview
    ------------------------------------------------------------
    Operational overview of inbound advice.
 
@@ -4716,7 +4716,7 @@ INSERT INTO deliveries.inbound_status_transitions VALUES
    - Desktop inbound list
    - Reporting / dashboards
    ============================================================ */
-CREATE OR ALTER VIEW deliveries.vw_inbound_overview
+CREATE OR ALTER VIEW inbound.vw_inbound_overview
 AS
 SELECT
     d.inbound_id,
@@ -4732,7 +4732,7 @@ SELECT
     a.postal_code,
     a.country_code
 
-FROM deliveries.inbound_deliveries d
+FROM inbound.inbound_deliveries d
 JOIN core.parties s ON s.party_id = d.supplier_party_id
 JOIN core.parties o ON o.party_id = d.owner_party_id
 LEFT JOIN core.parties h ON h.party_id = d.haulier_party_id
@@ -4740,7 +4740,7 @@ JOIN core.party_addresses a ON a.address_id = d.ship_to_address_id;
 GO
 
 /* ============================================================
-   View: deliveries.vw_inbound_by_supplier
+   View: inbound.vw_inbound_by_supplier
    ------------------------------------------------------------
    Supplier-centric workload view.
 
@@ -4748,13 +4748,13 @@ GO
    - Planning
    - Supplier performance insight
    ============================================================ */
-CREATE OR ALTER VIEW deliveries.vw_inbound_by_supplier
+CREATE OR ALTER VIEW inbound.vw_inbound_by_supplier
 AS
 SELECT
     s.party_code     AS supplier_code,
     s.display_name   AS supplier_name,
     COUNT(*)         AS open_inbounds
-FROM deliveries.inbound_deliveries d
+FROM inbound.inbound_deliveries d
 JOIN core.parties s ON s.party_id = d.supplier_party_id
 WHERE d.inbound_status_code IN ('EXP','ACT','RCV')
 GROUP BY s.party_code, s.display_name;
@@ -4769,7 +4769,7 @@ SELECT
     h.display_name AS haulier_name,
     COUNT(*)       AS scheduled_deliveries,
     MIN(d.expected_arrival_at) AS next_eta
-FROM deliveries.inbound_deliveries d
+FROM inbound.inbound_deliveries d
 JOIN core.parties h ON h.party_id = d.haulier_party_id
 WHERE d.inbound_status_code IN ('EXP','ACT','RCV')
 GROUP BY h.display_name;
@@ -4784,8 +4784,8 @@ GO
    Mirrors audit.party_changes pattern.
    ============================================================ */
 /*
-CREATE OR ALTER TRIGGER deliveries.tr_inbound_deliveries_audit
-ON deliveries.inbound_deliveries
+CREATE OR ALTER TRIGGER inbound.tr_inbound_deliveries_audit
+ON inbound.inbound_deliveries
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -4826,21 +4826,21 @@ BEGIN
 END;
 GO
 */
-CREATE TABLE deliveries.inbound_line_states
+CREATE TABLE inbound.inbound_line_states
 (
     state_code      VARCHAR(3) PRIMARY KEY, -- EXP, PRC, RCV, CNL
     state_desc      NVARCHAR(30) NOT NULL,
     is_terminal     BIT NOT NULL DEFAULT 0
 );
 
-INSERT INTO deliveries.inbound_line_states
+INSERT INTO inbound.inbound_line_states
 VALUES
 ('EXP','EXPECTED',0),
 ('PRC','PARTIALLY_RECEIVED',0),
 ('RCV','RECEIVED',1),
 ('CNL','CANCELLED',1);
 
-CREATE TABLE deliveries.inbound_line_state_transitions
+CREATE TABLE inbound.inbound_line_state_transitions
 (
     from_state_code VARCHAR(3) NOT NULL,
     to_state_code   VARCHAR(3) NOT NULL,
@@ -4851,15 +4851,15 @@ CREATE TABLE deliveries.inbound_line_state_transitions
 
     CONSTRAINT FK_inbound_line_transition_from
         FOREIGN KEY (from_state_code)
-        REFERENCES deliveries.inbound_line_states(state_code),
+        REFERENCES inbound.inbound_line_states(state_code),
 
     CONSTRAINT FK_inbound_line_transition_to
         FOREIGN KEY (to_state_code)
-        REFERENCES deliveries.inbound_line_states(state_code)
+        REFERENCES inbound.inbound_line_states(state_code)
 );
 GO
 
-INSERT INTO deliveries.inbound_line_state_transitions VALUES
+INSERT INTO inbound.inbound_line_state_transitions VALUES
 ('EXP','PRC',0),
 ('PRC','PRC',0),  -- multiple partial receipts
 ('PRC','RCV',0),
@@ -4871,7 +4871,7 @@ INSERT INTO deliveries.inbound_line_state_transitions VALUES
 ('RCV', 'EXP', 1);
 GO
 
-CREATE TABLE deliveries.inbound_lines
+CREATE TABLE inbound.inbound_lines
 (
     inbound_line_id     INT IDENTITY(1,1) PRIMARY KEY,
     inbound_id          INT NOT NULL,
@@ -4894,7 +4894,7 @@ CREATE TABLE deliveries.inbound_lines
 
     CONSTRAINT FK_inbound_lines_header
         FOREIGN KEY (inbound_id)
-        REFERENCES deliveries.inbound_deliveries(inbound_id),
+        REFERENCES inbound.inbound_deliveries(inbound_id),
 
     CONSTRAINT FK_inbound_lines_sku
         FOREIGN KEY (sku_id)
@@ -4902,7 +4902,7 @@ CREATE TABLE deliveries.inbound_lines
 
     CONSTRAINT FK_inbound_line_state
         FOREIGN KEY (line_state_code)
-        REFERENCES deliveries.inbound_line_states(state_code),
+        REFERENCES inbound.inbound_line_states(state_code),
 
     CONSTRAINT UQ_inbound_line
         UNIQUE (inbound_id, line_no),
@@ -4916,30 +4916,30 @@ CREATE TABLE deliveries.inbound_lines
 );
 
 /* ============================================================
-   deliveries.inbound_expected_units
+   inbound.inbound_expected_units
    ------------------------------------------------------------
    Pre-advised handling units (SSCC-level expectations).
    One row = one expected handling unit for an inbound line.
    ============================================================ */
-   CREATE TABLE deliveries.inbound_expected_unit_states
+   CREATE TABLE inbound.inbound_expected_unit_states
     (
         state_code VARCHAR(3) PRIMARY KEY,
         description NVARCHAR(50) NOT NULL
     );
 
-    INSERT INTO deliveries.inbound_expected_unit_states VALUES
+    INSERT INTO inbound.inbound_expected_unit_states VALUES
         ('EXP', 'EXPECTED'),
         ('CLM', 'CLAIMED'),
         ('RCV', 'RECEIVED'),
         ('CNL', 'CANCELLED');
 
 /* =========================================================================================
-   TABLE: deliveries.inbound_expected_unit_state_transitions
+   TABLE: inbound.inbound_expected_unit_state_transitions
    Purpose: Allowed state changes for SSCC expected units (EXP/CLM/RCV/...)
 ========================================================================================= */
-IF OBJECT_ID('deliveries.inbound_expected_unit_state_transitions', 'U') IS NULL
+IF OBJECT_ID('inbound.inbound_expected_unit_state_transitions', 'U') IS NULL
 BEGIN
-    CREATE TABLE deliveries.inbound_expected_unit_state_transitions
+    CREATE TABLE inbound.inbound_expected_unit_state_transitions
     (
         from_state_code     VARCHAR(3) NOT NULL,
         to_state_code       VARCHAR(3) NOT NULL,
@@ -4952,7 +4952,7 @@ END;
 GO
 
 /* Seed transitions (idempotent) */
-MERGE deliveries.inbound_expected_unit_state_transitions AS tgt
+MERGE inbound.inbound_expected_unit_state_transitions AS tgt
 USING (VALUES
     ('EXP','CLM',0),  -- preview claim
     ('CLM','EXP',0),  -- auto-expire / release claim
@@ -4968,13 +4968,13 @@ WHEN NOT MATCHED THEN
 GO
 
 /* ============================================================
-   deliveries.inbound_expected_units (WITH CLAIM FIELDS)
+   inbound.inbound_expected_units (WITH CLAIM FIELDS)
    Includes optional updated_at / updated_by
    ============================================================ */
 
-    IF OBJECT_ID('deliveries.inbound_expected_units', 'U') IS NULL
+    IF OBJECT_ID('inbound.inbound_expected_units', 'U') IS NULL
     BEGIN
-        CREATE TABLE deliveries.inbound_expected_units
+        CREATE TABLE inbound.inbound_expected_units
         (
             inbound_expected_unit_id    INT IDENTITY(1,1) PRIMARY KEY,
 
@@ -5010,7 +5010,7 @@ GO
 
             CONSTRAINT FK_inbexp_line
                 FOREIGN KEY (inbound_line_id)
-                REFERENCES deliveries.inbound_lines(inbound_line_id),
+                REFERENCES inbound.inbound_lines(inbound_line_id),
 
             CONSTRAINT FK_inbexp_inventory_unit
                 FOREIGN KEY (received_inventory_unit_id)
@@ -5018,7 +5018,7 @@ GO
 
             CONSTRAINT FK_inbexp_state
                 FOREIGN KEY (expected_unit_state_code)
-                REFERENCES deliveries.inbound_expected_unit_states(state_code),
+                REFERENCES inbound.inbound_expected_unit_states(state_code),
 
             CONSTRAINT UQ_inbexp_external_ref
                 UNIQUE (expected_external_ref),
@@ -5028,18 +5028,18 @@ GO
         );
 
         CREATE INDEX IX_inbexp_line
-        ON deliveries.inbound_expected_units(inbound_line_id);
+        ON inbound.inbound_expected_units(inbound_line_id);
 
         CREATE INDEX IX_inbexp_claim_session 
-        ON deliveries.inbound_expected_units(claimed_session_id, claim_expires_at);
+        ON inbound.inbound_expected_units(claimed_session_id, claim_expires_at);
 
         CREATE INDEX IX_inbexp_units_claim
-        ON deliveries.inbound_expected_units (expected_external_ref)
+        ON inbound.inbound_expected_units (expected_external_ref)
         INCLUDE (received_inventory_unit_id, claimed_session_id, claim_expires_at);
 
         /* OPTIONAL (recommended): helps clean up / find expiring claims fast */
         CREATE INDEX IX_inbexp_claim_expires
-        ON deliveries.inbound_expected_units (claim_expires_at)
+        ON inbound.inbound_expected_units (claim_expires_at)
         INCLUDE (expected_external_ref, claimed_session_id, received_inventory_unit_id);
 
     END;
@@ -5048,7 +5048,7 @@ GO
 /* ============================================================
    
    ============================================================ */
-    IF OBJECT_ID('deliveries.inbound_expected_units', 'U') IS NOT NULL
+    IF OBJECT_ID('inbound.inbound_expected_units', 'U') IS NOT NULL
     AND NOT EXISTS
     (
         SELECT 1
@@ -5056,11 +5056,11 @@ GO
         JOIN sys.columns c
             ON c.object_id = dc.parent_object_id
            AND c.column_id = dc.parent_column_id
-        WHERE dc.parent_object_id = OBJECT_ID('deliveries.inbound_expected_units')
+        WHERE dc.parent_object_id = OBJECT_ID('inbound.inbound_expected_units')
           AND c.name = 'created_by'
     )
     BEGIN
-        ALTER TABLE deliveries.inbound_expected_units
+        ALTER TABLE inbound.inbound_expected_units
         ADD CONSTRAINT DF_inbexp_created_by
         DEFAULT (CONVERT(int, SESSION_CONTEXT(N'user_id')))
         FOR created_by;
@@ -5068,18 +5068,18 @@ GO
     GO
 
 /* ============================================================
-   deliveries.inbound_receipts
+   inbound.inbound_receipts
    ------------------------------------------------------------
    Physical receipt events against inbound lines.
 
    One row = one receive transaction.
    Immutable business event.
    ============================================================ */
-   IF OBJECT_ID('deliveries.inbound_receipts','U') IS NOT NULL
-    DROP TABLE deliveries.inbound_receipts;
+   IF OBJECT_ID('inbound.inbound_receipts','U') IS NOT NULL
+    DROP TABLE inbound.inbound_receipts;
 GO
 
-CREATE TABLE deliveries.inbound_receipts
+CREATE TABLE inbound.inbound_receipts
 (
     receipt_id              INT IDENTITY(1,1)
                             CONSTRAINT PK_inbound_receipts
@@ -5087,11 +5087,11 @@ CREATE TABLE deliveries.inbound_receipts
 
     inbound_line_id         INT NOT NULL
                             CONSTRAINT FK_inbound_receipts_line
-                            REFERENCES deliveries.inbound_lines(inbound_line_id),
+                            REFERENCES inbound.inbound_lines(inbound_line_id),
 
     inbound_expected_unit_id INT NULL
                             CONSTRAINT FK_inbound_receipts_expected_unit
-                            REFERENCES deliveries.inbound_expected_units(inbound_expected_unit_id),
+                            REFERENCES inbound.inbound_expected_units(inbound_expected_unit_id),
 
     inventory_unit_id       INT NOT NULL
                             CONSTRAINT FK_inbound_receipts_inventory
@@ -5112,12 +5112,12 @@ CREATE TABLE deliveries.inbound_receipts
     is_reversal             BIT NOT NULL DEFAULT(0),
     reversed_receipt_id     INT NULL
                             CONSTRAINT FK_inbound_receipts_reversal
-                            REFERENCES deliveries.inbound_receipts(receipt_id)
+                            REFERENCES inbound.inbound_receipts(receipt_id)
 );
 GO
 
 CREATE NONCLUSTERED INDEX IX_inbound_receipts_line
-ON deliveries.inbound_receipts(inbound_line_id)
+ON inbound.inbound_receipts(inbound_line_id)
 INCLUDE (received_qty, received_at);
 GO
 
@@ -5125,7 +5125,7 @@ USE PW_Core_DEV;
 GO
 
 /* ============================================================
-   View: deliveries.vw_inbounds_activatable
+   View: inbound.vw_inbounds_activatable
    ------------------------------------------------------------
    Returns inbound deliveries eligible for activation.
 
@@ -5141,7 +5141,7 @@ GO
    ordinal read: inbound_id(0), inbound_ref(1),
                  expected_arrival_at(2), line_count(3)
    ============================================================ */
-CREATE OR ALTER VIEW deliveries.vw_inbounds_activatable
+CREATE OR ALTER VIEW inbound.vw_inbounds_activatable
 AS
 SELECT
     d.inbound_id,
@@ -5149,8 +5149,8 @@ SELECT
     d.expected_arrival_at,
     COUNT(l.inbound_line_id)  AS line_count
 
-FROM deliveries.inbound_deliveries d
-JOIN deliveries.inbound_lines l
+FROM inbound.inbound_deliveries d
+JOIN inbound.inbound_lines l
     ON l.inbound_id = d.inbound_id
 
 WHERE d.inbound_status_code = 'EXP'
@@ -5161,7 +5161,7 @@ GROUP BY
     d.expected_arrival_at;
 GO
 
-CREATE OR ALTER VIEW deliveries.vw_inbound_lines_receivable
+CREATE OR ALTER VIEW inbound.vw_inbound_lines_receivable
 AS
 SELECT
     l.inbound_line_id,
@@ -5173,8 +5173,8 @@ SELECT
     l.received_qty,
     (l.expected_qty - l.received_qty) AS outstanding_qty,
     l.line_state_code
-FROM deliveries.inbound_lines l
-JOIN deliveries.inbound_deliveries d
+FROM inbound.inbound_lines l
+JOIN inbound.inbound_deliveries d
     ON d.inbound_id = l.inbound_id
 JOIN inventory.skus s
     ON s.sku_id = l.sku_id
@@ -5185,14 +5185,14 @@ WHERE
 GO
 
 /********************************************************************************************
-    Procedure: deliveries.usp_activate_inbound
+    Procedure: inbound.usp_activate_inbound
     Purpose  : Activates inbound delivery (EXP → ACT)
                - Validates transition rules
                - Enforces structural consistency (no mixed SSCC / Manual lines)
                - Determines and persists inbound_mode_code (SSCC / MANUAL)
                - Locks header during activation
 ********************************************************************************************/
-CREATE OR ALTER PROCEDURE deliveries.usp_activate_inbound
+CREATE OR ALTER PROCEDURE inbound.usp_activate_inbound
 (
     @inbound_id INT,
     @user_id INT = NULL,
@@ -5216,7 +5216,7 @@ BEGIN
         SELECT
             @current_status = inbound_status_code,
             @existing_mode  = inbound_mode_code
-        FROM deliveries.inbound_deliveries WITH (UPDLOCK, HOLDLOCK)
+        FROM inbound.inbound_deliveries WITH (UPDLOCK, HOLDLOCK)
         WHERE inbound_id = @inbound_id;
 
         IF @current_status IS NULL
@@ -5229,7 +5229,7 @@ BEGIN
         IF NOT EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_status_transitions
+            FROM inbound.inbound_status_transitions
             WHERE from_status_code = @current_status
               AND to_status_code   = 'ACT'
         )
@@ -5242,7 +5242,7 @@ BEGIN
         IF NOT EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_lines
+            FROM inbound.inbound_lines
             WHERE inbound_id = @inbound_id
               AND line_state_code <> 'CNL'
         )
@@ -5254,20 +5254,20 @@ BEGIN
 
         SELECT
             @sscc_line_count = COUNT(DISTINCT l.inbound_line_id)
-        FROM deliveries.inbound_lines l
-        JOIN deliveries.inbound_expected_units eu
+        FROM inbound.inbound_lines l
+        JOIN inbound.inbound_expected_units eu
             ON eu.inbound_line_id = l.inbound_line_id
         WHERE l.inbound_id = @inbound_id
           AND l.line_state_code <> 'CNL';
 
         SELECT
             @manual_line_count = COUNT(*)
-        FROM deliveries.inbound_lines l
+        FROM inbound.inbound_lines l
         WHERE l.inbound_id = @inbound_id
           AND l.line_state_code <> 'CNL'
           AND NOT EXISTS (
                 SELECT 1
-                FROM deliveries.inbound_expected_units eu
+                FROM inbound.inbound_expected_units eu
                 WHERE eu.inbound_line_id = l.inbound_line_id
           );
 
@@ -5293,7 +5293,7 @@ BEGIN
         EXEC sys.sp_set_session_context @key = N'user_id',    @value = @user_id;
         EXEC sys.sp_set_session_context @key = N'session_id', @value = @session_id;
 
-        UPDATE deliveries.inbound_deliveries
+        UPDATE inbound.inbound_deliveries
         SET inbound_status_code = 'ACT',
             inbound_mode_code   = @mode_code,
             updated_at          = SYSUTCDATETIME(),
@@ -5312,7 +5312,7 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE deliveries.usp_receive_inbound_line
+CREATE OR ALTER PROCEDURE inbound.usp_receive_inbound_line
 (
     @inbound_line_id            INT = NULL,
     @received_qty               INT = NULL,
@@ -5393,7 +5393,7 @@ BEGIN
                 @claim_expires_at     = eu.claim_expires_at,
                 @db_claim_token       = eu.claim_token,
                 @claimed_session_id   = eu.claimed_session_id
-            FROM deliveries.inbound_expected_units eu WITH (UPDLOCK, HOLDLOCK)
+            FROM inbound.inbound_expected_units eu WITH (UPDLOCK, HOLDLOCK)
             WHERE eu.inbound_expected_unit_id = @inbound_expected_unit_id;
 
             IF @resolved_line_id IS NULL
@@ -5481,7 +5481,7 @@ BEGIN
             @already_received     = ISNULL(l.received_qty, 0),
             @line_state           = l.line_state_code,
             @arrival_status_code  = l.arrival_stock_status_code
-        FROM deliveries.inbound_lines l WITH (UPDLOCK, HOLDLOCK)
+        FROM inbound.inbound_lines l WITH (UPDLOCK, HOLDLOCK)
         WHERE l.inbound_line_id = @resolved_line_id;
 
         IF (@already_received + @received_qty) > @expected_qty
@@ -5550,7 +5550,7 @@ BEGIN
 
         IF @is_sscc_mode = 1
         BEGIN
-            UPDATE deliveries.inbound_expected_units
+            UPDATE inbound.inbound_expected_units
             SET received_inventory_unit_id = @inventory_unit_id,
                 expected_unit_state_code   = 'RCV'
             WHERE inbound_expected_unit_id = @inbound_expected_unit_id;
@@ -5564,7 +5564,7 @@ BEGIN
                 ELSE 'RCV'
             END;
 
-        UPDATE deliveries.inbound_lines
+        UPDATE inbound.inbound_lines
         SET received_qty    = @new_received_qty,
             line_state_code = @new_line_state,
             updated_at      = SYSUTCDATETIME(),
@@ -5579,7 +5579,7 @@ BEGIN
             RETURN;
         END
 
-        INSERT INTO deliveries.inbound_receipts
+        INSERT INTO inbound.inbound_receipts
         (
             inbound_line_id, inbound_expected_unit_id, inventory_unit_id,
             received_qty, received_at, received_by_user_id, session_id
@@ -5614,12 +5614,12 @@ BEGIN
         IF NOT EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_lines
+            FROM inbound.inbound_lines
             WHERE inbound_id = @inbound_id
               AND line_state_code NOT IN ('RCV','CNL')
         )
         BEGIN
-            UPDATE deliveries.inbound_deliveries
+            UPDATE inbound.inbound_deliveries
             SET inbound_status_code = 'CLS',
                 updated_at          = SYSUTCDATETIME(),
                 updated_by          = @user_id
@@ -5651,7 +5651,7 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE deliveries.usp_get_inbound_summary
+CREATE OR ALTER PROCEDURE inbound.usp_get_inbound_summary
 (
     @inbound_ref NVARCHAR(50)
 )
@@ -5665,24 +5665,24 @@ BEGIN
         CAST(
             CASE WHEN EXISTS (
                 SELECT 1
-                FROM deliveries.inbound_expected_units eu
-                JOIN deliveries.inbound_lines l ON eu.inbound_line_id = l.inbound_line_id
+                FROM inbound.inbound_expected_units eu
+                JOIN inbound.inbound_lines l ON eu.inbound_line_id = l.inbound_line_id
                 WHERE l.inbound_id = d.inbound_id AND eu.expected_unit_state_code = 'EXP'
             ) THEN 1 ELSE 0 END
         AS BIT) AS HasExpectedUnits,
         d.inbound_mode_code AS InboundMode
-    FROM deliveries.inbound_deliveries d
+    FROM inbound.inbound_deliveries d
     WHERE d.inbound_ref = @inbound_ref;
 END
 GO
 
 /********************************************************************************************
-    PROCEDURE: deliveries.usp_validate_sscc_for_receive
+    PROCEDURE: inbound.usp_validate_sscc_for_receive
     Purpose  : Preview + claim an expected SSCC unit for receiving (CLM window)
-               Enforces expected-unit state transitions via deliveries.inbound_expected_unit_state_transitions
+               Enforces expected-unit state transitions via inbound.inbound_expected_unit_state_transitions
                Keeps output contract columns 0-19 stable for C# reader mapping
 ********************************************************************************************/
-CREATE OR ALTER PROCEDURE deliveries.usp_validate_sscc_for_receive
+CREATE OR ALTER PROCEDURE inbound.usp_validate_sscc_for_receive
 (
     @external_ref             NVARCHAR(100),
     @staging_bin_code         NVARCHAR(100),
@@ -5737,7 +5737,7 @@ BEGIN
     ----------------------------------------------------------------------
     -- 0) Cleanup expired claims
     ----------------------------------------------------------------------
-    UPDATE deliveries.inbound_expected_units
+    UPDATE inbound.inbound_expected_units
     SET expected_unit_state_code = 'EXP',
         claimed_session_id       = NULL,
         claimed_by_user_id       = NULL,
@@ -5773,10 +5773,10 @@ BEGIN
             @claim_expires_at         = eu.claim_expires_at,
             @claim_token              = eu.claim_token,
             @arrival_status_code      = l.arrival_stock_status_code
-        FROM deliveries.inbound_expected_units eu
-        JOIN deliveries.inbound_lines l
+        FROM inbound.inbound_expected_units eu
+        JOIN inbound.inbound_lines l
             ON eu.inbound_line_id = l.inbound_line_id
-        JOIN deliveries.inbound_deliveries d
+        JOIN inbound.inbound_deliveries d
             ON l.inbound_id = d.inbound_id
         JOIN inventory.skus s
             ON l.sku_id = s.sku_id
@@ -5894,7 +5894,7 @@ BEGIN
         IF NOT EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_expected_unit_state_transitions t
+            FROM inbound.inbound_expected_unit_state_transitions t
             WHERE t.from_state_code = @expected_unit_state
               AND t.to_state_code   = 'CLM'
         )
@@ -5988,7 +5988,7 @@ BEGIN
         SET @claim_token      = NEWID();
         SET @claim_expires_at = DATEADD(SECOND, @ttl_seconds, @now);
 
-        UPDATE deliveries.inbound_expected_units
+        UPDATE inbound.inbound_expected_units
         SET expected_unit_state_code = 'CLM',
             claimed_session_id       = @session_id,
             claimed_by_user_id       = @user_id,
@@ -6095,12 +6095,12 @@ GO
 ********************************************************************************************/
 
 /* =========================================================================================
-   Trigger: deliveries.trg_inbound_lines_guard
+   Trigger: inbound.trg_inbound_lines_guard
    Blocks structural modification of inbound lines after activation.
    Allows operational updates (receiving progression) in ACT/RCV.
 ========================================================================================= */
-CREATE OR ALTER TRIGGER deliveries.trg_inbound_lines_guard
-ON deliveries.inbound_lines
+CREATE OR ALTER TRIGGER inbound.trg_inbound_lines_guard
+ON inbound.inbound_lines
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -6117,8 +6117,8 @@ BEGIN
         IF EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_deliveries d
-            JOIN deliveries.inbound_lines l
+            FROM inbound.inbound_deliveries d
+            JOIN inbound.inbound_lines l
                 ON l.inbound_id = d.inbound_id
             WHERE l.inbound_line_id IN
             (
@@ -6141,8 +6141,8 @@ BEGIN
     IF EXISTS
     (
         SELECT 1
-        FROM deliveries.inbound_deliveries d
-        JOIN deliveries.inbound_lines l
+        FROM inbound.inbound_deliveries d
+        JOIN inbound.inbound_lines l
             ON l.inbound_id = d.inbound_id
         WHERE l.inbound_line_id IN
         (
@@ -6183,7 +6183,7 @@ BEGIN
               AND NOT EXISTS
               (
                   SELECT 1
-                  FROM deliveries.inbound_line_state_transitions t
+                  FROM inbound.inbound_line_state_transitions t
                   WHERE t.from_state_code = d.line_state_code
                     AND t.to_state_code   = i.line_state_code
               )
@@ -6196,12 +6196,12 @@ END;
 GO
 
 /* =========================================================================================
-   Trigger: deliveries.trg_inbound_expected_units_guard
+   Trigger: inbound.trg_inbound_expected_units_guard
    Blocks structural modification of expected units after activation.
    Allows operational claim/receive updates in ACT/RCV/CLS, enforcing allowed transitions.
 ========================================================================================= */
-CREATE OR ALTER TRIGGER deliveries.trg_inbound_expected_units_guard
-ON deliveries.inbound_expected_units
+CREATE OR ALTER TRIGGER inbound.trg_inbound_expected_units_guard
+ON inbound.inbound_expected_units
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
@@ -6218,8 +6218,8 @@ BEGIN
         IF EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_deliveries d
-            JOIN deliveries.inbound_lines l
+            FROM inbound.inbound_deliveries d
+            JOIN inbound.inbound_lines l
                 ON l.inbound_id = d.inbound_id
             WHERE l.inbound_line_id IN
             (
@@ -6242,8 +6242,8 @@ BEGIN
     IF EXISTS
     (
         SELECT 1
-        FROM deliveries.inbound_deliveries d
-        JOIN deliveries.inbound_lines l
+        FROM inbound.inbound_deliveries d
+        JOIN inbound.inbound_lines l
             ON l.inbound_id = d.inbound_id
         WHERE l.inbound_line_id IN
         (
@@ -6283,7 +6283,7 @@ BEGIN
               AND NOT EXISTS
               (
                   SELECT 1
-                  FROM deliveries.inbound_expected_unit_state_transitions t
+                  FROM inbound.inbound_expected_unit_state_transitions t
                   WHERE t.from_state_code = d.expected_unit_state_code
                     AND t.to_state_code   = i.expected_unit_state_code
               )
@@ -6297,11 +6297,11 @@ GO
 
 
 /* =========================================================================================
-   Trigger: deliveries.trg_inbound_mode_guard
+   Trigger: inbound.trg_inbound_mode_guard
    Prevents inbound_mode_code from being changed once set
 ========================================================================================= */
-CREATE OR ALTER TRIGGER deliveries.trg_inbound_mode_guard
-ON deliveries.inbound_deliveries
+CREATE OR ALTER TRIGGER inbound.trg_inbound_mode_guard
+ON inbound.inbound_deliveries
 AFTER UPDATE
 AS
 BEGIN
@@ -6321,7 +6321,7 @@ END;
 GO
 
 CREATE INDEX IX_inbexp_outstanding
-ON deliveries.inbound_expected_units(expected_external_ref)
+ON inbound.inbound_expected_units(expected_external_ref)
 WHERE received_inventory_unit_id IS NULL;
 
 
@@ -6448,7 +6448,7 @@ ON warehouse.warehouse_tasks (inventory_unit_id)
 WHERE task_state_code IN ('OPN','CLM');
 GO
 
-CREATE OR ALTER PROCEDURE deliveries.usp_reverse_inbound_receipt
+CREATE OR ALTER PROCEDURE inbound.usp_reverse_inbound_receipt
 (
     @receipt_id      INT,
     @reason_code     NVARCHAR(50) = NULL,
@@ -6483,7 +6483,7 @@ BEGIN
             @inbound_expected_unit_id = r.inbound_expected_unit_id,
             @inventory_unit_id        = r.inventory_unit_id,
             @received_qty             = r.received_qty
-        FROM deliveries.inbound_receipts r WITH (UPDLOCK, HOLDLOCK)
+        FROM inbound.inbound_receipts r WITH (UPDLOCK, HOLDLOCK)
         WHERE r.receipt_id = @receipt_id
           AND r.is_reversal = 0;
 
@@ -6500,7 +6500,7 @@ BEGIN
         IF EXISTS
         (
             SELECT 1
-            FROM deliveries.inbound_receipts
+            FROM inbound.inbound_receipts
             WHERE receipt_id = @receipt_id
               AND reversed_receipt_id IS NOT NULL
         )
@@ -6514,11 +6514,11 @@ BEGIN
         END
 
         SELECT @inbound_id = inbound_id
-        FROM deliveries.inbound_lines
+        FROM inbound.inbound_lines
         WHERE inbound_line_id = @inbound_line_id;
 
         SELECT @old_header_status = inbound_status_code
-        FROM deliveries.inbound_deliveries WITH (UPDLOCK, HOLDLOCK)
+        FROM inbound.inbound_deliveries WITH (UPDLOCK, HOLDLOCK)
         WHERE inbound_id = @inbound_id;
 
         DECLARE
@@ -6584,7 +6584,7 @@ BEGIN
 
         IF @inbound_expected_unit_id IS NOT NULL
         BEGIN
-            UPDATE deliveries.inbound_expected_units
+            UPDATE inbound.inbound_expected_units
             SET received_inventory_unit_id = NULL,
                 expected_unit_state_code   = 'EXP',
                 claimed_session_id         = NULL,
@@ -6597,7 +6597,7 @@ BEGIN
             WHERE inbound_expected_unit_id = @inbound_expected_unit_id;
         END
 
-        INSERT INTO deliveries.inbound_receipts
+        INSERT INTO inbound.inbound_receipts
         (
             inbound_line_id, inbound_expected_unit_id, inventory_unit_id,
             received_qty, received_by_user_id, session_id,
@@ -6612,7 +6612,7 @@ BEGIN
 
         SET @reversal_receipt_id = SCOPE_IDENTITY();
 
-        UPDATE deliveries.inbound_receipts
+        UPDATE inbound.inbound_receipts
         SET reversed_receipt_id = @reversal_receipt_id
         WHERE receipt_id = @receipt_id;
 
@@ -6625,7 +6625,7 @@ BEGIN
                         WHEN r.is_reversal = 0 THEN r.received_qty
                         ELSE -r.received_qty
                     END), 0)
-                FROM deliveries.inbound_receipts r
+                FROM inbound.inbound_receipts r
                 WHERE r.inbound_line_id = l.inbound_line_id
             ),
             line_state_code =
@@ -6636,7 +6636,7 @@ BEGIN
                             WHEN r.is_reversal = 0 THEN r.received_qty
                             ELSE -r.received_qty
                         END), 0)
-                    FROM deliveries.inbound_receipts r
+                    FROM inbound.inbound_receipts r
                     WHERE r.inbound_line_id = l.inbound_line_id
                 ) = 0 THEN 'EXP'
                 WHEN (
@@ -6645,33 +6645,33 @@ BEGIN
                             WHEN r.is_reversal = 0 THEN r.received_qty
                             ELSE -r.received_qty
                         END), 0)
-                    FROM deliveries.inbound_receipts r
+                    FROM inbound.inbound_receipts r
                     WHERE r.inbound_line_id = l.inbound_line_id
                 ) < l.expected_qty THEN 'PRC'
                 ELSE 'RCV'
             END,
             updated_at = SYSUTCDATETIME(),
             updated_by = @user_id
-        FROM deliveries.inbound_lines l
+        FROM inbound.inbound_lines l
         WHERE l.inbound_line_id = @inbound_line_id;
 
         SET @new_header_status = 'ACT';
 
         IF EXISTS
         (
-            SELECT 1 FROM deliveries.inbound_lines
+            SELECT 1 FROM inbound.inbound_lines
             WHERE inbound_id = @inbound_id AND line_state_code IN ('PRC','RCV')
         )
             SET @new_header_status = 'RCV';
 
         IF NOT EXISTS
         (
-            SELECT 1 FROM deliveries.inbound_lines
+            SELECT 1 FROM inbound.inbound_lines
             WHERE inbound_id = @inbound_id AND line_state_code NOT IN ('RCV','CNL')
         )
             SET @new_header_status = 'CLS';
 
-        UPDATE deliveries.inbound_deliveries
+        UPDATE inbound.inbound_deliveries
         SET inbound_status_code = @new_header_status,
             updated_at          = SYSUTCDATETIME(),
             updated_by          = @user_id
