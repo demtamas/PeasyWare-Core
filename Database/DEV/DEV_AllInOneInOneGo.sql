@@ -1302,6 +1302,19 @@ BEGIN
 END;
 GO
 
+-- Add is_system_role to support system/api role filtering
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('auth.roles')
+      AND name = 'is_system_role'
+)
+BEGIN
+    ALTER TABLE auth.roles
+    ADD is_system_role BIT NOT NULL DEFAULT 0;
+END;
+GO
+
+
 ---------------------------------------------------------------
 -- 1.3 User → Roles
 ---------------------------------------------------------------
@@ -1334,7 +1347,8 @@ BEGIN
         role_name   AS RoleName,
         description AS Description
     FROM auth.roles
-    WHERE is_active = 1
+    WHERE is_active      = 1
+      AND is_system_role = 0        -- never show system roles in user-facing dropdowns
     ORDER BY role_name;
 END;
 GO
@@ -2925,6 +2939,43 @@ EXEC auth.usp_add_role
     @NewRoleId = @OutputId OUTPUT;
 GO
 
+
+-- Mark system role as is_system_role
+UPDATE auth.roles SET is_system_role = 1 WHERE role_name = 'system';
+GO
+
+-- Add api role
+DECLARE @SystemUserId2 INT = (SELECT id FROM auth.users WHERE username = 'system');
+IF NOT EXISTS (SELECT 1 FROM auth.roles WHERE role_name = 'api')
+BEGIN
+    INSERT INTO auth.roles (role_name, description, is_active, is_system_role, created_by)
+    VALUES ('api', 'API integration role — system use only', 1, 1, @SystemUserId2);
+    PRINT 'api role created.';
+END
+ELSE
+BEGIN
+    UPDATE auth.roles SET is_system_role = 1 WHERE role_name = 'api';
+    PRINT 'api role already exists — is_system_role ensured.';
+END
+GO
+
+-- Add api user
+IF NOT EXISTS (SELECT 1 FROM auth.users WHERE username = 'api')
+BEGIN
+    EXEC auth.usp_create_user
+        @username     = 'api',
+        @display_name = 'PeasyWare API',
+        @role_name    = 'api',
+        @email        = 'api@pw.local',
+        @password     = 'ChangeMe123!',
+        @result_code  = NULL,
+        @friendly_msg = NULL;
+    PRINT 'api user created.';
+END
+ELSE
+    PRINT 'api user already exists — skipped.';
+GO
+
 IF OBJECT_ID('auth.usp_update_role_by_name', 'P') IS NOT NULL
     DROP PROCEDURE auth.usp_update_role_by_name;
 GO
@@ -3275,9 +3326,11 @@ BEGIN
     DECLARE @is_system BIT = 0;
 
     SELECT @is_system = 1
-    FROM auth.users
-    WHERE id = @user_id
-      AND username = 'system';
+    FROM auth.users u
+    JOIN auth.user_roles ur ON ur.user_id = u.id
+    JOIN auth.roles r       ON r.id = ur.role_id
+    WHERE u.id = @user_id
+      AND r.is_system_role = 1;
 
     RETURN @is_system;
 END;
