@@ -169,7 +169,11 @@ internal sealed class StubInboundQueryRepo : IInboundQueryRepository
         Success = true, FriendlyMessage = "OK"
     };
 
-    public SsccValidationDto ValidateSsccForInbound(string externalRef, string stagingBin)
+    public SsccValidationDto ValidateSsccForInbound(
+        string externalRef,
+        string stagingBin,
+        DateOnly? scannedBestBefore = null,
+        string?   scannedBatch      = null)
     {
         ValidateSsccCalled = true;
         LastExternalRef    = externalRef;

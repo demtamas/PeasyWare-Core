@@ -32,7 +32,7 @@ public sealed class SqlInboundCommandRepository
         IErrorMessageResolver resolver,
         ILogger logger,
         SessionGuard sessionGuard)
-        : base(sessionGuard, session.SessionId)
+        : base(sessionGuard, session, resolver, logger)
     {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -297,35 +297,4 @@ public sealed class SqlInboundCommandRepository
         return result is int inboundId ? inboundId : -1;
     }
 
-    // --------------------------------------------------
-    // Shared result builder (FLAT + STANDARDISED)
-    // --------------------------------------------------
-
-    private OperationResult BuildResult(
-        string action,
-        string resultCode,
-        object data)
-    {
-        var success = resultCode.StartsWith("SUC", StringComparison.OrdinalIgnoreCase);
-        var message = _resolver.Resolve(resultCode);
-
-        var result = OperationResult.Create(success, resultCode, message);
-
-        var payload = new
-        {
-            _session.UserId,
-            _session.SessionId,
-            _session.CorrelationId,
-            ResultCode = resultCode,
-            Success    = success,
-            Data       = data
-        };
-
-        if (success)
-            _logger.Info(action, payload);
-        else
-            _logger.Warn(action, payload);
-
-        return result;
-    }
 }

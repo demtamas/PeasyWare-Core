@@ -28,7 +28,7 @@ public sealed class SqlWarehouseTaskCommandRepository
         IErrorMessageResolver resolver,
         ILogger               logger,
         SessionGuard          sessionGuard)
-        : base(sessionGuard, session.SessionId)
+        : base(sessionGuard, session, resolver, logger)
     {
         _factory  = factory  ?? throw new ArgumentNullException(nameof(factory));
         _session  = session  ?? throw new ArgumentNullException(nameof(session));
@@ -143,25 +143,11 @@ public sealed class SqlWarehouseTaskCommandRepository
 
         var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code    = reader.GetString(reader.GetOrdinal("result_code"));
-        var message = _resolver.Resolve(code);
-        var result  = OperationResult.Create(success, code, message);
 
-        if (success)
-            _logger.Info("WarehouseTask.Confirm", new
-            {
-                _session.UserId, _session.SessionId,
-                TaskId = taskId, Destination = destination,
-                ResultCode = code, Success = true
-            });
-        else
-            _logger.Warn("WarehouseTask.Confirm", new
-            {
-                _session.UserId, _session.SessionId,
-                TaskId = taskId, Destination = destination,
-                ResultCode = code, Success = false
-            });
-
-        return result;
+        return BuildResult(
+            action:     "WarehouseTask.Confirm",
+            resultCode: code,
+            data:       new { TaskId = taskId, Destination = destination });
     }
 
     // ────────────────────────────────────────────────────────
@@ -268,24 +254,10 @@ public sealed class SqlWarehouseTaskCommandRepository
 
         var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code    = reader.GetString(reader.GetOrdinal("result_code"));
-        var message = _resolver.Resolve(code);
-        var result  = OperationResult.Create(success, code, message);
 
-        if (success)
-            _logger.Info("WarehouseTask.BinMove.Confirm", new
-            {
-                _session.UserId, _session.SessionId,
-                TaskId = taskId, ScannedBin = scannedBinCode,
-                ResultCode = code, Success = true
-            });
-        else
-            _logger.Warn("WarehouseTask.BinMove.Confirm", new
-            {
-                _session.UserId, _session.SessionId,
-                TaskId = taskId, ScannedBin = scannedBinCode,
-                ResultCode = code, Success = false
-            });
-
-        return result;
+        return BuildResult(
+            action:     "WarehouseTask.BinMove.Confirm",
+            resultCode: code,
+            data:       new { TaskId = taskId, ScannedBin = scannedBinCode });
     }
 }

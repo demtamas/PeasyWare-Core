@@ -251,7 +251,7 @@ static void RunInbound(AppRuntime runtime, SessionContext session)
                     break;
                 }
 
-            case "3": new PutawayFromInboundFlow(runtime, session).RunAsync().Wait(); break;
+            case "3": new PutawayFromInboundFlow(runtime, session).Run(); break;
             case "4" when canReverse: new ReverseInboundReceiptFlow(runtime, session).Run(); break;
             case "0": return;
             default: Console.WriteLine("Invalid option."); break;
@@ -286,8 +286,8 @@ static void RunMove(AppRuntime runtime, SessionContext session)
         var input = MenuRenderer.ShowMoveMenu();
         switch (input)
         {
-            case "1": new PutawayFromInboundFlow(runtime, session).RunAsync().Wait(); break;
-            case "2": new BinToBinMoveFlow(runtime, session).RunAsync().Wait();       break;
+            case "1": new PutawayFromInboundFlow(runtime, session).Run(); break;
+            case "2": new BinToBinMoveFlow(runtime, session).Run();       break;
             case "0": return;
             default: Console.WriteLine("Coming soon."); Console.ReadKey(true); break;
         }

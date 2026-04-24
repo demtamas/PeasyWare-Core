@@ -151,7 +151,11 @@ namespace PeasyWare.Application.Flows
                     ? scan.Sscc
                     : rawInput;
 
-                var validation = service.ValidateSscc(scanInput, bin);
+                var validation = service.ValidateSscc(
+                    scanInput,
+                    bin,
+                    scannedBestBefore: scan.BestBefore,
+                    scannedBatch:      scan.Batch);
 
                 if (_session.UiMode == UiMode.Trace)
                 {
@@ -202,7 +206,11 @@ namespace PeasyWare.Application.Flows
                     validation.InboundExpectedUnitId,
                     scanInput,
                     bin,
-                    validation.ClaimToken.Value);
+                    validation.ClaimToken.Value,
+                    batchNumber:    scan.Batch,
+                    bestBeforeDate: scan.BestBefore.HasValue
+                        ? scan.BestBefore.Value.ToDateTime(TimeOnly.MinValue)
+                        : null);
 
                 if (!result.Success)
                 {

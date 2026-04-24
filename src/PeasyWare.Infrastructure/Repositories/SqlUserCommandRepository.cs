@@ -32,7 +32,7 @@ public sealed class SqlUserCommandRepository
         IErrorMessageResolver resolver,
         ILogger logger,
         SessionGuard sessionGuard)
-        : base(sessionGuard, session.SessionId)
+        : base(sessionGuard, session, resolver, logger)
     {
         _factory = factory;
         _session = session;

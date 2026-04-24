@@ -1090,7 +1090,29 @@ BEGIN
 
         (N'ERRTASK09', N'TASK', N'ERROR',
             N'The suggested location is no longer available. Please request a new suggestion.',
-            N'Task.Confirm: destination bin capacity exceeded or bin inactive at confirm time');
+            N'Task.Confirm: destination bin capacity exceeded or bin inactive at confirm time'),
+
+        /* ── ERRINBL06/07/08 — previously missing message definitions ── */
+        (N'ERRINBL06', N'INB', N'ERROR',
+            N'Received quantity must be greater than zero.',
+            N'Inbound.Line (manual mode): received_qty NULL or <= 0'),
+
+        (N'ERRINBL07', N'INB', N'ERROR',
+            N'Staging bin must be provided.',
+            N'Inbound.Line: staging_bin_code parameter is NULL or empty'),
+
+        (N'ERRINBL08', N'INB', N'ERROR',
+            N'Staging bin not found or is inactive. Please check the bin code and try again.',
+            N'Inbound.Line: staging_bin_code not found in locations.bins or is_active = 0'),
+
+        /* ── ERRINBL09/10 — BBE and batch mismatch hard blocks ── */
+        (N'ERRINBL09', N'INB', N'ERROR',
+            N'Best Before Date on label does not match the expected value. Please contact your supervisor.',
+            N'Inbound.Line (SSCC mode): scanned best_before_date != expected_unit.best_before_date'),
+
+        (N'ERRINBL10', N'INB', N'ERROR',
+            N'Batch number on label does not match the expected value. Please contact your supervisor.',
+            N'Inbound.Line (SSCC mode): scanned batch_number != expected_unit.batch_number');
 
 END;
 GO
@@ -5316,7 +5338,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
-        IF NULLIF(LTRIM(RTRIM(@staging_bin_code)), N'') IS NULL
+        SET @staging_bin_code = UPPER(LTRIM(RTRIM(@staging_bin_code)));
+
+        IF NULLIF(@staging_bin_code, N'') IS NULL
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRINBL07' AS result_code,
                    NULL AS inbound_line_id, NULL AS inbound_id, CAST(0 AS BIT) AS is_closed;
@@ -5328,23 +5352,26 @@ BEGIN
             CASE WHEN @inbound_expected_unit_id IS NOT NULL THEN 1 ELSE 0 END;
 
         DECLARE
-            @resolved_line_id      INT = NULL,
-            @sku_id                INT = NULL,
-            @inbound_id            INT = NULL,
-            @expected_qty          INT = NULL,
-            @already_received      INT = NULL,
-            @line_state            VARCHAR(3),
-            @header_status         VARCHAR(3),
-            @expected_unit_qty     INT,
-            @existing_received_id  INT,
-            @now                   DATETIME2(3) = SYSUTCDATETIME(),
-            @claim_expires_at      DATETIME2(3),
-            @db_claim_token        UNIQUEIDENTIFIER,
-            @claimed_session_id    UNIQUEIDENTIFIER,
-            @new_received_qty      INT,
-            @new_line_state        VARCHAR(3),
-            @receipt_id            INT,
-            @arrival_status_code   VARCHAR(2);
+            @resolved_line_id          INT = NULL,
+            @sku_id                    INT = NULL,
+            @inbound_id                INT = NULL,
+            @expected_qty              INT = NULL,
+            @already_received          INT = NULL,
+            @line_state                VARCHAR(3),
+            @header_status             VARCHAR(3),
+            @expected_unit_qty         INT,
+            @existing_received_id      INT,
+            @now                       DATETIME2(3) = SYSUTCDATETIME(),
+            @claim_expires_at          DATETIME2(3),
+            @db_claim_token            UNIQUEIDENTIFIER,
+            @claimed_session_id        UNIQUEIDENTIFIER,
+            @new_received_qty          INT,
+            @new_line_state            VARCHAR(3),
+            @receipt_id                INT,
+            @arrival_status_code       VARCHAR(2),
+            /* Capture scanned values before overwrite from expected unit */
+            @scanned_best_before_date  DATE           = @best_before_date,
+            @scanned_batch_number      NVARCHAR(100)  = @batch_number;
 
         IF @is_sscc_mode = 1
         BEGIN
@@ -5397,6 +5424,28 @@ BEGIN
                OR @db_claim_token <> @claim_token
             BEGIN
                 SELECT CAST(0 AS BIT) AS success, N'ERRSSCC08' AS result_code,
+                       NULL AS inbound_line_id, NULL AS inbound_id, CAST(0 AS BIT) AS is_closed;
+                ROLLBACK;
+                RETURN;
+            END
+
+            /* ── BBE mismatch — hard block ────────────────────────────────────────────── */
+            IF @scanned_best_before_date IS NOT NULL
+               AND @best_before_date IS NOT NULL
+               AND @scanned_best_before_date <> @best_before_date
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRINBL09' AS result_code,
+                       NULL AS inbound_line_id, NULL AS inbound_id, CAST(0 AS BIT) AS is_closed;
+                ROLLBACK;
+                RETURN;
+            END
+
+            /* ── Batch number mismatch — hard block ───────────────────────────────────── */
+            IF @scanned_batch_number IS NOT NULL
+               AND @batch_number IS NOT NULL
+               AND @scanned_batch_number <> @batch_number
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRINBL10' AS result_code,
                        NULL AS inbound_line_id, NULL AS inbound_id, CAST(0 AS BIT) AS is_closed;
                 ROLLBACK;
                 RETURN;
@@ -5483,7 +5532,7 @@ BEGIN
 
         SELECT @staging_bin_id = bin_id
         FROM locations.bins
-        WHERE bin_code = @staging_bin_code
+        WHERE bin_code = UPPER(LTRIM(RTRIM(@staging_bin_code)))
           AND is_active = 1;
 
         IF @staging_bin_id IS NULL
@@ -5635,10 +5684,12 @@ GO
 ********************************************************************************************/
 CREATE OR ALTER PROCEDURE deliveries.usp_validate_sscc_for_receive
 (
-    @external_ref        NVARCHAR(100),
-    @staging_bin_code    NVARCHAR(100),
-    @user_id             INT = NULL,
-    @session_id          UNIQUEIDENTIFIER = NULL
+    @external_ref             NVARCHAR(100),
+    @staging_bin_code         NVARCHAR(100),
+    @scanned_best_before_date DATE          = NULL,
+    @scanned_batch_number     NVARCHAR(100) = NULL,
+    @user_id                  INT           = NULL,
+    @session_id               UNIQUEIDENTIFIER = NULL
 )
 AS
 BEGIN
@@ -5872,7 +5923,67 @@ BEGIN
         END;
 
         ------------------------------------------------------------------
-        -- 4.3) Create NEW claim
+        -- 4.3) BBE mismatch — hard block before claim is written
+        ------------------------------------------------------------------
+        IF @scanned_best_before_date IS NOT NULL
+           AND @best_before_date IS NOT NULL
+           AND @scanned_best_before_date <> @best_before_date
+        BEGIN
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRINBL09'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty) AS outstanding_before,
+                (@line_expected_qty - @line_received_qty) AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
+            RETURN;
+        END;
+
+        ------------------------------------------------------------------
+        -- 4.4) Batch mismatch — hard block before claim is written
+        ------------------------------------------------------------------
+        IF @scanned_batch_number IS NOT NULL
+           AND @batch_number IS NOT NULL
+           AND @scanned_batch_number <> @batch_number
+        BEGIN
+            SELECT
+                CAST(0 AS BIT)  AS success,
+                N'ERRINBL10'    AS result_code,
+                @inbound_expected_unit_id AS inbound_expected_unit_id,
+                @inbound_line_id          AS inbound_line_id,
+                @inbound_ref              AS inbound_ref,
+                @header_status            AS header_status,
+                @line_state               AS line_state,
+                @sku_code                 AS sku_code,
+                @sku_description          AS sku_description,
+                @expected_unit_qty        AS expected_unit_qty,
+                @line_expected_qty        AS line_expected_qty,
+                @line_received_qty        AS line_received_qty,
+                (@line_expected_qty - @line_received_qty) AS outstanding_before,
+                (@line_expected_qty - @line_received_qty) AS outstanding_after,
+                @batch_number             AS batch_number,
+                @best_before_date         AS best_before_date,
+                NULL AS claimed_session_id, NULL AS claimed_by_user_id,
+                NULL AS claim_expires_at,   NULL AS claim_token,
+                NULL AS arrival_stock_status_code;
+            RETURN;
+        END;
+
+        ------------------------------------------------------------------
+        -- 4.5) Create NEW claim
         ------------------------------------------------------------------
         SET @claim_token      = NEWID();
         SET @claim_expires_at = DATEADD(SECOND, @ttl_seconds, @now);
@@ -5892,7 +6003,7 @@ BEGIN
               );
 
         ------------------------------------------------------------------
-        -- 4.4) Race protection
+        -- 4.6) Race protection
         ------------------------------------------------------------------
         IF @@ROWCOUNT = 0
         BEGIN
@@ -7512,7 +7623,7 @@ BEGIN
 
         SELECT @dest_bin_code = bin_code FROM locations.bins WHERE bin_id = @dest_bin_id;
 
-        IF LTRIM(RTRIM(@scanned_bin_code)) <> LTRIM(RTRIM(@dest_bin_code))
+        IF UPPER(LTRIM(RTRIM(@scanned_bin_code))) <> UPPER(LTRIM(RTRIM(@dest_bin_code)))
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTASK08' AS result_code; ROLLBACK; RETURN; END
 
         SELECT @scanned_bin_id = bin_id, @bin_capacity = capacity, @bin_active = is_active
@@ -8382,7 +8493,7 @@ BEGIN
                 @staging_bin_code = b.bin_code
             FROM locations.bins b
             JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
-            WHERE b.bin_code            = @destination_bin_code
+            WHERE b.bin_code            = UPPER(LTRIM(RTRIM(@destination_bin_code)))
               AND b.is_active           = 1
               AND st.storage_type_code  = 'STAGE';
 
@@ -9107,7 +9218,7 @@ BEGIN
         FROM locations.bins
         WHERE bin_id = @source_bin_id;
 
-        IF LTRIM(RTRIM(@scanned_bin_code)) <> LTRIM(RTRIM(@source_bin_code))
+        IF UPPER(LTRIM(RTRIM(@scanned_bin_code))) <> UPPER(LTRIM(RTRIM(@source_bin_code)))
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRPICK03' AS result_code;
             ROLLBACK; RETURN;
@@ -9337,7 +9448,7 @@ BEGIN
                 @staging_bin_code = b.bin_code
             FROM locations.bins b
             JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
-            WHERE b.bin_code            = @destination_bin_code
+            WHERE b.bin_code            = UPPER(LTRIM(RTRIM(@destination_bin_code)))
               AND b.is_active           = 1
               AND st.storage_type_code  = 'STAGE';
 

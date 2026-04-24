@@ -14,7 +14,9 @@ public interface IInboundQueryRepository
 
     SsccValidationDto ValidateSsccForInbound(
         string externalRef,
-        string stagingBin);
+        string stagingBin,
+        DateOnly? scannedBestBefore = null,
+        string? scannedBatch = null);
 
     IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef);
 

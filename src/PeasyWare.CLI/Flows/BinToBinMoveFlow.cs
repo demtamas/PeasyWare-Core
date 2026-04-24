@@ -4,7 +4,6 @@ using PeasyWare.Application.Scanning;
 using PeasyWare.Infrastructure.Bootstrap;
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace PeasyWare.CLI.Flows;
 
@@ -37,7 +36,7 @@ public sealed class BinToBinMoveFlow
         _session = session;
     }
 
-    public async Task RunAsync()
+    public void Run()
     {
         var commandRepo = _runtime.Repositories.CreateWarehouseTaskCommand(_session);
 

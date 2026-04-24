@@ -24,7 +24,7 @@ public sealed class SqlOutboundCommandRepository
         IErrorMessageResolver resolver,
         ILogger               logger,
         SessionGuard          sessionGuard)
-        : base(sessionGuard, session.SessionId)
+        : base(sessionGuard, session, resolver, logger)
     {
         _factory  = factory  ?? throw new ArgumentNullException(nameof(factory));
         _session  = session  ?? throw new ArgumentNullException(nameof(session));
@@ -110,13 +110,11 @@ public sealed class SqlOutboundCommandRepository
 
         var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code    = reader.GetString(reader.GetOrdinal("result_code"));
-        var message = _resolver.Resolve(code);
-        var result  = OperationResult.Create(success, code, message);
 
-        if (success) _logger.Info("Outbound.Pick.Confirm", new { _session.UserId, TaskId = taskId, ResultCode = code });
-        else         _logger.Warn("Outbound.Pick.Confirm", new { _session.UserId, TaskId = taskId, ResultCode = code });
-
-        return result;
+        return BuildResult(
+            action:     "Outbound.Pick.Confirm",
+            resultCode: code,
+            data:       new { TaskId = taskId, ScannedBin = scannedBinCode, ScannedSscc = scannedSscc });
     }
 
     // ────────────────────────────────────────────────────────

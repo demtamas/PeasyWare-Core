@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PeasyWare.Application\PeasyWare.Application.csproj" />
+    <ProjectReference Include="..\..\src\PeasyWare.Infrastructure\PeasyWare.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

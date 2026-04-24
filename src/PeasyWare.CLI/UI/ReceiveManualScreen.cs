@@ -107,8 +107,9 @@ public static class ReceiveManualScreen
     {
         if (prefilled is not null)
         {
-            Console.WriteLine($"Batch:       {prefilled}  [from scan]");
-            return prefilled;
+            var normalised = prefilled.ToUpperInvariant();
+            Console.WriteLine($"Batch:       {normalised}  [from scan]");
+            return normalised;
         }
 
         while (true)
@@ -120,7 +121,7 @@ public static class ReceiveManualScreen
             var input = Console.ReadLine()?.Trim();
 
             if (!string.IsNullOrWhiteSpace(input))
-                return input;
+                return input.Trim().ToUpperInvariant();
 
             if (!isRequired)
                 return null;

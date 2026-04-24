@@ -4,7 +4,6 @@ using PeasyWare.Application.Scanning;
 using PeasyWare.Infrastructure.Bootstrap;
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace PeasyWare.CLI.Flows
 {
@@ -19,7 +18,7 @@ namespace PeasyWare.CLI.Flows
             _session = session;
         }
 
-        public async Task RunAsync()
+        public void Run()
         {
             var queryRepo   = _runtime.Repositories.CreateInventoryQuery(_session);
             var commandRepo = _runtime.Repositories.CreateWarehouseTaskCommand(_session);

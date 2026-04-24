@@ -19,23 +19,35 @@ public sealed class InboundReceivingService
         _resolver = resolver;
     }
 
-    public SsccValidationDto ValidateSscc(string externalRef, string bin)
+    public SsccValidationDto ValidateSscc(
+        string externalRef,
+        string bin,
+        DateOnly? scannedBestBefore = null,
+        string? scannedBatch = null)
     {
-        return _queryRepo.ValidateSsccForInbound(externalRef, bin);
+        return _queryRepo.ValidateSsccForInbound(
+            externalRef,
+            bin,
+            scannedBestBefore,
+            scannedBatch);
     }
 
     public OperationResult ConfirmSscc(
-    int inboundExpectedUnitId,   // NEW
-    string externalRef,
-    string bin,
-    Guid claimToken)
+        int inboundExpectedUnitId,
+        string externalRef,
+        string bin,
+        Guid claimToken,
+        string? batchNumber = null,
+        DateTime? bestBeforeDate = null)
     {
         return _commandRepo.ReceiveInboundLine(
             inboundLineId: 0,
-            receivedQty: 0, // ignored in SSCC mode
+            receivedQty: 0,
             stagingBinCode: bin,
-            inboundExpectedUnitId: inboundExpectedUnitId,  // ✅ THIS is the fix
+            inboundExpectedUnitId: inboundExpectedUnitId,
             externalRef: externalRef,
+            batchNumber: batchNumber,
+            bestBeforeDate: bestBeforeDate,
             claimToken: claimToken
         );
     }

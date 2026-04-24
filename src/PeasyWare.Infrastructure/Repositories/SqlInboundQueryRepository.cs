@@ -311,7 +311,11 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
     // SSCC validation
     // ------------------------------------------------------------
 
-    public SsccValidationDto ValidateSsccForInbound(string externalRef, string stagingBin)
+    public SsccValidationDto ValidateSsccForInbound(
+        string externalRef,
+        string stagingBin,
+        DateOnly? scannedBestBefore = null,
+        string? scannedBatch = null)
     {
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
@@ -321,8 +325,10 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         command.Parameters.AddWithValue("@user_id",    _session.UserId);
         command.Parameters.AddWithValue("@session_id", _session.SessionId);
-        command.Parameters.Add(new SqlParameter("@external_ref",     SqlDbType.NVarChar, 50) { Value = externalRef });
-        command.Parameters.Add(new SqlParameter("@staging_bin_code", SqlDbType.NVarChar, 50) { Value = stagingBin });
+        command.Parameters.Add(new SqlParameter("@external_ref",             SqlDbType.NVarChar, 100) { Value = externalRef });
+        command.Parameters.Add(new SqlParameter("@staging_bin_code",         SqlDbType.NVarChar, 100) { Value = stagingBin });
+        command.Parameters.Add(new SqlParameter("@scanned_best_before_date", SqlDbType.Date)          { Value = scannedBestBefore.HasValue ? scannedBestBefore.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@scanned_batch_number",     SqlDbType.NVarChar, 100) { Value = (object?)scannedBatch ?? DBNull.Value });
 
         using var reader = command.ExecuteReader();
 

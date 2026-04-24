@@ -1,3 +1,11 @@
+using FluentAssertions;
+using PeasyWare.Application;
+using Xunit;
+
+namespace PeasyWare.Tests.Application;
+
+public class UiModeTests
+{
     [Fact]
     public void OnlyTrace_MeetsTraceThreshold()
     {
@@ -9,3 +17,4 @@
         (standard >= UiMode.Trace).Should().BeFalse();
         (minimal  >= UiMode.Trace).Should().BeFalse();
     }
+}

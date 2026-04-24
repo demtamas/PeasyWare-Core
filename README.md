@@ -106,8 +106,10 @@ Database/DEV/DEV_Test_Data_Samples.sql ← test inbounds, orders, shipment
 
 The app resolves the connection string in this order:
 
-1. **Environment variable** `PEASYWARE_DB` ← preferred for all machines
-2. Hardcoded fallback: `localhost` (for local dev)
+1. **Environment variable** `PEASYWARE_DB` ← required in production, preferred everywhere
+2. **DEBUG builds only** — hardcoded fallback to `localhost` if env var not set
+
+> **Release builds will throw at startup** if `PEASYWARE_DB` is not set. This is intentional — silent fallback to a wrong database in production is more dangerous than a clear startup failure.
 
 Set the environment variable on your machine:
 
@@ -140,7 +142,7 @@ Initial credentials: `admin` / `admin0` — you will be prompted to change the p
 dotnet test
 ```
 
-76 tests covering GS1-128 barcode parsing, UiMode ordering, and inbound receiving service delegation.
+108 tests covering GS1-128 barcode parsing, UiMode ordering, inbound receiving service delegation, LoginFlow UiMode resolution, SessionGuard expiry, and RepositoryBase.BuildResult logging.
 
 ---
 

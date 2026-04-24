@@ -127,7 +127,23 @@ INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_
 	('R0401A', @RackId, @FloorId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
 	('R0401B', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
 	('R0401C', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
-	('R0401D', @RackId, @TopId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId);
+	('R0401D', @RackId, @TopId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+    ('R0501A', @RackId, @FloorId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0501B', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0501C', @RackId, @MidId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0501D', @RackId, @TopId, 1, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0601A', @RackId, @FloorId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0601B', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0601C', @RackId, @MidId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0601D', @RackId, @TopId, 2, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0701A', @RackId, @FloorId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0701B', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0701C', @RackId, @MidId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0701D', @RackId, @TopId, 3, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0801A', @RackId, @FloorId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0801B', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0801C', @RackId, @MidId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId),
+	('R0801D', @RackId, @TopId, 4, 1, 1, NULL, SYSUTCDATETIME(), @SystemUserId);
 
 /* ============================================================
    inventory.skus
@@ -135,8 +151,8 @@ INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_
 INSERT INTO inventory.skus (sku_code, sku_description, ean, uom_code, weight_per_unit, standard_hu_quantity, is_full_hu_required, preferred_storage_type_id, preferred_storage_section_id, is_hazardous,is_active, created_at, created_by)
 	VALUES
 	('SKU001', 'First test SKU', '01234567899', 'UNIT', 600, 1, 0, @RackId, @FloorId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('SKU002', 'Second test SKU', '11223344556',  'Each', 800, 120, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
-	('SKU003', 'Third test SKU', '05556899874510', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
+	('251130', '7UP ZERO 330ML CAN MP18X1', '05010102322523',  'Each', 800, 120, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId),
+	('290812', 'PEPSI MAX 2L PET X6 P2.19', '04062139024766', 'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
 
 
 /* ============================================================
