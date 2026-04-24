@@ -64,4 +64,11 @@ public sealed class AppRuntime
 
         Repositories = repositories;
     }
+
+    /// <summary>
+    /// Creates a runtime instance for the API.
+    /// Uses the same bootstrap path as CLI/Desktop.
+    /// The API uses the system session context for all operations.
+    /// </summary>
+    public static AppRuntime CreateForApi() => AppStartup.Initialize();
 }

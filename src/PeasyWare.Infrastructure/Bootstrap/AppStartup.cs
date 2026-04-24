@@ -110,7 +110,8 @@ public static class AppStartup
                 _factory,
                 _messageResolver,
                 logger,
-                sessionGuard);
+                sessionGuard,
+                bootstrapSession);
 
         // --------------------------------------------------
         // RUNTIME

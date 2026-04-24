@@ -200,4 +200,97 @@ public sealed class SqlOutboundCommandRepository
         _logger.Info("Outbound.Ship", new { _session.UserId, ShipmentId = shipmentId, result.UnitsShipped, ResultCode = code });
         return result;
     }
+
+    // ────────────────────────────────────────────────────────
+    // API creation methods
+    // ────────────────────────────────────────────────────────
+
+    public OperationResult CreateOrder(
+        string             orderRef,
+        string             customerPartyCode,
+        string?            haulierPartyCode = null,
+        DateTime?          requiredDate     = null,
+        string?            notes            = null,
+        List<OrderLineDto> lines            = null!)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_create_order";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",              _session.UserId);
+        command.Parameters.AddWithValue("@session_id",           _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@order_ref",           SqlDbType.NVarChar, 50)   { Value = orderRef });
+        command.Parameters.Add(new SqlParameter("@customer_party_code", SqlDbType.NVarChar, 50)   { Value = customerPartyCode });
+        command.Parameters.Add(new SqlParameter("@haulier_party_code",  SqlDbType.NVarChar, 50)   { Value = (object?)haulierPartyCode ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@required_date",       SqlDbType.Date)           { Value = (object?)requiredDate     ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@notes",               SqlDbType.NVarChar, 500)  { Value = (object?)notes            ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@lines_json",          SqlDbType.NVarChar, -1)   { Value = System.Text.Json.JsonSerializer.Serialize(lines) });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRORD99", "Unexpected error.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var orderId = success ? reader.GetInt32(reader.GetOrdinal("outbound_order_id")) : 0;
+
+        return BuildResult("Outbound.CreateOrder", code, new { OrderRef = orderRef, OrderId = orderId });
+    }
+
+    public OperationResult CreateShipment(
+        string    shipmentRef,
+        string    haulierPartyCode,
+        string?   vehicleRef       = null,
+        DateTime? plannedDeparture = null,
+        string?   notes            = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_create_shipment";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",             _session.UserId);
+        command.Parameters.AddWithValue("@session_id",          _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@shipment_ref",        SqlDbType.NVarChar, 50)  { Value = shipmentRef });
+        command.Parameters.Add(new SqlParameter("@haulier_party_code",  SqlDbType.NVarChar, 50)  { Value = haulierPartyCode });
+        command.Parameters.Add(new SqlParameter("@vehicle_ref",         SqlDbType.NVarChar, 50)  { Value = (object?)vehicleRef       ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@planned_departure",   SqlDbType.DateTime2)     { Value = (object?)plannedDeparture ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@notes",               SqlDbType.NVarChar, 500) { Value = (object?)notes            ?? DBNull.Value });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRSHIP99", "Unexpected error.");
+
+        var success    = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code       = reader.GetString(reader.GetOrdinal("result_code"));
+        var shipmentId = success ? reader.GetInt32(reader.GetOrdinal("shipment_id")) : 0;
+
+        return BuildResult("Outbound.CreateShipment", code, new { ShipmentRef = shipmentRef, ShipmentId = shipmentId });
+    }
+
+    public OperationResult AddOrderToShipment(
+        string shipmentRef,
+        string orderRef)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_add_order_to_shipment";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",    _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@shipment_ref", SqlDbType.NVarChar, 50) { Value = shipmentRef });
+        command.Parameters.Add(new SqlParameter("@order_ref",    SqlDbType.NVarChar, 50) { Value = orderRef });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRSHIP99", "Unexpected error.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult("Outbound.AddOrderToShipment", code,
+            new { ShipmentRef = shipmentRef, OrderRef = orderRef });
+    }
 }

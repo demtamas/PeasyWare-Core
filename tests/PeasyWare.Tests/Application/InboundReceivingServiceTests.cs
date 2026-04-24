@@ -218,6 +218,15 @@ internal sealed class StubInboundCommandRepo : IInboundCommandRepository
         return ReceiveResult;
     }
 
+    public OperationResult CreateInbound(string inboundRef, string supplierPartyCode, string? haulierPartyCode = null, DateTime? expectedArrivalAt = null)
+        => OperationResult.Create(true, "SUCINB02", "Created.");
+
+    public OperationResult AddInboundLine(string inboundRef, string skuCode, int expectedQty, string? batchNumber = null, DateTime? bestBeforeDate = null, string arrivalStockStatus = "AV")
+        => OperationResult.Create(true, "SUCINBL02", "Created.");
+
+    public OperationResult AddExpectedUnit(string inboundRef, string sscc, int quantity, string? batchNumber = null, DateTime? bestBeforeDate = null)
+        => OperationResult.Create(true, "SUCINBU01", "Created.");
+
     public OperationResult ActivateInbound(int inboundId) =>
         OperationResult.Create(true, "SUC", "OK");
 

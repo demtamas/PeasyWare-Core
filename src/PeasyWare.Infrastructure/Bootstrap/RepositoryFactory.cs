@@ -8,21 +8,24 @@ namespace PeasyWare.Infrastructure.Bootstrap;
 
 public sealed class RepositoryFactory
 {
-    private readonly SqlConnectionFactory _factory;
+    private readonly SqlConnectionFactory  _factory;
     private readonly IErrorMessageResolver _resolver;
-    private readonly ILogger _logger;
-    private readonly SessionGuard _sessionGuard;
+    private readonly ILogger               _logger;
+    private readonly SessionGuard          _sessionGuard;
+    private readonly SessionContext        _systemSession;
 
     public RepositoryFactory(
-        SqlConnectionFactory factory,
+        SqlConnectionFactory  factory,
         IErrorMessageResolver resolver,
-        ILogger logger,
-        SessionGuard sessionGuard)
+        ILogger               logger,
+        SessionGuard          sessionGuard,
+        SessionContext        systemSession)
     {
-        _factory = factory;
-        _resolver = resolver;
-        _logger = logger;
-        _sessionGuard = sessionGuard;
+        _factory       = factory;
+        _resolver      = resolver;
+        _logger        = logger;
+        _sessionGuard  = sessionGuard;
+        _systemSession = systemSession;
     }
 
     private void BindSession(SessionContext session) =>
@@ -64,6 +67,10 @@ public sealed class RepositoryFactory
         return new SqlInboundCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
+    /// <summary>Sessionless overload for API use — uses system session.</summary>
+    public IInboundCommandRepository CreateInboundCommand()
+        => CreateInboundCommand(_systemSession);
+
     public IInboundQueryRepository CreateInboundQuery(SessionContext session)
     {
         BindSession(session);
@@ -96,6 +103,10 @@ public sealed class RepositoryFactory
         return new SqlOutboundCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
+    /// <summary>Sessionless overload for API use — uses system session.</summary>
+    public IOutboundCommandRepository CreateOutboundCommand()
+        => CreateOutboundCommand(_systemSession);
+
     // --------------------------------------------------
     // SETTINGS
     // --------------------------------------------------
@@ -121,4 +132,14 @@ public sealed class RepositoryFactory
         BindSession(session);
         return new SqlWarehouseTaskCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
+
+    // --------------------------------------------------
+    // SKU (API)
+    // --------------------------------------------------
+
+    public ISkuCommandRepository CreateSkuCommand()
+        => new SqlSkuCommandRepository(_factory, _systemSession, _resolver, _logger, _sessionGuard);
+
+    public ISkuQueryRepository CreateSkuQuery()
+        => new SqlSkuQueryRepository(_factory, _systemSession);
 }

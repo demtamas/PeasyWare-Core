@@ -280,6 +280,106 @@ public sealed class SqlInboundCommandRepository
     // Resolve inbound ID
     // --------------------------------------------------
 
+    // ──────────────────────────────────────────────────────────────────────
+    // API creation methods
+    // ──────────────────────────────────────────────────────────────────────
+
+    public OperationResult CreateInbound(
+        string    inboundRef,
+        string    supplierPartyCode,
+        string?   haulierPartyCode  = null,
+        DateTime? expectedArrivalAt = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "inbound.usp_create_inbound";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",             _session.UserId);
+        command.Parameters.AddWithValue("@session_id",          _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@inbound_ref",         SqlDbType.NVarChar, 50)  { Value = inboundRef });
+        command.Parameters.Add(new SqlParameter("@supplier_party_code", SqlDbType.NVarChar, 50)  { Value = supplierPartyCode });
+        command.Parameters.Add(new SqlParameter("@haulier_party_code",  SqlDbType.NVarChar, 50)  { Value = (object?)haulierPartyCode  ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@expected_arrival_at", SqlDbType.DateTime2)     { Value = (object?)expectedArrivalAt ?? DBNull.Value });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRINB99", "Unexpected error.");
+
+        var success    = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code       = reader.GetString(reader.GetOrdinal("result_code"));
+        var inboundId  = success ? reader.GetInt32(reader.GetOrdinal("inbound_id")) : 0;
+
+        return BuildResult("Inbound.Create", code, new { InboundRef = inboundRef, InboundId = inboundId });
+    }
+
+    public OperationResult AddInboundLine(
+        string    inboundRef,
+        string    skuCode,
+        int       expectedQty,
+        string?   batchNumber        = null,
+        DateTime? bestBeforeDate     = null,
+        string    arrivalStockStatus = "AV")
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "inbound.usp_create_inbound_line";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",              _session.UserId);
+        command.Parameters.AddWithValue("@session_id",           _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@inbound_ref",          SqlDbType.NVarChar, 50)  { Value = inboundRef });
+        command.Parameters.Add(new SqlParameter("@sku_code",             SqlDbType.NVarChar, 50)  { Value = skuCode });
+        command.Parameters.Add(new SqlParameter("@expected_qty",         SqlDbType.Int)           { Value = expectedQty });
+        command.Parameters.Add(new SqlParameter("@batch_number",         SqlDbType.NVarChar, 100) { Value = (object?)batchNumber    ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@best_before_date",     SqlDbType.Date)          { Value = (object?)bestBeforeDate ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@arrival_stock_status", SqlDbType.NVarChar, 2)   { Value = arrivalStockStatus });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRINB99", "Unexpected error.");
+
+        var success      = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code         = reader.GetString(reader.GetOrdinal("result_code"));
+        var lineId       = success ? reader.GetInt32(reader.GetOrdinal("inbound_line_id")) : 0;
+        var inboundId    = success ? reader.GetInt32(reader.GetOrdinal("inbound_id"))      : 0;
+
+        return BuildResult("Inbound.AddLine", code,
+            new { InboundRef = inboundRef, SkuCode = skuCode, InboundLineId = lineId });
+    }
+
+    public OperationResult AddExpectedUnit(
+        string    inboundRef,
+        string    sscc,
+        int       quantity,
+        string?   batchNumber    = null,
+        DateTime? bestBeforeDate = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "inbound.usp_create_expected_unit";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",            _session.UserId);
+        command.Parameters.AddWithValue("@session_id",         _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@inbound_ref",       SqlDbType.NVarChar, 50)  { Value = inboundRef });
+        command.Parameters.Add(new SqlParameter("@sscc",              SqlDbType.NVarChar, 18)  { Value = sscc });
+        command.Parameters.Add(new SqlParameter("@quantity",          SqlDbType.Int)           { Value = quantity });
+        command.Parameters.Add(new SqlParameter("@batch_number",      SqlDbType.NVarChar, 100) { Value = (object?)batchNumber    ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@best_before_date",  SqlDbType.Date)          { Value = (object?)bestBeforeDate ?? DBNull.Value });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRINB99", "Unexpected error.");
+
+        var success  = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code     = reader.GetString(reader.GetOrdinal("result_code"));
+        var unitId   = success ? reader.GetInt32(reader.GetOrdinal("inbound_expected_unit_id")) : 0;
+
+        return BuildResult("Inbound.AddExpectedUnit", code,
+            new { InboundRef = inboundRef, Sscc = sscc, UnitId = unitId });
+    }
+
     private static int ResolveInboundId(SqlConnection connection, string inboundRef)
     {
         using var command = connection.CreateCommand();
