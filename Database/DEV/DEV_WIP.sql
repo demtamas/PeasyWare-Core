@@ -127,12 +127,21 @@ BEGIN
             RETURN;
         END
 
+        -- Resolve default storage type (RACK preferred, fallback to first available)
+        DECLARE @default_storage_type_id INT =
+            ISNULL(
+                (SELECT TOP 1 storage_type_id FROM locations.storage_types WHERE storage_type_code = 'RACK' AND is_active = 1),
+                (SELECT TOP 1 storage_type_id FROM locations.storage_types WHERE is_active = 1 ORDER BY storage_type_id)
+            );
+
         INSERT INTO inventory.skus
             (sku_code, sku_description, ean, uom_code, weight_per_unit,
-             standard_hu_quantity, is_hazardous, is_active, created_at, created_by)
+             standard_hu_quantity, is_hazardous, is_active,
+             preferred_storage_type_id, created_at, created_by)
         VALUES
             (@sku_code, @sku_description, @ean, @uom_code, @weight_per_unit,
-             @standard_hu_quantity, @is_hazardous, 1, SYSUTCDATETIME(), @user_id);
+             @standard_hu_quantity, @is_hazardous, 1,
+             @default_storage_type_id, SYSUTCDATETIME(), @user_id);
 
         DECLARE @sku_id INT = SCOPE_IDENTITY();
 

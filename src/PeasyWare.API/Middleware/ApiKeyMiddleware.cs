@@ -23,7 +23,8 @@ public sealed class ApiKeyMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
 #if DEBUG
-        if (context.Request.Path.StartsWithSegments("/swagger"))
+        if (context.Request.Path.StartsWithSegments("/swagger") ||
+            context.Request.Path.StartsWithSegments("/openapi"))
         {
             await _next(context);
             return;
