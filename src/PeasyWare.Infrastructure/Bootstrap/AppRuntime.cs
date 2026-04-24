@@ -67,8 +67,8 @@ public sealed class AppRuntime
 
     /// <summary>
     /// Creates a runtime instance for the API.
-    /// Uses the same bootstrap path as CLI/Desktop.
-    /// The API uses the system session context for all operations.
+    /// Resolves the 'api' system user from the database for a named
+    /// audit identity. Falls back to UserId=0 if not found.
     /// </summary>
-    public static AppRuntime CreateForApi() => AppStartup.Initialize();
+    public static AppRuntime CreateForApi() => AppStartup.InitializeForApi();
 }

@@ -116,7 +116,7 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
     public IEnumerable<RoleDto> GetRoles()
     {
         using var connection = _factory.CreateForCommand(_session);
-        using var command = connection.CreateCommand();
+        using var command    = connection.CreateCommand();
 
         command.CommandText = "auth.usp_roles_get";
         command.CommandType = CommandType.StoredProcedure;
@@ -129,8 +129,9 @@ public sealed class SqlUserQueryRepository : IUserQueryRepository
         {
             roles.Add(new RoleDto
             {
-                RoleName = reader.GetString(reader.GetOrdinal("RoleName")),
-                Description = reader.GetString(reader.GetOrdinal("Description"))
+                RoleName     = reader.GetString(reader.GetOrdinal("RoleName")),
+                Description  = reader.GetString(reader.GetOrdinal("Description")),
+                IsSystemRole = false  // SP only returns non-system roles
             });
         }
 

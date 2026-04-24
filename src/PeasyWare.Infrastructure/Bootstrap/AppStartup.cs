@@ -136,4 +136,54 @@ public static class AppStartup
     {
         //CorrelationContext.Clear();
     }
+
+    /// <summary>
+    /// Initialises the runtime for API use.
+    /// Resolves the 'api' user from the database and builds a named
+    /// system session context for clean audit trail attribution.
+    /// Falls back to UserId=0 if the api user is not yet seeded.
+    /// </summary>
+    public static AppRuntime InitializeForApi()
+    {
+        var runtime = Initialize();
+
+        // Resolve api user ID from DB
+        int apiUserId;
+        try
+        {
+            using var connection = _factory!.Create();
+            connection.Open();
+            using var command    = connection.CreateCommand();
+            command.CommandText  = "SELECT id FROM auth.users WHERE username = 'api'";
+            var result           = command.ExecuteScalar();
+            apiUserId            = result is int id ? id : 0;
+        }
+        catch
+        {
+            apiUserId = 0;
+        }
+
+        if (apiUserId == 0)
+            return runtime; // fall back to bootstrap session
+
+        // Rebuild the system session with the real api user ID
+        var apiSession = new SessionContext(
+            sessionId:             Guid.Empty,
+            userId:                apiUserId,
+            username:              "api",
+            displayName:           "PeasyWare API",
+            sourceApp:             "PeasyWare.API",
+            sourceClient:          Environment.MachineName,
+            sourceIp:              null,
+            correlationId:         null,
+            osInfo:                Environment.OSVersion.ToString(),
+            roleName:              "api",
+            uiMode:                UiMode.Minimal,
+            sessionTimeoutMinutes: int.MaxValue
+        );
+
+        runtime.Repositories.UpdateSystemSession(apiSession);
+
+        return runtime;
+    }
 }

@@ -2,8 +2,8 @@
 {
     public sealed class RoleDto
     {
-        public string RoleName { get; init; } = "";
-        public string Description { get; init; } = "";
+        public string RoleName     { get; init; } = "";
+        public string Description  { get; init; } = "";
+        public bool   IsSystemRole { get; init; } = false;
     }
-
 }

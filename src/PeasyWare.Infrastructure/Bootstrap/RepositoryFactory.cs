@@ -13,6 +13,8 @@ public sealed class RepositoryFactory
     private readonly ILogger               _logger;
     private readonly SessionGuard          _sessionGuard;
     private readonly SessionContext        _systemSession;
+    private          SessionContext        _mutableSystemSession;
+    private          SessionContext        SystemSession => _mutableSystemSession;
 
     public RepositoryFactory(
         SqlConnectionFactory  factory,
@@ -21,11 +23,12 @@ public sealed class RepositoryFactory
         SessionGuard          sessionGuard,
         SessionContext        systemSession)
     {
-        _factory       = factory;
-        _resolver      = resolver;
-        _logger        = logger;
-        _sessionGuard  = sessionGuard;
-        _systemSession = systemSession;
+        _factory              = factory;
+        _resolver             = resolver;
+        _logger               = logger;
+        _sessionGuard         = sessionGuard;
+        _systemSession        = systemSession;
+        _mutableSystemSession = systemSession;
     }
 
     private void BindSession(SessionContext session) =>
@@ -69,7 +72,7 @@ public sealed class RepositoryFactory
 
     /// <summary>Sessionless overload for API use — uses system session.</summary>
     public IInboundCommandRepository CreateInboundCommand()
-        => CreateInboundCommand(_systemSession);
+        => CreateInboundCommand(SystemSession);
 
     public IInboundQueryRepository CreateInboundQuery(SessionContext session)
     {
@@ -105,7 +108,7 @@ public sealed class RepositoryFactory
 
     /// <summary>Sessionless overload for API use — uses system session.</summary>
     public IOutboundCommandRepository CreateOutboundCommand()
-        => CreateOutboundCommand(_systemSession);
+        => CreateOutboundCommand(SystemSession);
 
     // --------------------------------------------------
     // SETTINGS
@@ -138,8 +141,16 @@ public sealed class RepositoryFactory
     // --------------------------------------------------
 
     public ISkuCommandRepository CreateSkuCommand()
-        => new SqlSkuCommandRepository(_factory, _systemSession, _resolver, _logger, _sessionGuard);
+        => new SqlSkuCommandRepository(_factory, SystemSession, _resolver, _logger, _sessionGuard);
 
     public ISkuQueryRepository CreateSkuQuery()
-        => new SqlSkuQueryRepository(_factory, _systemSession);
+        => new SqlSkuQueryRepository(_factory, SystemSession);
+
+    /// <summary>
+    /// Replaces the system session used by sessionless overloads.
+    /// Called by AppStartup.InitializeForApi() after the api user
+    /// is resolved from the database.
+    /// </summary>
+    internal void UpdateSystemSession(SessionContext session)
+        => _mutableSystemSession = session;
 }
