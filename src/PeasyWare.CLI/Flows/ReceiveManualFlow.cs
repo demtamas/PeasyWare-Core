@@ -330,7 +330,7 @@ public sealed class ReceiveManualFlow
                 return;
             }
 
-            Console.ReadKey(true);
+            System.Threading.Thread.Sleep(1000);
         }
     }
 

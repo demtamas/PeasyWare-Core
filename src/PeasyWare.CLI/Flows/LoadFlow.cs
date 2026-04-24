@@ -18,9 +18,9 @@ namespace PeasyWare.CLI.Flows;
 /// Flow:
 ///   1. Show active shipments (OPEN or LOADING)
 ///   2. Operator selects shipment by # or ref
-///   3. Show orders on the shipment (PICKED or LOADED)
-///   4. Operator selects an order by # or ref to mark as loaded
-///   5. Repeat until done (0 to finish)
+///   3. Show orders on the shipment — pending numbered, loaded unnumbered
+///   4. Operator selects a pending order by # or ref to mark as loaded
+///   5. When all orders loaded, auto-exits with confirmation message
 /// </summary>
 public sealed class LoadFlow
 {
@@ -106,14 +106,27 @@ public sealed class LoadFlow
                     break;
                 }
 
+                var pending = orders.Where(o => o.OrderStatusCode != "LOADED").ToList();
+                var loaded  = orders.Where(o => o.OrderStatusCode == "LOADED").ToList();
+
                 Console.WriteLine($"  {"#",-4} {"Order Ref",-16} {"Customer",-24} {"Status"}");
                 Console.WriteLine($"  {new string('-', 58)}");
 
-                for (int i = 0; i < orders.Count; i++)
+                for (int i = 0; i < pending.Count; i++)
                 {
-                    var o = orders[i];
-                    var status = o.OrderStatusCode == "LOADED" ? "LOADED ✓" : o.OrderStatusCode;
-                    Console.WriteLine($"  {i + 1,-4} {o.OrderRef,-16} {o.CustomerName,-24} {status}");
+                    var o = pending[i];
+                    Console.WriteLine($"  {i + 1,-4} {o.OrderRef,-16} {o.CustomerName,-24} {o.OrderStatusCode}");
+                }
+
+                foreach (var o in loaded)
+                    Console.WriteLine($"  {"  ",-4} {o.OrderRef,-16} {o.CustomerName,-24} LOADED \u2713");
+
+                if (pending.Count == 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("All orders loaded. Press any key to return.");
+                    Console.ReadKey(true);
+                    break;
                 }
 
                 Console.WriteLine();
@@ -125,22 +138,15 @@ public sealed class LoadFlow
 
                 OutboundOrderSummaryDto? selectedOrder;
 
-                if (int.TryParse(orderInput, out var orderSeq) && orderSeq >= 1 && orderSeq <= orders.Count)
-                    selectedOrder = orders[orderSeq - 1];
+                if (int.TryParse(orderInput, out var orderSeq) && orderSeq >= 1 && orderSeq <= pending.Count)
+                    selectedOrder = pending[orderSeq - 1];
                 else
-                    selectedOrder = orders.FirstOrDefault(o =>
+                    selectedOrder = pending.FirstOrDefault(o =>
                         string.Equals(o.OrderRef, orderInput, StringComparison.OrdinalIgnoreCase));
 
                 if (selectedOrder is null)
                 {
-                    Console.WriteLine("Order not found on this shipment.");
-                    Console.ReadKey(true);
-                    continue;
-                }
-
-                if (selectedOrder.OrderStatusCode == "LOADED")
-                {
-                    Console.WriteLine($"{selectedOrder.OrderRef} is already marked as loaded.");
+                    Console.WriteLine("Order not found or already loaded.");
                     Console.ReadKey(true);
                     continue;
                 }
