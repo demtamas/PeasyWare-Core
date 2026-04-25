@@ -33,16 +33,16 @@ public static class GtinParser
     public static GtinScanResult Parse(string? rawScan)
     {
         if (string.IsNullOrWhiteSpace(rawScan))
-            return GtinScanResult.Invalid("Scan input is empty.");
+            return GtinScanResult.Invalid("Scan input is empty.", rawScan);
 
         try
         {
             var normalised = Normalise(rawScan);
-            return ParseNormalised(normalised);
+            return ParseNormalised(normalised, rawScan);
         }
         catch (Exception ex)
         {
-            return GtinScanResult.Invalid($"Parse error: {ex.Message}");
+            return GtinScanResult.Invalid($"Parse error: {ex.Message}", rawScan);
         }
     }
 
@@ -116,7 +116,7 @@ public static class GtinParser
     // Core parser — walks the normalised string
     // --------------------------------------------------
 
-    private static GtinScanResult ParseNormalised(string data)
+    private static GtinScanResult ParseNormalised(string data, string? rawScan)
     {
         string?  sscc      = null;
         string?  gtin      = null;
@@ -166,7 +166,7 @@ public static class GtinParser
                     break;
 
                 case "10":
-                    batch = ReadVariable(data, ref pos, 20);
+                    batch = IdentifierPolicy.NormaliseBatch(ReadVariable(data, ref pos, 20));
                     if (batch is not null) recognised++;
                     break;
 
@@ -197,7 +197,7 @@ public static class GtinParser
         }
 
         if (recognised == 0)
-            return GtinScanResult.Empty();
+            return GtinScanResult.Empty(rawScan);
 
         return new GtinScanResult
         {
@@ -206,7 +206,8 @@ public static class GtinParser
             Batch      = batch,
             BestBefore = bbe,
             Quantity   = quantity,
-            IsValid    = true
+            IsValid    = true,
+            RawScan    = rawScan
         };
     }
 

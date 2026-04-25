@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PeasyWare.API.Requests;
 using PeasyWare.API.Responses;
+using PeasyWare.Application.Scanning;
 using PeasyWare.Infrastructure.Bootstrap;
 
 namespace PeasyWare.API.Controllers;
@@ -55,7 +56,7 @@ public sealed class InboundController : ControllerBase
             inboundRef:         inboundRef,
             skuCode:            request.SkuCode,
             expectedQty:        request.ExpectedQty,
-            batchNumber:        request.BatchNumber,
+            batchNumber:        IdentifierPolicy.NormaliseBatch(request.BatchNumber),
             bestBeforeDate:     request.BestBeforeDate.HasValue
                                     ? request.BestBeforeDate.Value.ToDateTime(TimeOnly.MinValue)
                                     : null,
@@ -104,7 +105,7 @@ public sealed class InboundController : ControllerBase
                 inboundRef:     inboundRef,
                 sscc:           sscc,
                 quantity:       unit.Quantity,
-                batchNumber:    unit.BatchNumber,
+                batchNumber:    IdentifierPolicy.NormaliseBatch(unit.BatchNumber),
                 bestBeforeDate: unit.BestBeforeDate.HasValue
                                     ? unit.BestBeforeDate.Value.ToDateTime(TimeOnly.MinValue)
                                     : null);

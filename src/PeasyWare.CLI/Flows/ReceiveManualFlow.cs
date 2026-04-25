@@ -316,6 +316,7 @@ public sealed class ReceiveManualFlow
 
             if (!result.Success)
             {
+                Console.WriteLine(result.FriendlyMessage);
                 Console.ReadKey(true);
                 continue;
             }
@@ -337,6 +338,7 @@ public sealed class ReceiveManualFlow
     private static void RenderScanTrace(string label, GtinScanResult scan)
     {
         Console.WriteLine($"[{label}] IsPallet={scan.IsPalletScan} IsProduct={scan.IsProductScan}");
+        if (scan.RawScan    is not null) Console.WriteLine($"[{label}] Raw:   {scan.RawScan}");
         if (scan.Sscc       is not null) Console.WriteLine($"[{label}] SSCC:  {scan.Sscc}");
         if (scan.Gtin       is not null) Console.WriteLine($"[{label}] GTIN:  {scan.Gtin}");
         if (scan.Batch      is not null) Console.WriteLine($"[{label}] Batch: {scan.Batch}");

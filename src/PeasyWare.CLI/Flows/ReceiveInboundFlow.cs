@@ -130,6 +130,7 @@ namespace PeasyWare.Application.Flows
                 if (_session.UiMode == UiMode.Trace && scan.IsValid)
                 {
                     Console.WriteLine($"[SCAN] IsPallet={scan.IsPalletScan} IsProduct={scan.IsProductScan}");
+                    if (scan.RawScan    is not null) Console.WriteLine($"[SCAN] Raw:   {scan.RawScan}");
                     if (scan.Sscc       is not null) Console.WriteLine($"[SCAN] SSCC:  {scan.Sscc}");
                     if (scan.Gtin       is not null) Console.WriteLine($"[SCAN] GTIN:  {scan.Gtin}");
                     if (scan.Batch      is not null) Console.WriteLine($"[SCAN] Batch: {scan.Batch}");

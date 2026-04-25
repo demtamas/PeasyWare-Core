@@ -37,6 +37,13 @@ public sealed class GtinScanResult
     /// <summary>Populated when IsValid is false or a parsing error occurred.</summary>
     public string? ErrorReason { get; init; }
 
+    /// <summary>
+    /// The original raw string as received from the scanner, before any parsing.
+    /// Preserved for diagnostics and troubleshooting — if a scan misparse causes
+    /// a receiving error, this field allows the exact scanner output to be replayed.
+    /// </summary>
+    public string? RawScan { get; init; }
+
     // --------------------------------------------------
     // Convenience
     // --------------------------------------------------
@@ -51,15 +58,17 @@ public sealed class GtinScanResult
     // Factory helpers
     // --------------------------------------------------
 
-    internal static GtinScanResult Invalid(string reason) => new()
+    internal static GtinScanResult Invalid(string reason, string? rawScan = null) => new()
     {
         IsValid     = false,
-        ErrorReason = reason
+        ErrorReason = reason,
+        RawScan     = rawScan
     };
 
-    internal static GtinScanResult Empty() => new()
+    internal static GtinScanResult Empty(string? rawScan = null) => new()
     {
         IsValid     = false,
-        ErrorReason = "No recognised Application Identifiers found in scan."
+        ErrorReason = "No recognised Application Identifiers found in scan.",
+        RawScan     = rawScan
     };
 }

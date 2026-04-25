@@ -1,5 +1,6 @@
 using PeasyWare.Application;
 using PeasyWare.Application.Dto;
+using PeasyWare.Application.Scanning;
 using System;
 
 namespace PeasyWare.CLI.UI;
@@ -107,7 +108,7 @@ public static class ReceiveManualScreen
     {
         if (prefilled is not null)
         {
-            var normalised = prefilled.ToUpperInvariant();
+            var normalised = IdentifierPolicy.NormaliseBatch(prefilled);
             Console.WriteLine($"Batch:       {normalised}  [from scan]");
             return normalised;
         }
@@ -121,7 +122,7 @@ public static class ReceiveManualScreen
             var input = Console.ReadLine()?.Trim();
 
             if (!string.IsNullOrWhiteSpace(input))
-                return input.Trim().ToUpperInvariant();
+                return IdentifierPolicy.NormaliseBatch(input);
 
             if (!isRequired)
                 return null;
