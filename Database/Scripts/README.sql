@@ -1,0 +1,24 @@
+-- Database/Scripts/README.md
+--
+-- This directory will contain atomic SQL scripts once the split is complete.
+-- Until then, use Database/DEV/DEV_AllInOneInOneGo.sql directly.
+--
+-- Planned structure (numbered for execution order):
+--   000_setup/        -- database creation, schemas
+--   010_operations/   -- settings, error_messages tables
+--   020_audit/        -- audit tables and SP
+--   030_auth/         -- auth tables
+--   040_core/         -- parties, suppliers, customers
+--   050_locations/    -- bins, zones, storage types
+--   060_inventory/    -- SKUs, inventory units
+--   070_inbound/      -- inbound tables
+--   080_warehouse/    -- warehouse task tables
+--   090_outbound/     -- outbound tables
+--   100_operations/   -- operations SPs and views
+--   110_auth/         -- auth SPs, functions, views, triggers
+--   120_locations/    -- location SPs
+--   130_inventory/    -- inventory views and SPs
+--   140_inbound/      -- inbound SPs, views, triggers
+--   150_warehouse/    -- warehouse task SPs
+--   160_outbound/     -- outbound SPs
+--   900_seed/         -- error messages, reference data

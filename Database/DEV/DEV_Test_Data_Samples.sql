@@ -399,9 +399,6 @@ GO
 -- ============================================================
 
 DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @CustomerId   INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_CUSTOMER');
-DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
 
 -- Order 1
 IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD01')
@@ -411,14 +408,13 @@ BEGIN
          "requested_batch":null,"requested_bbe":null,"notes":"2 pallets"}
     ]';
     EXEC outbound.usp_create_order
-        @order_ref         = 'TESTORD01',
-        @customer_party_id = @CustomerId,
-        @haulier_party_id  = @HaulierId,
-        @required_date     = '2027-06-30',
-        @order_source      = 'MANUAL',
-        @notes             = 'Test order 1 — 2 pallets 290812',
-        @lines_json        = @Ord1Lines,
-        @user_id           = @SystemUserId;
+        @order_ref           = 'TESTORD01',
+        @customer_party_code = 'DUMMY_CUSTOMER',
+        @haulier_party_code  = 'DUMMY_HAULIER',
+        @required_date       = '2027-06-30',
+        @notes               = 'Test order 1 — 2 pallets 290812',
+        @lines_json          = @Ord1Lines,
+        @user_id             = @SystemUserId;
     PRINT 'TESTORD01 created.';
 END
 ELSE PRINT 'TESTORD01 already exists — skipped.';
@@ -431,14 +427,13 @@ BEGIN
          "requested_batch":null,"requested_bbe":null,"notes":"3 pallets"}
     ]';
     EXEC outbound.usp_create_order
-        @order_ref         = 'TESTORD02',
-        @customer_party_id = @CustomerId,
-        @haulier_party_id  = @HaulierId,
-        @required_date     = '2027-06-30',
-        @order_source      = 'MANUAL',
-        @notes             = 'Test order 2 — 3 pallets 290812',
-        @lines_json        = @Ord2Lines,
-        @user_id           = @SystemUserId;
+        @order_ref           = 'TESTORD02',
+        @customer_party_code = 'DUMMY_CUSTOMER',
+        @haulier_party_code  = 'DUMMY_HAULIER',
+        @required_date       = '2027-06-30',
+        @notes               = 'Test order 2 — 3 pallets 290812',
+        @lines_json          = @Ord2Lines,
+        @user_id             = @SystemUserId;
     PRINT 'TESTORD02 created.';
 END
 ELSE PRINT 'TESTORD02 already exists — skipped.';
@@ -451,14 +446,13 @@ BEGIN
          "requested_batch":null,"requested_bbe":null,"notes":"5 pallets"}
     ]';
     EXEC outbound.usp_create_order
-        @order_ref         = 'TESTORD03',
-        @customer_party_id = @CustomerId,
-        @haulier_party_id  = @HaulierId,
-        @required_date     = '2027-06-30',
-        @order_source      = 'MANUAL',
-        @notes             = 'Test order 3 — 5 pallets 290812',
-        @lines_json        = @Ord3Lines,
-        @user_id           = @SystemUserId;
+        @order_ref           = 'TESTORD03',
+        @customer_party_code = 'DUMMY_CUSTOMER',
+        @haulier_party_code  = 'DUMMY_HAULIER',
+        @required_date       = '2027-06-30',
+        @notes               = 'Test order 3 — 5 pallets 290812',
+        @lines_json          = @Ord3Lines,
+        @user_id             = @SystemUserId;
     PRINT 'TESTORD03 created.';
 END
 ELSE PRINT 'TESTORD03 already exists — skipped.';
@@ -466,28 +460,21 @@ GO
 
 -- Shipments (separate batch — orders must exist first)
 DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');
-DECLARE @HaulierId    INT = (SELECT party_id FROM core.parties WHERE party_code = 'DUMMY_HAULIER');
-DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
 
 -- Shipment 1: Order 1 only
 IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP01')
 BEGIN
     EXEC outbound.usp_create_shipment
-        @shipment_ref         = 'TESTSHIP01',
-        @haulier_party_id     = @HaulierId,
-        @vehicle_ref          = 'TEST-VEH-01',
-        @ship_from_address_id = @OwnAddrId,
-        @planned_departure    = NULL,
-        @notes                = 'Test shipment 1 — single order',
-        @user_id              = @SystemUserId;
-
-    DECLARE @Ship1Id INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP01');
-    DECLARE @Ord1Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD01');
+        @shipment_ref       = 'TESTSHIP01',
+        @haulier_party_code = 'DUMMY_HAULIER',
+        @vehicle_ref        = 'TEST-VEH-01',
+        @notes              = 'Test shipment 1 — single order',
+        @user_id            = @SystemUserId;
 
     EXEC outbound.usp_add_order_to_shipment
-        @outbound_order_id = @Ord1Id,
-        @shipment_id       = @Ship1Id,
-        @user_id           = @SystemUserId;
+        @shipment_ref = 'TESTSHIP01',
+        @order_ref    = 'TESTORD01',
+        @user_id      = @SystemUserId;
 
     PRINT 'TESTSHIP01 created — linked to TESTORD01.';
 END
@@ -497,27 +484,21 @@ ELSE PRINT 'TESTSHIP01 already exists — skipped.';
 IF NOT EXISTS (SELECT 1 FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP02')
 BEGIN
     EXEC outbound.usp_create_shipment
-        @shipment_ref         = 'TESTSHIP02',
-        @haulier_party_id     = @HaulierId,
-        @vehicle_ref          = 'TEST-VEH-02',
-        @ship_from_address_id = @OwnAddrId,
-        @planned_departure    = NULL,
-        @notes                = 'Test shipment 2 — two orders',
-        @user_id              = @SystemUserId;
-
-    DECLARE @Ship2Id INT = (SELECT shipment_id FROM outbound.shipments WHERE shipment_ref = 'TESTSHIP02');
-    DECLARE @Ord2Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD02');
-    DECLARE @Ord3Id  INT = (SELECT outbound_order_id FROM outbound.outbound_orders WHERE order_ref = 'TESTORD03');
+        @shipment_ref       = 'TESTSHIP02',
+        @haulier_party_code = 'DUMMY_HAULIER',
+        @vehicle_ref        = 'TEST-VEH-02',
+        @notes              = 'Test shipment 2 — two orders',
+        @user_id            = @SystemUserId;
 
     EXEC outbound.usp_add_order_to_shipment
-        @outbound_order_id = @Ord2Id,
-        @shipment_id       = @Ship2Id,
-        @user_id           = @SystemUserId;
+        @shipment_ref = 'TESTSHIP02',
+        @order_ref    = 'TESTORD02',
+        @user_id      = @SystemUserId;
 
     EXEC outbound.usp_add_order_to_shipment
-        @outbound_order_id = @Ord3Id,
-        @shipment_id       = @Ship2Id,
-        @user_id           = @SystemUserId;
+        @shipment_ref = 'TESTSHIP02',
+        @order_ref    = 'TESTORD03',
+        @user_id      = @SystemUserId;
 
     PRINT 'TESTSHIP02 created — linked to TESTORD02 + TESTORD03.';
 END

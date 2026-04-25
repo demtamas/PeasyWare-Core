@@ -2959,22 +2959,6 @@ BEGIN
 END
 GO
 
--- Add api user
-IF NOT EXISTS (SELECT 1 FROM auth.users WHERE username = 'api')
-BEGIN
-    EXEC auth.usp_create_user
-        @username     = 'api',
-        @display_name = 'PeasyWare API',
-        @role_name    = 'api',
-        @email        = 'api@pw.local',
-        @password     = 'ChangeMe123!',
-        @result_code  = NULL,
-        @friendly_msg = NULL;
-    PRINT 'api user created.';
-END
-ELSE
-    PRINT 'api user already exists — skipped.';
-GO
 
 IF OBJECT_ID('auth.usp_update_role_by_name', 'P') IS NOT NULL
     DROP PROCEDURE auth.usp_update_role_by_name;
@@ -7328,6 +7312,24 @@ LogAndExit:
 
     END CATCH;
 END;
+GO
+
+
+-- Add api user
+IF NOT EXISTS (SELECT 1 FROM auth.users WHERE username = 'api')
+BEGIN
+    EXEC auth.usp_create_user
+        @username     = 'api',
+        @display_name = 'PeasyWare API',
+        @role_name    = 'api',
+        @email        = 'api@pw.local',
+        @password     = 'ChangeMe123!',
+        @result_code  = NULL,
+        @friendly_msg = NULL;
+    PRINT 'api user created.';
+END
+ELSE
+    PRINT 'api user already exists — skipped.';
 GO
 
 CREATE OR ALTER PROCEDURE locations.usp_suggest_putaway_bin
