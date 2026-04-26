@@ -161,7 +161,16 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
     }
 
     // ------------------------------------------------------------
-    // Receivable receipts
+    // Reversible receipts — staging bin only
+    //
+    // Design decision: only receipts currently in a staging bin
+    // are reversible. This covers:
+    //   - RCD units that have never been put away
+    //   - PTW units that were put away then moved back to staging
+    //     via bin-to-bin move (operator moves to staging to reverse)
+    //
+    // Units in rack bins (PUT state, RACK storage type) are not
+    // reversible — use inventory adjustment instead.
     // ------------------------------------------------------------
 
     public IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef)
@@ -182,10 +191,12 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
             JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
             LEFT JOIN inventory.inventory_placements p ON p.inventory_unit_id = r.inventory_unit_id
             LEFT JOIN locations.bins b           ON b.bin_id = p.bin_id
+            LEFT JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
             WHERE d.inbound_ref         = @ref
               AND r.is_reversal         = 0
               AND r.reversed_receipt_id IS NULL
-              AND iu.stock_state_code   = 'RCD'
+              AND iu.stock_state_code   IN ('RCD', 'PTW')
+              AND st.storage_type_code  = 'STAGE'
             ORDER BY r.receipt_id
         """;
 
@@ -230,12 +241,6 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
     // ------------------------------------------------------------
     // Receivable line by EAN / GTIN / SKU code
-    //
-    // Accepts a raw input that may be an EAN, a GTIN extracted by the
-    // resolver, or a plain SKU code typed manually by the operator.
-    // EAN match takes priority over SKU code match.
-    // Returns IsBatchRequired and StandardHuQuantity for the flow.
-    // MatchedBy indicates which field was used ("EAN" or "SKU").
     // ------------------------------------------------------------
 
     public InboundLineByEanDto? GetReceivableLineByEan(string inboundRef, string input)
