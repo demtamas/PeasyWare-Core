@@ -4,15 +4,6 @@ namespace PeasyWare.Tools.Commands;
 
 /// <summary>
 /// Prints a quick health dashboard for the PeasyWare database.
-///
-/// Shows:
-///   - Row counts per key table
-///   - Active sessions
-///   - Open inbounds / outbounds
-///   - Locked SSCC claims
-///   - Last 5 audit events
-///
-/// Usage: pwtools stats
 /// </summary>
 internal static class StatsCommand
 {
@@ -37,7 +28,7 @@ internal static class StatsCommand
             {
                 ("SKUs",              "SELECT COUNT(*) FROM inventory.skus WHERE is_active = 1"),
                 ("Inventory units",   "SELECT COUNT(*) FROM inventory.inventory_units WHERE stock_state_code NOT IN ('SHP','REV')"),
-                ("Available units",   "SELECT COUNT(*) FROM inventory.inventory_units WHERE stock_state_code = 'PUT' AND stock_status_code = 'AV'"),
+                ("Available units",   "SELECT COUNT(*) FROM inventory.inventory_units WHERE stock_state_code = 'PTW' AND stock_status_code = 'AV'"),
                 ("Received (staging)","SELECT COUNT(*) FROM inventory.inventory_units WHERE stock_state_code = 'RCD'"),
             }, conn);
 
@@ -64,10 +55,9 @@ internal static class StatsCommand
 
             PrintSection("Sessions", new[]
             {
-                ("Active sessions",   "SELECT COUNT(*) FROM auth.user_sessions WHERE expires_at > SYSUTCDATETIME()"),
+                ("Active sessions",   "SELECT COUNT(*) FROM auth.user_sessions WHERE is_active = 1 AND session_status = 'ACTIVE'"),
             }, conn);
 
-            // Last 5 audit events
             Console.WriteLine("Recent audit events");
             Console.WriteLine(new string('─', 60));
             PrintRecentEvents(conn);
@@ -108,12 +98,12 @@ internal static class StatsCommand
     {
         const string sql = """
             SELECT TOP 5
-                CONVERT(NVARCHAR(19), logged_at, 120) AS at,
+                CONVERT(NVARCHAR(19), occurred_at, 120) AS at,
                 ISNULL(CONVERT(NVARCHAR(5), user_id), 'sys') AS usr,
-                event_name,
-                result_code
+                action,
+                level
             FROM audit.trace_logs
-            ORDER BY log_id DESC
+            ORDER BY trace_id DESC
             """;
 
         try
@@ -123,11 +113,11 @@ internal static class StatsCommand
 
             while (reader.Read())
             {
-                var at     = reader.GetString(0);
-                var usr    = reader.GetString(1);
-                var evt    = reader.GetString(2);
-                var code   = reader.GetString(3);
-                Console.WriteLine($"  {at}  usr={usr,-6}  {evt,-35} {code}");
+                var at  = reader.GetString(0);
+                var usr = reader.GetString(1);
+                var act = reader.GetString(2);
+                var lvl = reader.GetString(3);
+                Console.WriteLine($"  {at}  usr={usr,-6}  {lvl,-5}  {act}");
             }
         }
         catch (Exception ex)
