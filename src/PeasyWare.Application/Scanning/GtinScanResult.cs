@@ -8,27 +8,49 @@ namespace PeasyWare.Application.Scanning;
 ///
 /// Supported AIs:
 ///   00 — SSCC-18 (pallet identifier)
-///   01 — GTIN-14 (product identifier)
+///   01 — GTIN-14 (product identifier, the pallet's own GTIN)
+///   02 — GTIN-14 (GTIN of contained trade items — used on pallet labels
+///                  like Ardagh where the pallet GTIN differs from the item GTIN)
 ///   10 — Batch / Lot number
-///   15 — Best Before End date (YYMMDD, last day of month)
-///   17 — Use By / Expiry date (YYMMDD, exact date)
-///   37 — Quantity
+///   11 — Production date (YYMMDD)
+///   15 — Best Before End date (YYMMDD)
+///   17 — Use By / Expiry date (YYMMDD)
+///   21 — Serial number (variable length, up to 20 chars)
+///   37 — Quantity of contained items
 /// </summary>
 public sealed class GtinScanResult
 {
     /// <summary>AI 00 — Serial Shipping Container Code (18 digits)</summary>
     public string? Sscc { get; init; }
 
-    /// <summary>AI 01 — Global Trade Item Number (14 digits)</summary>
+    /// <summary>AI 01 — GTIN-14 of the pallet / shipping unit itself</summary>
     public string? Gtin { get; init; }
+
+    /// <summary>
+    /// AI 02 — GTIN-14 of the contained trade items.
+    /// Present on pallet labels where the pallet's GTIN (AI 01) differs from
+    /// the item GTIN (AI 02). Common on supplier labels (e.g. Ardagh Group).
+    /// Use this as the product identifier when AI 01 is absent.
+    /// </summary>
+    public string? ContainedGtin { get; init; }
 
     /// <summary>AI 10 — Batch or lot number (variable length, up to 20 chars)</summary>
     public string? Batch { get; init; }
 
+    /// <summary>AI 11 — Production date</summary>
+    public DateOnly? ProductionDate { get; init; }
+
     /// <summary>AI 15 or 17 — Best before / expiry date</summary>
     public DateOnly? BestBefore { get; init; }
 
-    /// <summary>AI 37 — Item quantity (variable length)</summary>
+    /// <summary>
+    /// AI 21 — Serial number (variable length, up to 20 chars).
+    /// Distinct from batch number — identifies a specific unit rather than a lot.
+    /// On Ardagh labels this is the Customer Ref / production run number.
+    /// </summary>
+    public string? SerialNumber { get; init; }
+
+    /// <summary>AI 37 — Count of contained trade items</summary>
     public int? Quantity { get; init; }
 
     /// <summary>True if at least one recognised AI was successfully parsed.</summary>
@@ -51,8 +73,17 @@ public sealed class GtinScanResult
     /// <summary>True if this scan identifies a specific pallet (has SSCC).</summary>
     public bool IsPalletScan => Sscc is not null;
 
-    /// <summary>True if this scan identifies a product (has GTIN).</summary>
-    public bool IsProductScan => Gtin is not null;
+    /// <summary>
+    /// True if this scan identifies a product by GTIN.
+    /// Checks both AI 01 (pallet GTIN) and AI 02 (contained item GTIN).
+    /// </summary>
+    public bool IsProductScan => Gtin is not null || ContainedGtin is not null;
+
+    /// <summary>
+    /// The best available product GTIN from this scan.
+    /// Prefers AI 01 (direct GTIN) over AI 02 (contained GTIN).
+    /// </summary>
+    public string? EffectiveGtin => Gtin ?? ContainedGtin;
 
     // --------------------------------------------------
     // Factory helpers

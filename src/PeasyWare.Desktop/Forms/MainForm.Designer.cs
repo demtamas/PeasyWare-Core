@@ -66,6 +66,7 @@
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
             pnlMain = new Panel();
+            inventoryActiveToolStripMenuItem = new ToolStripMenuItem();
             pnlMenuStrip.SuspendLayout();
             menuStrip1.SuspendLayout();
             pnlToolStrip.SuspendLayout();
@@ -126,6 +127,7 @@
             // 
             // inventoryToolStripMenuItem
             // 
+            inventoryToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { inventoryActiveToolStripMenuItem, materialsToolStripMenuItem });
             inventoryToolStripMenuItem.Name = "inventoryToolStripMenuItem";
             inventoryToolStripMenuItem.Size = new Size(69, 20);
             inventoryToolStripMenuItem.Text = "In&ventory";
@@ -150,7 +152,7 @@
             // 
             // adminToolStripMenuItem
             // 
-            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem, locationsToolStripMenuItem, materialsToolStripMenuItem, suppliersToolStripMenuItem, customersToolStripMenuItem });
+            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem, locationsToolStripMenuItem, suppliersToolStripMenuItem, customersToolStripMenuItem });
             adminToolStripMenuItem.Name = "adminToolStripMenuItem";
             adminToolStripMenuItem.Size = new Size(55, 20);
             adminToolStripMenuItem.Text = "&Admin";
@@ -192,6 +194,7 @@
             materialsToolStripMenuItem.Name = "materialsToolStripMenuItem";
             materialsToolStripMenuItem.Size = new Size(191, 22);
             materialsToolStripMenuItem.Text = "&Materials";
+            materialsToolStripMenuItem.Click += materialsToolStripMenuItem_Click;
             // 
             // suppliersToolStripMenuItem
             // 
@@ -334,6 +337,13 @@
             pnlMain.Size = new Size(1384, 675);
             pnlMain.TabIndex = 3;
             // 
+            // inventoryActiveToolStripMenuItem
+            // 
+            inventoryActiveToolStripMenuItem.Name = "inventoryActiveToolStripMenuItem";
+            inventoryActiveToolStripMenuItem.Size = new Size(180, 22);
+            inventoryActiveToolStripMenuItem.Text = "&Inventory (Active)";
+            inventoryActiveToolStripMenuItem.Click += inventoryActiveToolStripMenuItem_Click;
+            // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -401,5 +411,6 @@
         private ToolStripMenuItem clientSettingsToolStripMenuItem;
         private StatusStrip statusStrip1;
         private ToolStripStatusLabel toolStripStatusLabel1;
+        private ToolStripMenuItem inventoryActiveToolStripMenuItem;
     }
 }

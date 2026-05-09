@@ -4,5 +4,6 @@ namespace PeasyWare.Application.Interfaces;
 
 public interface ISkuQueryRepository
 {
-    SkuDto? GetByCode(string skuCode);
+    SkuDto?               GetByCode(string skuCode);
+    IReadOnlyList<SkuDto> GetAll(bool includeInactive = false);
 }

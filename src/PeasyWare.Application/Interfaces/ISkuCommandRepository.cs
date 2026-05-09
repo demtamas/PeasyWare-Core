@@ -10,4 +10,14 @@ public interface ISkuCommandRepository
         decimal? weightPerUnit      = null,
         int      standardHuQuantity = 0,
         bool     isHazardous        = false);
+
+    OperationResult UpdateSku(
+        string   skuCode,
+        string   skuDescription,
+        string?  ean                = null,
+        string   uomCode            = "Each",
+        decimal? weightPerUnit      = null,
+        int      standardHuQuantity = 0,
+        bool     isHazardous        = false,
+        bool     isActive           = true);
 }

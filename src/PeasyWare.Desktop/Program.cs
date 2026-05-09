@@ -53,7 +53,7 @@ try
             sourceApp: "PeasyWare.Desktop",
             sourceClient: Environment.MachineName,
             sourceIp: IpResolver.GetLocalIPv4(),
-            correlationId: null,
+            correlationId: Guid.NewGuid(),
             osInfo: Environment.OSVersion.ToString(),
             roleName: loginForm.RoleName,
             uiMode: loginForm.UiMode,

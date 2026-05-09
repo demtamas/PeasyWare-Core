@@ -130,11 +130,15 @@ namespace PeasyWare.Application.Flows
                 if (_session.UiMode == UiMode.Trace && scan.IsValid)
                 {
                     Console.WriteLine($"[SCAN] IsPallet={scan.IsPalletScan} IsProduct={scan.IsProductScan}");
-                    if (scan.RawScan    is not null) Console.WriteLine($"[SCAN] Raw:   {scan.RawScan}");
-                    if (scan.Sscc       is not null) Console.WriteLine($"[SCAN] SSCC:  {scan.Sscc}");
-                    if (scan.Gtin       is not null) Console.WriteLine($"[SCAN] GTIN:  {scan.Gtin}");
-                    if (scan.Batch      is not null) Console.WriteLine($"[SCAN] Batch: {scan.Batch}");
-                    if (scan.BestBefore is not null) Console.WriteLine($"[SCAN] BBE:   {scan.BestBefore:dd-MM-yyyy}");
+                    if (scan.RawScan        is not null) Console.WriteLine($"[SCAN] Raw:          {scan.RawScan}");
+                    if (scan.Sscc           is not null) Console.WriteLine($"[SCAN] SSCC:         {scan.Sscc}");
+                    if (scan.Gtin           is not null) Console.WriteLine($"[SCAN] GTIN (01):    {scan.Gtin}");
+                    if (scan.ContainedGtin  is not null) Console.WriteLine($"[SCAN] GTIN (02):    {scan.ContainedGtin}");
+                    if (scan.Batch          is not null) Console.WriteLine($"[SCAN] Batch:        {scan.Batch}");
+                    if (scan.SerialNumber   is not null) Console.WriteLine($"[SCAN] Serial:       {scan.SerialNumber}");
+                    if (scan.ProductionDate is not null) Console.WriteLine($"[SCAN] Prod date:    {scan.ProductionDate:dd-MM-yyyy}");
+                    if (scan.BestBefore     is not null) Console.WriteLine($"[SCAN] BBE:          {scan.BestBefore:dd-MM-yyyy}");
+                    if (scan.Quantity       is not null) Console.WriteLine($"[SCAN] Quantity:     {scan.Quantity}");
                 }
 
                 // -------------------------------------------------------

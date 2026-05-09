@@ -12,5 +12,7 @@ public interface IInventoryQueryRepository
 
     IReadOnlyList<ActiveInventoryDto> GetActiveInventoryByBin(string binCode);
 
+    IReadOnlyList<ActiveInventoryDto> GetAllActiveInventory(string? searchTerm = null);
+
     bool BinExists(string binCode);
 }

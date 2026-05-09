@@ -62,6 +62,15 @@ public static class GtinParser
     {
         raw = raw.Replace(Tilde, Fnc1);
 
+        // Strip GS1-128 / Code 128 symbology identifiers that some scanners prepend:
+        //   ]C1  = GS1-128 (most common)
+        //   ]C0  = Code 128 subset A
+        //   ]C2  = Code 128 subset C
+        //   ]e0  = GS1 DataBar
+        // These are 3-character prefixes before the first AI.
+        if (raw.Length > 3 && raw[0] == ']' && char.IsLetter(raw[1]))
+            raw = raw.Substring(3);
+
         if (raw.Contains('('))
             return ExpandParenthesisNotation(raw);
 
@@ -118,11 +127,14 @@ public static class GtinParser
 
     private static GtinScanResult ParseNormalised(string data, string? rawScan)
     {
-        string?  sscc      = null;
-        string?  gtin      = null;
-        string?  batch     = null;
-        DateOnly? bbe      = null;
-        int?     quantity  = null;
+        string?  sscc           = null;
+        string?  gtin           = null;
+        string?  containedGtin  = null;
+        string?  batch          = null;
+        DateOnly? productionDate = null;
+        DateOnly? bbe            = null;
+        string?  serialNumber   = null;
+        int?     quantity       = null;
 
         var pos        = 0;
         var recognised = 0;
@@ -165,9 +177,32 @@ public static class GtinParser
                     }
                     break;
 
+                case "02":
+                    // GTIN of contained trade items — common on pallet/outer labels
+                    // (e.g. Ardagh Group) where the pallet's own GTIN differs from
+                    // the item GTIN inside it.
+                    if (pos + 14 <= data.Length)
+                    {
+                        containedGtin = data.Substring(pos, 14);
+                        pos += 14;
+                        recognised++;
+                    }
+                    break;
+
                 case "10":
                     batch = IdentifierPolicy.NormaliseBatch(ReadVariable(data, ref pos, 20));
                     if (batch is not null) recognised++;
+                    break;
+
+                case "11":
+                    // Production date — distinct from best before date
+                    if (pos + 6 <= data.Length)
+                    {
+                        var prodDateStr = data.Substring(pos, 6);
+                        productionDate = ParseGs1Date(prodDateStr);
+                        pos += 6;
+                        if (productionDate is not null) recognised++;
+                    }
                     break;
 
                 case "15":
@@ -179,6 +214,12 @@ public static class GtinParser
                         pos += 6;
                         if (bbe is not null) recognised++;
                     }
+                    break;
+
+                case "21":
+                    // Serial number — identifies a specific unit, not a batch
+                    serialNumber = ReadVariable(data, ref pos, 20);
+                    if (serialNumber is not null) recognised++;
                     break;
 
                 case "37":
@@ -201,13 +242,16 @@ public static class GtinParser
 
         return new GtinScanResult
         {
-            Sscc       = sscc,
-            Gtin       = gtin,
-            Batch      = batch,
-            BestBefore = bbe,
-            Quantity   = quantity,
-            IsValid    = true,
-            RawScan    = rawScan
+            Sscc           = sscc,
+            Gtin           = gtin,
+            ContainedGtin  = containedGtin,
+            Batch          = batch,
+            ProductionDate = productionDate,
+            BestBefore     = bbe,
+            SerialNumber   = serialNumber,
+            Quantity       = quantity,
+            IsValid        = true,
+            RawScan        = rawScan
         };
     }
 
@@ -218,11 +262,12 @@ public static class GtinParser
     /// <summary>
     /// Reads a variable-length field up to maxLength characters.
     /// Stops on FNC1 (the correct GS1 terminator) or end of string.
-    /// Does NOT use AI boundary heuristics — those cause false stops on
-    /// batch values that happen to contain digit sequences like "003".
-    /// In parenthesis format, ExpandParenthesisNotation guarantees FNC1
-    /// is present after each variable-length field.
-    /// In raw flat format, reads to maxLength (best effort without delimiters).
+    ///
+    /// For purely numeric fields in raw flat format (no FNC1 separators),
+    /// also stops when a known 2-char AI is detected at the current position
+    /// AND the remaining field so far is valid length — but ONLY if the field
+    /// so far contains digits only. Alphanumeric batches are never split on
+    /// AI boundaries because "SKU003BATCH" would falsely split on "00".
     /// </summary>
     private static string? ReadVariable(string data, ref int pos, int maxLength)
     {
@@ -232,6 +277,25 @@ public static class GtinParser
         while (end < data.Length && end - start < maxLength)
         {
             if (data[end] == Fnc1) break;
+
+            // Numeric-only AI boundary heuristic for raw flat format only.
+            // ONLY splits on AI '21' (serial number) — the one reliable case
+            // where a numeric batch is followed by a serial number.
+            // We deliberately do NOT split on other AIs to avoid false positives
+            // in batch numbers that contain digit sequences matching valid AIs.
+            // The correct solution is scanner FNC1 configuration.
+            var hasFnc1Ahead = data.IndexOf(Fnc1, end) >= 0;
+            if (!hasFnc1Ahead && end - start >= 2)
+            {
+                var soFar = data.Substring(start, end - start);
+                if (IsAllDigits(soFar) && end + 1 < data.Length)
+                {
+                    var nextTwo = data.Substring(end, Math.Min(2, data.Length - end));
+                    if (nextTwo == "21")
+                        break;
+                }
+            }
+
             end++;
         }
 
@@ -245,6 +309,35 @@ public static class GtinParser
             pos++;
 
         return value;
+    }
+
+    /// <summary>
+    /// AIs that reliably indicate the start of a new field when encountered
+    /// mid-string in raw flat format. Only well-known fixed or clearly delimited
+    /// AIs are included — we exclude rarely-used AIs like 20, 22, 30 that are
+    /// likely to appear as digit sequences inside batch numbers.
+    /// </summary>
+    private static bool IsFieldBoundaryAi(string ai) => ai switch
+    {
+        "00" => true,  // SSCC (18 fixed)
+        "01" => true,  // GTIN-14 (14 fixed)
+        "02" => true,  // Contained GTIN (14 fixed)
+        "10" => true,  // Batch
+        "11" => true,  // Production date
+        "12" => true,  // Due date
+        "13" => true,  // Packaging date
+        "15" => true,  // Best before
+        "17" => true,  // Use by
+        "21" => true,  // Serial number
+        "37" => true,  // Quantity
+        _    => false
+    };
+
+    private static bool IsAllDigits(string s)
+    {
+        foreach (var c in s)
+            if (!char.IsDigit(c)) return false;
+        return true;
     }
 
     /// <summary>

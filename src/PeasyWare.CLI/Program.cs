@@ -167,10 +167,42 @@ runtime.Logger.Info("Session.Start", new
 HeaderRenderer.Render(runtime.Settings, diagnosticsEnabled, session.SessionId);
 Console.WriteLine("Login successful. Welcome back!\n");
 
+// Session touch helper — debounced to 10 seconds for menu navigation.
+// Repo calls (EnsureSession) also touch via SessionGuard, but those only fire
+// when an action is taken. This ensures the session stays alive during
+// menu browsing even if the operator is deciding what to do next.
+var sessionCommand   = runtime.Repositories.CreateSessionCommand(session);
+var lastMenuTouch    = DateTime.UtcNow;
+const int TouchDebounceSeconds = 10;
+
+void TouchSessionIfDue()
+{
+    var now = DateTime.UtcNow;
+    if ((now - lastMenuTouch).TotalSeconds < TouchDebounceSeconds) return;
+    lastMenuTouch = now;
+    var touchResult = sessionCommand.TouchSession(
+        session.SessionId,
+        sourceApp:    "PeasyWare.CLI",
+        sourceClient: Environment.MachineName,
+        sourceIp:     IpResolver.GetLocalIPv4());
+    if (!touchResult.IsAlive)
+        throw new PeasyWare.Application.Security.SessionExpiredException(
+            touchResult.FriendlyMessage);
+}
+
+void HandleSessionExpired()
+{
+    Console.Clear();
+    Console.WriteLine();
+    Console.WriteLine("Your session has expired. Please log in again.");
+    Console.ReadKey(true);
+}
+
 try
 {
     while (true)
     {
+        TouchSessionIfDue();
         var input = MenuRenderer.ShowMainMenu();
 
         switch (input)
@@ -181,8 +213,8 @@ try
 
             case "7":
                 {
-                    var sessionCommand = runtime.Repositories.CreateSessionCommand(session);
-                    var logout = sessionCommand.LogoutSession(
+                    var logoutCmd = runtime.Repositories.CreateSessionCommand(session);
+                    var logout = logoutCmd.LogoutSession(
                         session.SessionId, sourceApp: "PeasyWare.CLI",
                         sourceClient: Environment.MachineName, sourceIp: IpResolver.GetLocalIPv4());
                     Console.WriteLine(logout.FriendlyMessage);
@@ -198,6 +230,10 @@ try
                 break;
         }
     }
+}
+catch (PeasyWare.Application.Security.SessionExpiredException)
+{
+    HandleSessionExpired();
 }
 catch (Exception ex)
 {

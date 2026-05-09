@@ -105,11 +105,11 @@ public sealed class ReceiveManualFlow
 
             if (firstScan.IsValid && firstScan.IsProductScan)
             {
-                line = queryRepo.GetReceivableLineByEan(inboundRef, firstScan.Gtin!);
+                line = queryRepo.GetReceivableLineByEan(inboundRef, firstScan.EffectiveGtin!);
 
                 if (line is null)
                 {
-                    Console.WriteLine($"Material not expected on this inbound. (GTIN: {firstScan.Gtin})");
+                    Console.WriteLine($"Material not expected on this inbound. (GTIN: {firstScan.EffectiveGtin})");
                     Console.ReadKey(true);
                     continue;
                 }
@@ -163,8 +163,8 @@ public sealed class ReceiveManualFlow
                     if (_session.UiMode == UiMode.Trace && secondScan.IsValid)
                         RenderScanTrace("SCAN 2", secondScan);
 
-                    var lookupKey = secondScan.IsValid && secondScan.Gtin is not null
-                        ? secondScan.Gtin
+                    var lookupKey = secondScan.IsValid && secondScan.EffectiveGtin is not null
+                        ? secondScan.EffectiveGtin
                         : secondRaw;
 
                     line = queryRepo.GetReceivableLineByEan(inboundRef, lookupKey);
@@ -338,10 +338,14 @@ public sealed class ReceiveManualFlow
     private static void RenderScanTrace(string label, GtinScanResult scan)
     {
         Console.WriteLine($"[{label}] IsPallet={scan.IsPalletScan} IsProduct={scan.IsProductScan}");
-        if (scan.RawScan    is not null) Console.WriteLine($"[{label}] Raw:   {scan.RawScan}");
-        if (scan.Sscc       is not null) Console.WriteLine($"[{label}] SSCC:  {scan.Sscc}");
-        if (scan.Gtin       is not null) Console.WriteLine($"[{label}] GTIN:  {scan.Gtin}");
-        if (scan.Batch      is not null) Console.WriteLine($"[{label}] Batch: {scan.Batch}");
-        if (scan.BestBefore is not null) Console.WriteLine($"[{label}] BBE:   {scan.BestBefore:dd-MM-yyyy}");
+        if (scan.RawScan        is not null) Console.WriteLine($"[{label}] Raw:          {scan.RawScan}");
+        if (scan.Sscc           is not null) Console.WriteLine($"[{label}] SSCC:         {scan.Sscc}");
+        if (scan.Gtin           is not null) Console.WriteLine($"[{label}] GTIN (01):    {scan.Gtin}");
+        if (scan.ContainedGtin  is not null) Console.WriteLine($"[{label}] GTIN (02):    {scan.ContainedGtin}");
+        if (scan.Batch          is not null) Console.WriteLine($"[{label}] Batch:        {scan.Batch}");
+        if (scan.SerialNumber   is not null) Console.WriteLine($"[{label}] Serial:       {scan.SerialNumber}");
+        if (scan.ProductionDate is not null) Console.WriteLine($"[{label}] Prod date:    {scan.ProductionDate:dd-MM-yyyy}");
+        if (scan.BestBefore     is not null) Console.WriteLine($"[{label}] BBE:          {scan.BestBefore:dd-MM-yyyy}");
+        if (scan.Quantity       is not null) Console.WriteLine($"[{label}] Quantity:     {scan.Quantity}");
     }
 }

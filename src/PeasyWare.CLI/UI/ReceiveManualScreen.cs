@@ -122,7 +122,17 @@ public static class ReceiveManualScreen
             var input = Console.ReadLine()?.Trim();
 
             if (!string.IsNullOrWhiteSpace(input))
+            {
+                // If the input looks like a GS1 barcode scan (longer than 10 chars
+                // or starts with a known AI prefix), try to extract the batch AI 10.
+                // This handles operators scanning the Ardagh batch/serial barcode
+                // (10)2604062414(21)128834 directly into the batch prompt.
+                var scan = GtinParser.Parse(input);
+                if (scan.IsValid && scan.Batch is not null)
+                    return IdentifierPolicy.NormaliseBatch(scan.Batch);
+
                 return IdentifierPolicy.NormaliseBatch(input);
+            }
 
             if (!isRequired)
                 return null;

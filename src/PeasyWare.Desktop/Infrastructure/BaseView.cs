@@ -1,28 +1,28 @@
-﻿using PeasyWare.Application.Security;
-using PeasyWare.Desktop.Forms;
-using PeasyWare.Desktop.Infrastructure.Ui;
+﻿using PeasyWare.Desktop.Forms;
 using System;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace PeasyWare.Desktop.Infrastructure;
 
-public abstract partial class BaseView : UserControl
+public partial class BaseView : UserControl
 {
     private MainForm? _main;
 
-    protected MainForm Main
+    protected MainForm? Main
     {
         get
         {
+            if (DesignMode)
+                return null;
+
             _main ??= FindForm() as MainForm;
-            return _main!;
+            return _main;
         }
     }
 
     protected void Execute(Action action)
     {
-        if (Main == null)
+        if (Main is null)
             return;
 
         Main.ExecuteWithSession(action);
@@ -35,10 +35,9 @@ public abstract partial class BaseView : UserControl
 
     protected bool CanExecute()
     {
-        return Main != null && !Main.GetIsSessionExpired();
+        return Main is not null && !Main.GetIsSessionExpired();
     }
 }
-
 /*
 
 Add this helper in BaseView:

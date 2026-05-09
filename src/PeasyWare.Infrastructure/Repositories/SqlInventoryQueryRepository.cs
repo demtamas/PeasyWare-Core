@@ -202,4 +202,50 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
             LastMovedBy      = reader.IsDBNull(colLastMvBy)    ? null : reader.GetString(colLastMvBy)
         };
     }
+
+    // --------------------------------------------------
+    // All active inventory
+    // --------------------------------------------------
+
+    public IReadOnlyList<ActiveInventoryDto> GetAllActiveInventory(string? searchTerm = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            command.CommandText = """
+                SELECT sscc, sku_code, sku_description, batch_number, best_before_date,
+                       quantity, stock_state, stock_status, bin_code, zone_code,
+                       storage_type_code, received_at, received_by,
+                       last_movement_type, last_movement_at, last_moved_by
+                FROM inventory.v_active_inventory
+                ORDER BY bin_code, sku_code
+                """;
+        }
+        else
+        {
+            command.CommandText = """
+                SELECT sscc, sku_code, sku_description, batch_number, best_before_date,
+                       quantity, stock_state, stock_status, bin_code, zone_code,
+                       storage_type_code, received_at, received_by,
+                       last_movement_type, last_movement_at, last_moved_by
+                FROM inventory.v_active_inventory
+                WHERE sscc        LIKE @term
+                   OR sku_code    LIKE @term
+                   OR batch_number LIKE @term
+                   OR bin_code    LIKE @term
+                ORDER BY bin_code, sku_code
+                """;
+            command.Parameters.AddWithValue("@term", $"%{searchTerm}%");
+        }
+
+        using var reader = command.ExecuteReader();
+        var results = new List<ActiveInventoryDto>();
+
+        while (reader.Read())
+            results.Add(ReadRow(reader));
+
+        return results;
+    }
 }

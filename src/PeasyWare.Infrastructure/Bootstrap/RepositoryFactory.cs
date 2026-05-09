@@ -143,8 +143,14 @@ public sealed class RepositoryFactory
     public ISkuCommandRepository CreateSkuCommand()
         => new SqlSkuCommandRepository(_factory, SystemSession, _resolver, _logger, _sessionGuard);
 
+    public ISkuCommandRepository CreateSkuCommand(SessionContext session)
+        => new SqlSkuCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+
     public ISkuQueryRepository CreateSkuQuery()
         => new SqlSkuQueryRepository(_factory, SystemSession);
+
+    public ISkuQueryRepository CreateSkuQuery(SessionContext session)
+        => new SqlSkuQueryRepository(_factory, session);
 
     /// <summary>
     /// Replaces the system session used by sessionless overloads.

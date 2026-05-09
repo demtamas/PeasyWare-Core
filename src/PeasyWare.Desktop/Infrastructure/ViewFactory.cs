@@ -1,4 +1,6 @@
 ﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Desktop.Views.Inventory;
+using PeasyWare.Desktop.Views.Materials;
 using PeasyWare.Desktop.Views.Sessions;
 using PeasyWare.Desktop.Views.Settings;
 using PeasyWare.Desktop.Views.Users;
@@ -52,5 +54,18 @@ public sealed class ViewFactory
             session.SessionId,
             _runtime.SettingsQueryRepository,
             commandRepo);
+    }
+
+    public UserControl CreateInventoryView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateInventoryQuery(session);
+        return new InventoryView(session.SessionId, queryRepo);
+    }
+
+    public UserControl CreateMaterialsView(SessionContext session)
+    {
+        var queryRepo   = _runtime.Repositories.CreateSkuQuery(session);
+        var commandRepo = _runtime.Repositories.CreateSkuCommand(session);
+        return new MaterialsView(queryRepo, commandRepo, _runtime.ConnectionFactory);
     }
 }

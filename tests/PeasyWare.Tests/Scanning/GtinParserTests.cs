@@ -292,4 +292,124 @@ public class GtinParserTests
 
         act.Should().NotThrow();
     }
+
+    // ── Ardagh Group label format ────────────────────────────────────────────
+    // Real label from Ardagh Group (can manufacturer, customer: Britvic).
+    // Three barcodes, none matching the standard Britvic format:
+    //   Barcode 1: (02)04045907311343(11)260406(37)8073
+    //   Barcode 2: (10)2604062414(21)128834
+    //   Barcode 3: (00)640617550330318013
+
+    [Fact]
+    public void Parse_ArdaghBarcode1_ContainedGtinProductionDateQuantity()
+    {
+        var result = GtinParser.Parse("(02)04045907311343(11)260406(37)8073");
+
+        result.IsValid.Should().BeTrue();
+        result.ContainedGtin.Should().Be("04045907311343");
+        result.ProductionDate.Should().Be(new DateOnly(2026, 4, 6));
+        result.Quantity.Should().Be(8073);
+        result.Sscc.Should().BeNull();
+        result.Gtin.Should().BeNull();
+        result.BestBefore.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_ArdaghBarcode2_BatchAndSerialNumber()
+    {
+        var result = GtinParser.Parse("(10)2604062414(21)128834");
+
+        result.IsValid.Should().BeTrue();
+        result.Batch.Should().Be("2604062414");
+        result.SerialNumber.Should().Be("128834");
+        result.Sscc.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_ArdaghBarcode2_RawFlat_SplitsAtAiBoundary()
+    {
+        // Raw scan without FNC1: "10" + batch + "21" + serial
+        // Numeric-only heuristic should stop batch at AI "21" boundary
+        var result = GtinParser.Parse("10260406241421128834");
+
+        result.IsValid.Should().BeTrue();
+        result.Batch.Should().Be("2604062414");
+        result.SerialNumber.Should().Be("128834");
+    }
+
+    [Fact]
+    public void Parse_ArdaghBarcode3_Sscc()
+    {
+        var result = GtinParser.Parse("(00)640617550330318013");
+
+        result.IsValid.Should().BeTrue();
+        result.Sscc.Should().Be("640617550330318013");
+    }
+
+    [Fact]
+    public void Parse_ArdaghRawConcatenated_NoBrackets_ExtractsAllAIs()
+    {
+        // Raw string as a scanner would emit without parentheses or FNC1
+        // 02+14digits + 11+6digits + 37+4digits
+        var result = GtinParser.Parse("020404590731134311260406378073");
+
+        result.IsValid.Should().BeTrue();
+        result.ContainedGtin.Should().Be("04045907311343");
+        result.ProductionDate.Should().Be(new DateOnly(2026, 4, 6));
+        result.Quantity.Should().Be(8073);
+    }
+
+    [Fact]
+    public void Parse_ArdaghRawWithTrailingZero_StillParses()
+    {
+        // Some scanners append a trailing character — parser should tolerate it
+        var result = GtinParser.Parse("0204045907311343112604063780730");
+
+        result.IsValid.Should().BeTrue();
+        result.ContainedGtin.Should().Be("04045907311343");
+        result.ProductionDate.Should().Be(new DateOnly(2026, 4, 6));
+    }
+
+    [Fact]
+    public void Parse_ArdaghFullScan_AllThreeBarcodesIndividually_AllValid()
+    {
+        // Simulate operator scanning all three barcodes in sequence
+        var b1 = GtinParser.Parse("(02)04045907311343(11)260406(37)8073");
+        var b2 = GtinParser.Parse("(10)2604062414(21)128834");
+        var b3 = GtinParser.Parse("(00)640617550330318013");
+
+        b1.IsValid.Should().BeTrue();
+        b2.IsValid.Should().BeTrue();
+        b3.IsValid.Should().BeTrue();
+
+        // Key fields across the three scans
+        b1.ContainedGtin.Should().Be("04045907311343");
+        b1.ProductionDate.Should().Be(new DateOnly(2026, 4, 6));
+        b1.Quantity.Should().Be(8073);
+        b2.Batch.Should().Be("2604062414");
+        b2.SerialNumber.Should().Be("128834");
+        b3.Sscc.Should().Be("640617550330318013");
+    }
+
+    [Fact]
+    public void EffectiveGtin_ReturnsContainedGtin_WhenOnlyAi02Present()
+    {
+        var result = GtinParser.Parse("(02)04045907311343");
+
+        result.IsValid.Should().BeTrue();
+        result.Gtin.Should().BeNull();
+        result.ContainedGtin.Should().Be("04045907311343");
+        result.EffectiveGtin.Should().Be("04045907311343");
+    }
+
+    [Fact]
+    public void EffectiveGtin_PrefersAi01_WhenBothPresent()
+    {
+        var result = GtinParser.Parse("(01)05010102200142(02)04045907311343");
+
+        result.IsValid.Should().BeTrue();
+        result.Gtin.Should().Be("05010102200142");
+        result.ContainedGtin.Should().Be("04045907311343");
+        result.EffectiveGtin.Should().Be("05010102200142");
+    }
 }

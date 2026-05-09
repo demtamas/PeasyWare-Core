@@ -228,7 +228,7 @@ public partial class MainForm : Form
         view.Dock = DockStyle.Fill;
         pnlMain.Controls.Add(view);
 
-        HookGlobalInteraction( view );
+        HookGlobalInteraction(view);
 
         pnlMain.ResumeLayout();
 
@@ -280,6 +280,16 @@ public partial class MainForm : Form
     private void operationalSettingsToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateSettingsView(_session));
+    }
+
+    private void inventoryActiveToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateInventoryView(_session));
+    }
+
+    private void materialsToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateMaterialsView(_session));
     }
 
     private void logoutToolStripMenuItem_Click(object sender, EventArgs e)
@@ -450,4 +460,5 @@ public partial class MainForm : Form
                 MessageBoxIcon.Error);
         }
     }
+
 }
