@@ -54,7 +54,7 @@ public abstract class RepositoryBase
             _session.CorrelationId,
             ResultCode = resultCode,
             Success    = success,
-            Data       = data
+            Outcome    = data
         };
 
         if (success)

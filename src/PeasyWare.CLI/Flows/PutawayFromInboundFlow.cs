@@ -163,7 +163,8 @@ namespace PeasyWare.CLI.Flows
 
                         var confirmResult = commandRepo.ConfirmPutawayTask(
                             result.TaskId,
-                            resolvedBin);
+                            resolvedBin,
+                            result.InventoryUnitId);
 
                         Console.WriteLine(confirmResult.FriendlyMessage);
 

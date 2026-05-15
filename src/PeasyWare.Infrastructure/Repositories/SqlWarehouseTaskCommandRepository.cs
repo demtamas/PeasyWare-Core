@@ -77,11 +77,40 @@ public sealed class SqlWarehouseTaskCommandRepository
 
         if (!success)
         {
+            // Enrich failure trace with current unit state and location
+            // so ERRTASK04 (no suitable location) is diagnosable without
+            // needing to query the DB separately.
+            string? currentState = null;
+            string? currentBin   = null;
+            try
+            {
+                using var diagConn = _factory.CreateForCommand(_session);
+                using var diagCmd  = diagConn.CreateCommand();
+                diagCmd.CommandText = """
+                    SELECT iu.stock_state_code, b.bin_code
+                    FROM inventory.inventory_units iu
+                    LEFT JOIN inventory.inventory_placements ip ON ip.inventory_unit_id = iu.inventory_unit_id
+                    LEFT JOIN locations.bins b ON b.bin_id = ip.bin_id
+                    WHERE iu.inventory_unit_id = @id
+                    """;
+                diagCmd.Parameters.Add("@id", SqlDbType.Int).Value = inventoryUnitId;
+                using var diagReader = diagCmd.ExecuteReader();
+                if (diagReader.Read())
+                {
+                    currentState = diagReader.IsDBNull(0) ? null : diagReader.GetString(0);
+                    currentBin   = diagReader.IsDBNull(1) ? null : diagReader.GetString(1);
+                }
+            }
+            catch { /* diagnostic best-effort, never throw */ }
+
             _logger.Warn("WarehouseTask.Create", new
             {
                 _session.UserId, _session.SessionId,
                 InventoryUnitId = inventoryUnitId,
-                ResultCode = code, Success = false
+                CurrentState    = currentState,
+                CurrentBin      = currentBin,
+                ResultCode      = code,
+                Success         = false
             });
 
             return new PutawayTaskResult
@@ -120,7 +149,7 @@ public sealed class SqlWarehouseTaskCommandRepository
     // Putaway — confirm task
     // ────────────────────────────────────────────────────────
 
-    public OperationResult ConfirmPutawayTask(int taskId, string destination)
+    public OperationResult ConfirmPutawayTask(int taskId, string destination, int inventoryUnitId)
     {
         EnsureSession();
 
@@ -147,7 +176,7 @@ public sealed class SqlWarehouseTaskCommandRepository
         return BuildResult(
             action:     "WarehouseTask.Confirm",
             resultCode: code,
-            data:       new { TaskId = taskId, Destination = destination });
+            data:       new { TaskId = taskId, InventoryUnitId = inventoryUnitId, Destination = destination });
     }
 
     // ────────────────────────────────────────────────────────

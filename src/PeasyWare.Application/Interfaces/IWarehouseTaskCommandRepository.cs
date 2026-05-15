@@ -7,7 +7,7 @@ public interface IWarehouseTaskCommandRepository
 {
     PutawayTaskResult CreatePutawayTask(int inventoryUnitId);
 
-    OperationResult ConfirmPutawayTask(int taskId, string destinationBinCode);
+    OperationResult ConfirmPutawayTask(int taskId, string destinationBinCode, int inventoryUnitId);
 
     BinMoveTaskResult CreateBinMoveTask(string externalRef, string? destinationBinCode);
 
