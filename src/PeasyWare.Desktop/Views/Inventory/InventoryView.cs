@@ -11,24 +11,34 @@ namespace PeasyWare.Desktop.Views.Inventory;
 
 public partial class InventoryView : BaseView, IToolbarAware
 {
-    private readonly Guid                    _sessionId;
-    private readonly IInventoryQueryRepository _repo;
+    private readonly Guid                       _sessionId;
+    private readonly IInventoryQueryRepository  _queryRepo;
+    private readonly IInventoryCommandRepository _commandRepo;
 
-    private ToolStripButton? _btnRefresh;
-    private TextBox?         _txtSearch;
+    private ToolStripButton?      _btnRefresh;
+    private ToolStripButton?      _btnSelectAll;
+    private ToolStripButton?      _btnChangeStatus;
     private ToolStripControlHost? _searchHost;
+    private TextBox?              _txtSearch;
 
     private List<ActiveInventoryDto> _inventory = new();
 
-    public InventoryView(Guid sessionId, IInventoryQueryRepository repo)
+    public InventoryView(
+        Guid                        sessionId,
+        IInventoryQueryRepository   queryRepo,
+        IInventoryCommandRepository commandRepo)
     {
         InitializeComponent();
 
-        _sessionId = sessionId;
-        _repo      = repo;
+        _sessionId   = sessionId;
+        _queryRepo   = queryRepo;
+        _commandRepo = commandRepo;
 
         ConfigureGrid(dgvInventory);
         EnableDoubleBuffering(dgvInventory);
+
+        dgvInventory.SelectionChanged += (_, _) => UpdateToolbarState();
+        dgvInventory.CellDoubleClick  += DgvInventory_CellDoubleClick;
 
         Load += (_, _) => LoadInventory();
     }
@@ -40,29 +50,52 @@ public partial class InventoryView : BaseView, IToolbarAware
     public void ConfigureToolbar(ToolStrip toolStrip)
     {
         toolStrip.Items.Clear();
-        toolStrip.ImageScalingSize = new Size(16, 16);
 
-        _btnRefresh = new ToolStripButton("Refresh")
-        {
-            DisplayStyle = ToolStripItemDisplayStyle.Text
-        };
+        _btnRefresh = new ToolStripButton("Refresh") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnRefresh.Click += Wrap(RefreshInventory);
 
-        _txtSearch              = new TextBox();
-        _txtSearch.PlaceholderText = "Search SSCC / SKU / batch / bin…";
-        _txtSearch.Width        = 260;
+        _btnSelectAll = new ToolStripButton("Select all") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnSelectAll.Click += (_, _) => dgvInventory.SelectAll();
+
+        _btnChangeStatus = new ToolStripButton("Change status")
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Enabled      = false
+        };
+        _btnChangeStatus.Click += Wrap(ChangeStatus);
+
+        _txtSearch = new TextBox
+        {
+            PlaceholderText = "Search SSCC / SKU / batch / bin…",
+            Width           = 260
+        };
         _txtSearch.TextChanged += (_, _) => ApplyFilter();
 
         _searchHost = new ToolStripControlHost(_txtSearch)
         {
-            AutoSize = false,
-            Width    = 280,
+            AutoSize  = false,
+            Width     = 280,
             Alignment = ToolStripItemAlignment.Left
         };
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnSelectAll);
+        toolStrip.Items.Add(_btnChangeStatus);
+        toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
+    }
+
+    private void UpdateToolbarState()
+    {
+        var count = dgvInventory.SelectedRows.Count;
+        if (_btnChangeStatus is not null)
+        {
+            _btnChangeStatus.Enabled = count > 0;
+            _btnChangeStatus.Text    = count > 1
+                ? $"Change status ({count})"
+                : "Change status";
+        }
     }
 
     // ==========================================================
@@ -71,19 +104,13 @@ public partial class InventoryView : BaseView, IToolbarAware
 
     private void LoadInventory()
     {
-        _inventory = _repo.GetAllActiveInventory().ToList();
+        _inventory = _queryRepo.GetAllActiveInventory().ToList();
         ApplyFilter();
     }
 
     private void ApplyFilter()
     {
-        if (_txtSearch is null)
-        {
-            Bind(_inventory);
-            return;
-        }
-
-        var q = _txtSearch.Text.Trim();
+        var q = _txtSearch?.Text.Trim() ?? "";
 
         var data = string.IsNullOrWhiteSpace(q)
             ? _inventory
@@ -104,8 +131,82 @@ public partial class InventoryView : BaseView, IToolbarAware
         dgvInventory.DataSource = data;
     }
 
-    private void RefreshInventory()
+    private void RefreshInventory() => Execute(LoadInventory);
+
+    // ==========================================================
+    // Double-click: copy cell value to clipboard
+    // ==========================================================
+
+    private void DgvInventory_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+        var cell = dgvInventory[e.ColumnIndex, e.RowIndex];
+        var val  = cell.FormattedValue?.ToString();
+
+        if (string.IsNullOrEmpty(val)) return;
+
+        ClipboardHelper.SetText(val);
+        ShowCopiedHint(cell);
+    }
+
+    // Persistent tooltip instance — prevents GC from collecting it before it shows
+    private readonly ToolTip _copyHint = new() { IsBalloon = false, InitialDelay = 0, ReshowDelay = 0 };
+
+    private void ShowCopiedHint(DataGridViewCell cell)
+    {
+        var pt = dgvInventory.GetCellDisplayRectangle(cell.ColumnIndex, cell.RowIndex, true);
+        _copyHint.Show("Copied!", dgvInventory, pt.X, pt.Y - 20, 1200);
+    }
+
+    // ==========================================================
+    // Status change
+    // ==========================================================
+
+    private void ChangeStatus()
+    {
+        var selected = dgvInventory.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Select(r => r.DataBoundItem as ActiveInventoryDto)
+            .Where(d => d is not null)
+            .Cast<ActiveInventoryDto>()
+            .ToList();
+
+        if (selected.Count == 0) return;
+
+        using var form = new StatusChangeForm(selected.Count);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        // Confirmation for large batches
+        if (selected.Count > 1)
+        {
+            var confirm = MessageBox.Show(
+                this,
+                $"You are about to change the status of {selected.Count} unit(s) to {form.NewStatusCode}.\n\nThis cannot be undone automatically. Continue?",
+                "Confirm Status Change",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (confirm != DialogResult.Yes) return;
+        }
+
+        var result = _commandRepo.UpdateStockStatus(
+            ssccs:         selected.Select(d => d.Sscc),
+            newStatusCode: form.NewStatusCode,
+            reason:        form.Reason);
+
+        if (!result.Success)
+        {
+            MessageBox.Show(this, result.FriendlyMessage, "Status Change Failed",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        MessageBox.Show(this,
+            $"{selected.Count} unit(s) updated to {form.NewStatusCode}.",
+            "PeasyWare Inventory", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
         Execute(LoadInventory);
     }
 
@@ -117,15 +218,15 @@ public partial class InventoryView : BaseView, IToolbarAware
     {
         dgv.AutoGenerateColumns = false;
         dgv.SelectionMode       = DataGridViewSelectionMode.FullRowSelect;
-        dgv.MultiSelect         = false;
+        dgv.MultiSelect         = true;   // Ctrl+click and Shift+click supported
         dgv.ReadOnly            = true;
 
         dgv.AllowUserToAddRows    = false;
         dgv.AllowUserToDeleteRows = false;
         dgv.AllowUserToResizeRows = false;
 
-        dgv.RowHeadersVisible    = false;
-        dgv.AutoSizeColumnsMode  = DataGridViewAutoSizeColumnsMode.Fill;
+        dgv.RowHeadersVisible   = false;
+        dgv.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
         dgv.EnableHeadersVisualStyles = false;
         dgv.ColumnHeadersDefaultCellStyle.BackColor          = SystemColors.Control;
@@ -138,91 +239,32 @@ public partial class InventoryView : BaseView, IToolbarAware
 
         dgv.Columns.Clear();
 
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.Sscc),
-            HeaderText       = "SSCC",
-            FillWeight       = 20
-        });
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Sscc),            "SSCC",         20));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.SkuCode),         "SKU",          10));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.SkuDescription),  "Description",  22));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BatchNumber),     "Batch",        12));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BestBeforeDate),  "BBE",          10, "dd-MM-yyyy"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Quantity),        "Qty",           6));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockState),      "State",         7));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockStatus),     "Status",        7));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BinCode),         "Bin",           9));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StorageTypeCode), "Type",          7));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),"Last Move",     9));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),  "Last Move At", 14, "dd-MM-yyyy HH:mm"));
+    }
 
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
+    private static DataGridViewTextBoxColumn Col(
+        string prop, string header, int fill, string? format = null)
+    {
+        var col = new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(ActiveInventoryDto.SkuCode),
-            HeaderText       = "SKU",
-            FillWeight       = 10
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.SkuDescription),
-            HeaderText       = "Description",
-            FillWeight       = 22
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.BatchNumber),
-            HeaderText       = "Batch",
-            FillWeight       = 12
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.BestBeforeDate),
-            HeaderText       = "BBE",
-            FillWeight       = 10,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "dd-MM-yyyy" }
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.Quantity),
-            HeaderText       = "Qty",
-            FillWeight       = 6
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.StockState),
-            HeaderText       = "State",
-            FillWeight       = 7
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.StockStatus),
-            HeaderText       = "Status",
-            FillWeight       = 7
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.BinCode),
-            HeaderText       = "Bin",
-            FillWeight       = 9
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.StorageTypeCode),
-            HeaderText       = "Type",
-            FillWeight       = 7
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.LastMovementType),
-            HeaderText       = "Last Move",
-            FillWeight       = 9
-        });
-
-        dgv.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(ActiveInventoryDto.LastMovementAt),
-            HeaderText       = "Last Move At",
-            FillWeight       = 14,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "dd-MM-yyyy HH:mm" }
-        });
+            DataPropertyName = prop,
+            HeaderText       = header,
+            FillWeight       = fill
+        };
+        if (format is not null)
+            col.DefaultCellStyle = new DataGridViewCellStyle { Format = format };
+        return col;
     }
 
     private static void EnableDoubleBuffering(DataGridView dgv)

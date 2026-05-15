@@ -90,6 +90,12 @@ public sealed class RepositoryFactory
         return new SqlInventoryQueryRepository(_factory, session);
     }
 
+    public IInventoryCommandRepository CreateInventoryCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlInventoryCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
     // --------------------------------------------------
     // OUTBOUND
     // --------------------------------------------------
@@ -151,6 +157,9 @@ public sealed class RepositoryFactory
 
     public ISkuQueryRepository CreateSkuQuery(SessionContext session)
         => new SqlSkuQueryRepository(_factory, session);
+
+    public IAuditQueryRepository CreateAuditQuery(SessionContext session)
+        => new SqlAuditQueryRepository(_factory, session);
 
     /// <summary>
     /// Replaces the system session used by sessionless overloads.

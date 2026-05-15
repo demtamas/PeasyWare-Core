@@ -55,6 +55,7 @@
             logsToolStripMenuItem = new ToolStripMenuItem();
             loginAttemptsToolStripMenuItem = new ToolStripMenuItem();
             userChangesToolStripMenuItem = new ToolStripMenuItem();
+            skuChangesToolStripMenuItem = new ToolStripMenuItem();
             helpToolStripMenuItem = new ToolStripMenuItem();
             aboutPeasyWareToolStripMenuItem = new ToolStripMenuItem();
             versionInfoToolStripMenuItem = new ToolStripMenuItem();
@@ -237,7 +238,7 @@
             // 
             // logsToolStripMenuItem
             // 
-            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem });
+            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem, skuChangesToolStripMenuItem });
             logsToolStripMenuItem.Name = "logsToolStripMenuItem";
             logsToolStripMenuItem.Size = new Size(116, 22);
             logsToolStripMenuItem.Text = "&Logs";
@@ -249,10 +250,17 @@
             loginAttemptsToolStripMenuItem.Text = "Login &Attempts";
             // 
             // userChangesToolStripMenuItem
-            // 
+            //
             userChangesToolStripMenuItem.Name = "userChangesToolStripMenuItem";
             userChangesToolStripMenuItem.Size = new Size(156, 22);
             userChangesToolStripMenuItem.Text = "&User changes";
+            //
+            // skuChangesToolStripMenuItem
+            //
+            skuChangesToolStripMenuItem.Name = "skuChangesToolStripMenuItem";
+            skuChangesToolStripMenuItem.Size = new Size(156, 22);
+            skuChangesToolStripMenuItem.Text = "&SKU changes";
+            skuChangesToolStripMenuItem.Click += skuChangesToolStripMenuItem_Click;
             // 
             // helpToolStripMenuItem
             // 
@@ -407,6 +415,7 @@
         private ToolStripMenuItem logsToolStripMenuItem;
         private ToolStripMenuItem loginAttemptsToolStripMenuItem;
         private ToolStripMenuItem userChangesToolStripMenuItem;
+        private ToolStripMenuItem skuChangesToolStripMenuItem;
         private ToolStripMenuItem operationalSettingsToolStripMenuItem;
         private ToolStripMenuItem clientSettingsToolStripMenuItem;
         private StatusStrip statusStrip1;

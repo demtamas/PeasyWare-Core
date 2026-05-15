@@ -7,7 +7,7 @@ GO
     Stripped to bare minimum for API development and label testing.
 
     Covers:
-      - 1 test SKU (real Britvic label format)
+      - 1 test SKU (real Product label format)
       - 2 inbounds: 1 SSCC pre-advised, 1 manual (blind)
       - 3 outbound orders
       - 2 shipments: 1 single-order, 1 two-order
@@ -275,7 +275,7 @@ BEGIN
          preferred_storage_type_id, preferred_storage_section_id,
          is_hazardous, is_active, created_at, created_by)
     VALUES
-        ('290812', 'PEPSI MAX 2L PET X6 P2.19', '04062139024766',
+        ('290812', 'First Test Product', '04062139024766',
          'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
     PRINT 'SKU 290812 created.';
 END
@@ -289,7 +289,7 @@ BEGIN
          preferred_storage_type_id, preferred_storage_section_id,
          is_hazardous, is_active, created_at, created_by)
     VALUES
-        ('251130', '7UP ZERO 330ML CAN MP18X1', '05010102322523',
+        ('251130', 'Second Test Product MP18X1', '05010102322523',
          'Each', 800, 180, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
     PRINT 'SKU 251130 created.';
 END

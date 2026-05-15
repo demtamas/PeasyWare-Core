@@ -1,4 +1,4 @@
-﻿using PeasyWare.Application;
+using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Flows;
 using PeasyWare.Desktop.Forms;
@@ -8,6 +8,8 @@ using PeasyWare.Infrastructure.Settings;
 using PeasyWare.Desktop.Infrastructure;
 using System;
 using System.Windows.Forms;
+
+ApplicationConfiguration.Initialize(); // Sets STA, DPI mode, default font
 
 AppRuntime runtime;
 try

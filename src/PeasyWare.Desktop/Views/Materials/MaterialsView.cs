@@ -173,13 +173,17 @@ public partial class MaterialsView : BaseView, IToolbarAware
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.CreateSku(
-            skuCode:            form.SkuCode,
-            skuDescription:     form.SkuDescription,
-            ean:                form.Ean,
-            uomCode:            form.UomCode,
-            weightPerUnit:      form.WeightPerUnit,
-            standardHuQuantity: form.StandardHuQuantity,
-            isHazardous:        form.IsHazardous);
+            skuCode:                  form.SkuCode,
+            skuDescription:           form.SkuDescription,
+            ean:                      form.Ean,
+            uomCode:                  form.UomCode,
+            weightPerUnit:            form.WeightPerUnit,
+            standardHuQuantity:       form.StandardHuQuantity,
+            isHazardous:              form.IsHazardous,
+            isBatchRequired:          form.IsBatchRequired,
+            isFullHuRequired:         form.IsFullHuRequired,
+            preferredStorageTypeCode: form.PreferredStorageTypeCode,
+            preferredSectionCode:     form.PreferredSectionCode);
 
         if (!result.Success)
         {
@@ -190,6 +194,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
 
         LoadSkus();
         SelectBySkuCode(form.SkuCode);
+        MessageBox.Show(this, $"{form.SkuCode} created successfully.",
+            "PeasyWare Materials", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void EditSelected()
@@ -200,14 +206,18 @@ public partial class MaterialsView : BaseView, IToolbarAware
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.UpdateSku(
-            skuCode:            form.SkuCode,
-            skuDescription:     form.SkuDescription,
-            ean:                form.Ean,
-            uomCode:            form.UomCode,
-            weightPerUnit:      form.WeightPerUnit,
-            standardHuQuantity: form.StandardHuQuantity,
-            isHazardous:        form.IsHazardous,
-            isActive:           form.IsActive);
+            skuCode:                  form.SkuCode,
+            skuDescription:           form.SkuDescription,
+            ean:                      form.Ean,
+            uomCode:                  form.UomCode,
+            weightPerUnit:            form.WeightPerUnit,
+            standardHuQuantity:       form.StandardHuQuantity,
+            isHazardous:              form.IsHazardous,
+            isBatchRequired:          form.IsBatchRequired,
+            isFullHuRequired:         form.IsFullHuRequired,
+            isActive:                 form.IsActive,
+            preferredStorageTypeCode: form.PreferredStorageTypeCode,
+            preferredSectionCode:     form.PreferredSectionCode);
 
         if (!result.Success)
         {
@@ -218,13 +228,14 @@ public partial class MaterialsView : BaseView, IToolbarAware
 
         LoadSkus();
         SelectBySkuCode(form.SkuCode);
+        MessageBox.Show(this, $"{form.SkuCode} saved successfully.",
+            "PeasyWare Materials", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void CopySelected()
     {
         if (GetSelectedSku() is not SkuDto source) return;
 
-        // Pre-populate with source but clear SKU code for operator to fill
         var template = source with
         {
             SkuCode        = "",
@@ -233,17 +244,20 @@ public partial class MaterialsView : BaseView, IToolbarAware
         };
 
         using var form = new SkuEditForm(template, _storageTypes, _sections);
-        // Unlock SKU code for the copy
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.CreateSku(
-            skuCode:            form.SkuCode,
-            skuDescription:     form.SkuDescription,
-            ean:                form.Ean,
-            uomCode:            form.UomCode,
-            weightPerUnit:      form.WeightPerUnit,
-            standardHuQuantity: form.StandardHuQuantity,
-            isHazardous:        form.IsHazardous);
+            skuCode:                  form.SkuCode,
+            skuDescription:           form.SkuDescription,
+            ean:                      form.Ean,
+            uomCode:                  form.UomCode,
+            weightPerUnit:            form.WeightPerUnit,
+            standardHuQuantity:       form.StandardHuQuantity,
+            isHazardous:              form.IsHazardous,
+            isBatchRequired:          form.IsBatchRequired,
+            isFullHuRequired:         form.IsFullHuRequired,
+            preferredStorageTypeCode: form.PreferredStorageTypeCode,
+            preferredSectionCode:     form.PreferredSectionCode);
 
         if (!result.Success)
         {
@@ -254,6 +268,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
 
         LoadSkus();
         SelectBySkuCode(form.SkuCode);
+        MessageBox.Show(this, $"{form.SkuCode} created successfully.",
+            "PeasyWare Materials", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     // ==========================================================
