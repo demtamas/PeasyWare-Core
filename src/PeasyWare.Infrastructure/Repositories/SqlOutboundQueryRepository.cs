@@ -127,7 +127,7 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             JOIN inventory.inventory_placements ip ON ip.inventory_unit_id = iu.inventory_unit_id
             JOIN locations.bins b             ON b.bin_id             = ip.bin_id
             WHERE l.outbound_order_id  = @outbound_order_id
-              AND a.allocation_status IN ('PENDING','CONFIRMED')
+              AND a.allocation_status IN ('PENDING','CONFIRMED','PICKED')
             ORDER BY l.line_no, b.bin_code
         """;
 

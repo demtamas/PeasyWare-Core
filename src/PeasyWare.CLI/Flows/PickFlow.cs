@@ -115,14 +115,14 @@ public sealed class PickFlow
                 var binScan = GtinParser.Parse(destRaw);
                 destinationBinCode = binScan.IsValid && binScan.Sscc is not null
                     ? binScan.Sscc
-                    : destRaw.ToUpperInvariant();
+                    : destRaw.Trim();
 
                 if (_session.UiMode == UiMode.Trace)
                     Console.WriteLine($"[SCAN] Destination staging bin: '{destinationBinCode}'");
             }
 
             var pendingAllocations = allocations
-                .Where(a => a.AllocationStatus == "PENDING")
+                .Where(a => a.AllocationStatus == "PENDING" || a.AllocationStatus == "CONFIRMED")
                 .ToList();
 
             var picked  = 0;
@@ -215,7 +215,7 @@ public sealed class PickFlow
                         continue;
                     }
 
-                    if (!string.Equals(resolvedBin, taskResult.SourceBinCode, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(resolvedBin, taskResult.SourceBinCode, StringComparison.Ordinal))
                     {
                         Console.WriteLine($"Wrong bin. Expected: {taskResult.SourceBinCode}");
                         continue;

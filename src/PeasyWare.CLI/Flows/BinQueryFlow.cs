@@ -48,7 +48,7 @@ public sealed class BinQueryFlow
             if (string.IsNullOrWhiteSpace(rawInput) || rawInput == "0")
                 return;
 
-            var binCode = rawInput.ToUpperInvariant();
+            var binCode = rawInput.Trim();
 
             var units = queryRepo.GetActiveInventoryByBin(binCode);
 
@@ -57,10 +57,12 @@ public sealed class BinQueryFlow
             if (units.Count == 0)
             {
                 // Distinguish between a known empty bin and a bin that doesn't exist
+                // Note: wrong-case bin codes (e.g. 'r0101a') will also report as non-existent
+                // This is intentional — operators must scan or type uppercase bin codes.
                 if (queryRepo.BinExists(binCode))
                     Console.WriteLine($"Bin {binCode} is empty.");
                 else
-                    Console.WriteLine($"Bin {binCode} does not exist.");
+                    Console.WriteLine($"Bin not found: {binCode}");
 
                 Console.WriteLine();
                 Console.WriteLine("Press any key to scan again.");

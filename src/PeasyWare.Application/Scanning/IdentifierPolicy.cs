@@ -20,8 +20,12 @@ namespace PeasyWare.Application.Scanning;
 ///   this policy must be revisited here — not worked around at call sites.
 ///
 /// BIN CODE POLICY:
-///   Bin codes are uppercase (RACK01, BAY02, etc.).
-///   Normalised to uppercase on entry to tolerate operator input casing.
+///   Bin codes are canonical uppercase identifiers (RACK01, BAY02, etc.).
+///   They are stored uppercase in the DB and must be entered uppercase.
+///   NO normalisation is applied — wrong case returns "bin not found".
+///   This enforces physical scanning discipline: scanning a bin barcode
+///   always produces the correct uppercase code. Operators who type
+///   must type uppercase. Silent correction is deliberately absent.
 ///
 /// SSCC POLICY:
 ///   See GtinParser for SSCC normalisation (18-digit canonical, no AI prefix).
@@ -41,7 +45,9 @@ public static class IdentifierPolicy
     }
 
     /// <summary>
-    /// Normalises a bin code to canonical form.
+    /// Returns the bin code with whitespace trimmed only.
+    /// NO case normalisation — bin codes must be entered in canonical uppercase.
+    /// Wrong case returns null which the SP will reject as bin not found.
     /// Returns null if input is null or whitespace.
     /// </summary>
     public static string? NormaliseBinCode(string? input)
@@ -49,6 +55,6 @@ public static class IdentifierPolicy
         if (string.IsNullOrWhiteSpace(input))
             return null;
 
-        return input.Trim().ToUpperInvariant();
+        return input.Trim();
     }
 }
