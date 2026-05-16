@@ -241,16 +241,29 @@ public partial class InventoryView : BaseView, IToolbarAware
 
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Sscc),            "SSCC",         20));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.SkuCode),         "SKU",          10));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.SkuDescription),  "Description",  22));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BatchNumber),     "Batch",        12));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BestBeforeDate),  "BBE",          10, "dd-MM-yyyy"));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Quantity),        "Qty",           6));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockState),      "State",         7));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockStatus),     "Status",        7));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BinCode),         "Bin",           9));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StorageTypeCode), "Type",          7));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),"Last Move",     9));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),  "Last Move At", 14, "dd-MM-yyyy HH:mm"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.SkuDescription),  "Description",  20));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BatchNumber),     "Batch",        11));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BestBeforeDate),  "BBE",           9, "dd-MM-yyyy"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Quantity),        "Qty",           5));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockState),      "State",         6));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockStatus),     "Status",        6));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BinCode),         "Bin",           8));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StorageTypeCode), "Type",          6));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Reference),       "Reference",    12));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),"Last Move",     8));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),  "Last Move At", 12, "dd-MM-yyyy HH:mm"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.ReceivedAt),      "Received At",  12, "dd-MM-yyyy HH:mm"));
+
+        // Colour-code Reference column: order refs in blue, inbound refs in grey
+        dgv.CellFormatting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (dgv.Columns[e.ColumnIndex].DataPropertyName != nameof(ActiveInventoryDto.Reference)) return;
+            if (dgv.Rows[e.RowIndex].DataBoundItem is not ActiveInventoryDto dto) return;
+            e.CellStyle.ForeColor = dto.OrderRef is not null
+                ? System.Drawing.Color.DarkBlue
+                : System.Drawing.Color.DimGray;
+        };
     }
 
     private static DataGridViewTextBoxColumn Col(

@@ -81,7 +81,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                 stock_state, stock_status,
                 bin_code, zone_code, storage_type_code,
                 received_at, received_by,
-                last_movement_type, last_movement_at, last_moved_by
+                last_movement_type, last_movement_at, last_moved_by,
+                inbound_ref, order_ref
             FROM inventory.v_active_inventory
             WHERE sscc = @sscc
         """;
@@ -180,6 +181,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         var colLastMvType  = reader.GetOrdinal("last_movement_type");
         var colLastMvAt    = reader.GetOrdinal("last_movement_at");
         var colLastMvBy    = reader.GetOrdinal("last_moved_by");
+        var colInboundRef  = reader.GetOrdinal("inbound_ref");
+        var colOrderRef    = reader.GetOrdinal("order_ref");
 
         return new ActiveInventoryDto
         {
@@ -199,7 +202,9 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
             ReceivedBy       = reader.IsDBNull(colReceivedBy)  ? null : reader.GetString(colReceivedBy),
             LastMovementType = reader.IsDBNull(colLastMvType)  ? null : reader.GetString(colLastMvType),
             LastMovementAt   = reader.IsDBNull(colLastMvAt)    ? null : reader.GetDateTime(colLastMvAt),
-            LastMovedBy      = reader.IsDBNull(colLastMvBy)    ? null : reader.GetString(colLastMvBy)
+            LastMovedBy      = reader.IsDBNull(colLastMvBy)    ? null : reader.GetString(colLastMvBy),
+            InboundRef       = reader.IsDBNull(colInboundRef)  ? null : reader.GetString(colInboundRef),
+            OrderRef         = reader.IsDBNull(colOrderRef)    ? null : reader.GetString(colOrderRef)
         };
     }
 
@@ -218,7 +223,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                 SELECT sscc, sku_code, sku_description, batch_number, best_before_date,
                        quantity, stock_state, stock_status, bin_code, zone_code,
                        storage_type_code, received_at, received_by,
-                       last_movement_type, last_movement_at, last_moved_by
+                       last_movement_type, last_movement_at, last_moved_by,
+                       inbound_ref, order_ref
                 FROM inventory.v_active_inventory
                 ORDER BY bin_code, sku_code
                 """;
@@ -229,7 +235,8 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                 SELECT sscc, sku_code, sku_description, batch_number, best_before_date,
                        quantity, stock_state, stock_status, bin_code, zone_code,
                        storage_type_code, received_at, received_by,
-                       last_movement_type, last_movement_at, last_moved_by
+                       last_movement_type, last_movement_at, last_moved_by,
+                       inbound_ref, order_ref
                 FROM inventory.v_active_inventory
                 WHERE sscc        LIKE @term
                    OR sku_code    LIKE @term
