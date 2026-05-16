@@ -162,6 +162,27 @@ public class BuildResultTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Payload shape — Outcome not Data
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildResult_LogPayload_UsesOutcomeNotData()
+    {
+        // RepositoryBase renamed the payload key from 'Data' to 'Outcome'
+        // to eliminate the confusing Data.Data nesting in trace logs.
+        // Verify the logger receives a payload with an 'Outcome' property.
+        var (sut, _, logger) = Build();
+        var dataObj = new { SkuCode = "251130", Before = new { Qty = 180 } };
+
+        sut.Expose("Sku.Update", "SUCSKU02", dataObj);
+
+        logger.LastPayload.Should().NotBeNull();
+        var payloadType = logger.LastPayload!.GetType();
+        payloadType.GetProperty("Outcome").Should().NotBeNull("payload should have Outcome property");
+        payloadType.GetProperty("Data").Should().BeNull("payload should NOT have Data property");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -228,12 +249,13 @@ internal sealed class CapturingErrorMessageResolver : IErrorMessageResolver
 
 internal sealed class CapturingLogger : ILogger
 {
-    public int     InfoCalls  { get; private set; }
-    public int     WarnCalls  { get; private set; }
-    public string? LastAction { get; private set; }
+    public int     InfoCalls   { get; private set; }
+    public int     WarnCalls   { get; private set; }
+    public string? LastAction  { get; private set; }
+    public object? LastPayload { get; private set; }
 
-    public void Info(string action, object? data) { InfoCalls++; LastAction = action; }
-    public void Warn(string action, object? data) { WarnCalls++; LastAction = action; }
+    public void Info(string action, object? data) { InfoCalls++; LastAction = action; LastPayload = data; }
+    public void Warn(string action, object? data) { WarnCalls++; LastAction = action; LastPayload = data; }
 
     public void SetSession(SessionContext session) { }
     public void Info(string message)               { InfoCalls++; }

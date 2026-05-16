@@ -44,6 +44,41 @@ public class GtinScanResultTests
     }
 
     [Fact]
+    public void IsProductScan_WhenOnlyContainedGtinPresent_ReturnsTrue()
+    {
+        // AI 02 (contained GTIN) without AI 01 — common on Ardagh/supplier labels
+        var result = new GtinScanResult { ContainedGtin = "04045907311343", IsValid = true };
+        result.IsProductScan.Should().BeTrue();
+        result.IsPalletScan.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EffectiveGtin_PrefersGtin_WhenBothPresent()
+    {
+        var result = new GtinScanResult
+        {
+            Gtin          = "05010102200142",
+            ContainedGtin = "04045907311343",
+            IsValid       = true
+        };
+        result.EffectiveGtin.Should().Be("05010102200142");
+    }
+
+    [Fact]
+    public void EffectiveGtin_ReturnsContainedGtin_WhenNoGtin()
+    {
+        var result = new GtinScanResult { ContainedGtin = "04045907311343", IsValid = true };
+        result.EffectiveGtin.Should().Be("04045907311343");
+    }
+
+    [Fact]
+    public void EffectiveGtin_ReturnsNull_WhenNeitherPresent()
+    {
+        var result = new GtinScanResult { Sscc = "300000000000000001", IsValid = true };
+        result.EffectiveGtin.Should().BeNull();
+    }
+
+    [Fact]
     public void BothFlags_WhenSsccAndGtinPresent_BothTrue()
     {
         // Combined label — product barcode + pallet SSCC on same scan
