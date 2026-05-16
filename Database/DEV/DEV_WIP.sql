@@ -49,7 +49,7 @@ BEGIN
         FROM outbound.outbound_allocations a WITH (UPDLOCK, HOLDLOCK)
         WHERE a.allocation_id = @allocation_id;
 
-        IF @inventory_unit_id IS NULL OR @alloc_status <> 'PENDING'
+        IF @inventory_unit_id IS NULL OR @alloc_status NOT IN ('PENDING', 'CONFIRMED')
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRPICK01' AS result_code,
                    NULL AS task_id, NULL AS inventory_unit_id,
