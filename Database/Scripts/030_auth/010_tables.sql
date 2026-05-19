@@ -1,167 +1,32 @@
-IF @data_type IS NULL
-        BEGIN
-            SET @result_code = 'ERRSET01';
-            SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-            ROLLBACK;
-            RETURN;
-        END;
+USE PW_Core_DEV;
+GO
 
-        --------------------------------------------------------
-        -- Validation
-        --------------------------------------------------------
+SET QUOTED_IDENTIFIER ON;
+GO
 
-        IF @data_type = 'int'
-           AND TRY_CONVERT(int, @setting_value) IS NULL
-        BEGIN
-            SET @result_code = 'ERRSET02';
-            SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-            ROLLBACK;
-            RETURN;
-        END;
+GO
 
-        --------------------------------------------------------
-        -- SAFE session context resolution
-        --------------------------------------------------------
+-------------------------------------------
+-- 3.4 Error messages (friendly messages)
+-- Core place for human-friendly messages by error_code & module
+-------------------------------------------
+IF OBJECT_ID('operations.error_messages', 'U') IS NULL
+BEGIN
+    CREATE TABLE operations.error_messages
+    (
+        error_code        nvarchar(20)    NOT NULL PRIMARY KEY,   -- e.g. ERRINB01, SUCINB01
+        module_code       nvarchar(20)    NOT NULL,               -- e.g. INB, INV, SYS
+        severity          nvarchar(10)    NOT NULL,               -- INFO/WARN/ERROR/CRIT
+        message_template  nvarchar(400)   NOT NULL,               -- Friendly text (with optional {placeholders})
+        is_active         bit             NOT NULL DEFAULT (1),
 
-        SELECT
-            @session_id_raw =
-                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'session_id')),
-
-            @correlation_id_raw =
-                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'correlation_id')),
-
-            @user_id =
-                TRY_CONVERT(int, SESSION_CONTEXT(N'user_id')),
-
-            @source_app =
-                TRY_CONVERT(nvarchar(100), SESSION_CONTEXT(N'source_app')),
-
-            @source_client =
-                TRY_CONVERT(nvarchar(200), SESSION_CONTEXT(N'source_client')),
-
-            @source_ip =
-                TRY_CONVERT(nvarchar(50), SESSION_CONTEXT(N'source_ip'));
-
-        SET @session_id =
-            TRY_CONVERT(uniqueidentifier, @session_id_raw);
-
-        SET @correlation_id =
-            TRY_CONVERT(uniqueidentifier, @correlation_id_raw);
-
-        --------------------------------------------------------
-        -- HARD GUARD
-        --------------------------------------------------------
-
-        IF @session_id IS NULL OR @user_id IS NULL
-        BEGIN
-            SET @result_code = 'ERRCTX01';
-            SET @friendly_msg = 'Invalid or missing session context';
-            ROLLBACK;
-            RETURN;
-        END;
-
-        --------------------------------------------------------
-        -- Update
-        --------------------------------------------------------
-
-        UPDATE operations.settings
-        SET
-            setting_value = @setting_value,
-            updated_at = SYSUTCDATETIME(),
-            updated_by = @user_id
-        WHERE setting_name = @setting_name;
-
-        --------------------------------------------------------
-        -- Structured audit
-        --------------------------------------------------------
-
-        INSERT INTO audit.setting_changes
-        (
-            setting_name,
-            old_value,
-            new_value,
-            changed_at,
-            changed_by,
-            source_app,
-            source_client,
-            source_ip,
-            correlation_id
-        )
-        VALUES
-        (
-            @setting_name,
-            @old_value,
-            @setting_value,
-            SYSUTCDATETIME(),
-            @user_id,
-            @source_app,
-            @source_client,
-            @source_ip,
-            @correlation_id
-        );
-
-        --------------------------------------------------------
-        -- Event audit
-        --------------------------------------------------------
-
-        DECLARE @payload_json NVARCHAR(MAX);
-
-        SET @payload_json = (
-            SELECT
-                @setting_name  AS SettingName,
-                @old_value     AS OldValue,
-                @setting_value AS NewValue
-            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-        );
-
-        EXEC audit.usp_log_event
-            @correlation_id = @correlation_id,
-            @user_id        = @user_id,
-            @session_id     = @session_id,
-            @event_name     = 'system.setting.updated',
-            @result_code    = 'SUCCESS',
-            @success        = 1,
-            @payload_json   = @payload_json;
-
-        COMMIT;
-
-        SET @result_code = 'SUCSET01';
-        SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
-
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0
-            ROLLBACK;
-
-        --------------------------------------------------------
-        -- Capture error FIRST (this was missing)
-        --------------------------------------------------------
-
-        DECLARE @error nvarchar(4000) = ERROR_MESSAGE();
-
-        DECLARE @payload_json_error NVARCHAR(MAX);
-
-        SET @payload_json_error = (
-            SELECT
-                @error AS ErrorMessage,
-                ERROR_NUMBER() AS ErrorNumber,
-                ERROR_LINE() AS ErrorLine
-            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-        );
-
-        EXEC audit.usp_log_event
-            @correlation_id = @correlation_id,
-            @user_id        = @user_id,
-            @session_id     = @session_id,
-            @event_name     = 'system.error.occurred',
-            @result_code    = 'UNHANDLED_EXCEPTION',
-            @success        = 0,
-            @payload_json   = @payload_json_error;
-
-        SET @result_code = 'ERRSET99';
-        SET @friendly_msg = 'Unexpected error occurred while updating setting.';
-    END CATCH
-END
+        tech_messege      nvarchar(400)    NULL,                   -- optional technical message for logs
+        created_at        datetime2(3)    NOT NULL CONSTRAINT DF_operations_error_messages_created_at DEFAULT (sysutcdatetime()),
+        created_by        int             NULL     CONSTRAINT DF_operations_error_messages_created_by DEFAULT (CONVERT(int, SESSION_CONTEXT(N'user_id'))),
+        updated_at        datetime2(3)    NULL,
+        updated_by        int             NULL
+    );
+END;
 GO
 
 IF NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRAUTH01')
@@ -534,45 +399,6 @@ BEGIN
 END;
 GO
 
-/* ============================================================
-   AUTHENTICATION LAYER v1.0
-   Schemas, tables, settings, helper procs, auth SPs
-   ============================================================*/
-
----------------------------------------------------------------
--- 0. Ensure db
----------------------------------------------------------------
-USE [PW_Core_DEV];
-GO
-
----------------------------------------------------------------
--- 1.4 Get Roles
----------------------------------------------------------------
-GO
-
--------------------------------------------
--- 3.4 Error messages (friendly messages)
--- Core place for human-friendly messages by error_code & module
--------------------------------------------
-IF OBJECT_ID('operations.error_messages', 'U') IS NULL
-BEGIN
-    CREATE TABLE operations.error_messages
-    (
-        error_code        nvarchar(20)    NOT NULL PRIMARY KEY,   -- e.g. ERRINB01, SUCINB01
-        module_code       nvarchar(20)    NOT NULL,               -- e.g. INB, INV, SYS
-        severity          nvarchar(10)    NOT NULL,               -- INFO/WARN/ERROR/CRIT
-        message_template  nvarchar(400)   NOT NULL,               -- Friendly text (with optional {placeholders})
-        is_active         bit             NOT NULL DEFAULT (1),
-
-        tech_messege      nvarchar(400)    NULL,                   -- optional technical message for logs
-        created_at        datetime2(3)    NOT NULL CONSTRAINT DF_operations_error_messages_created_at DEFAULT (sysutcdatetime()),
-        created_by        int             NULL     CONSTRAINT DF_operations_error_messages_created_by DEFAULT (CONVERT(int, SESSION_CONTEXT(N'user_id'))),
-        updated_at        datetime2(3)    NULL,
-        updated_by        int             NULL
-    );
-END;
-GO
-
 -------------------------------------------
 -- 3.3 Error log
 -- Captures errors with context for troubleshooting
@@ -594,6 +420,15 @@ BEGIN
 END;
 GO
 
+-------------------------------------------
+-- 3.4 Helper: set session user
+-- Use from the app before running business procs:
+--   EXEC operations.usp_set_session_user @user_id = 1;
+-------------------------------------------
+IF OBJECT_ID('operations.usp_set_session_user', 'P') IS NULL
+    EXEC('CREATE PROCEDURE operations.usp_set_session_user AS RETURN 0;');
+GO
+
 ALTER PROCEDURE operations.usp_set_session_user
     @user_id int
 AS
@@ -602,6 +437,13 @@ BEGIN
 
     EXEC sys.sp_set_session_context @key = N'user_id', @value = @user_id;
 END;
+GO
+
+-------------------------------------------
+-- 3.5 Helper: get session user id
+-------------------------------------------
+IF OBJECT_ID('operations.fn_get_session_user_id', 'FN') IS NULL
+    EXEC('CREATE FUNCTION operations.fn_get_session_user_id() RETURNS int AS BEGIN RETURN NULL; END;');
 GO
 
 ALTER FUNCTION operations.fn_get_session_user_id()
@@ -621,6 +463,14 @@ BEGIN
 END;
 GO
 
+-------------------------------------------
+-- 3.6 Helper: get friendly message by error_code
+-- Returns a human-friendly message or the error_code if not found
+-------------------------------------------
+IF OBJECT_ID('operations.fn_get_friendly_message', 'FN') IS NULL
+    EXEC('CREATE FUNCTION operations.fn_get_friendly_message(@error_code nvarchar(20)) RETURNS nvarchar(400) AS BEGIN RETURN @error_code; END;');
+GO
+
 ALTER FUNCTION operations.fn_get_friendly_message
 (
     @error_code nvarchar(20)
@@ -636,6 +486,13 @@ BEGIN
       AND em.is_active = 1;
     RETURN ISNULL(@msg, @error_code);
 END;
+GO
+
+-------------------------------------------
+-- 3.7 Helper: simple error logging proc
+-------------------------------------------
+IF OBJECT_ID('operations.usp_log_error', 'P') IS NULL
+    EXEC('CREATE PROCEDURE operations.usp_log_error AS RETURN 0;');
 GO
 
 ALTER PROCEDURE operations.usp_log_error
@@ -657,6 +514,18 @@ BEGIN
     VALUES
         (@error_code, @module_code, @message, @details, @context_json, @user_id);
 END;
+GO
+
+
+/* ============================================================
+   AUTHENTICATION LAYER v1.0
+   Schemas, tables, settings, helper procs, auth SPs
+   ============================================================*/
+
+---------------------------------------------------------------
+-- 0. Ensure db
+---------------------------------------------------------------
+USE [PW_Core_DEV];
 GO
 
 /* ============================================================
@@ -696,6 +565,25 @@ BEGIN
 END;
 GO
 
+---------------------------------------------------------------
+-- 1.2 Roles
+---------------------------------------------------------------
+IF OBJECT_ID('auth.roles', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.roles
+    (
+        id          INT IDENTITY(1,1) PRIMARY KEY,
+        role_name   NVARCHAR(100) NOT NULL UNIQUE,
+        description NVARCHAR(255) NULL,
+        is_active   BIT DEFAULT 1,
+        created_by  INT,
+        created_at  DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+        updated_by  INT FOREIGN KEY REFERENCES auth.users(id),
+        updated_at  DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+END;
+GO
+
 -- Add is_system_role to support system/api role filtering
 IF NOT EXISTS (
     SELECT 1 FROM sys.columns
@@ -707,6 +595,7 @@ BEGIN
     ADD is_system_role BIT NOT NULL DEFAULT 0;
 END;
 GO
+
 
 ---------------------------------------------------------------
 -- 1.3 User → Roles
@@ -726,4 +615,9 @@ BEGIN
             REFERENCES auth.roles(id)
     );
 END;
+GO
+
+---------------------------------------------------------------
+-- 1.4 Get Roles
+---------------------------------------------------------------
 GO

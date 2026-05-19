@@ -1,3 +1,9 @@
+USE PW_Core_DEV;
+GO
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
 ------------------------------------------------------------
 -- Detect environment
 ------------------------------------------------------------
@@ -43,6 +49,7 @@ END
 PRINT '------------------------------------------------------------';
 GO
 
+
 /********************************************************************************************
     PeasyWare WMS - Core Database Schema
     Version:        1.0.0
@@ -78,45 +85,36 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'auth')
     EXEC('CREATE SCHEMA auth');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'audit')
     EXEC('CREATE SCHEMA audit');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'inventory')
     EXEC('CREATE SCHEMA inventory');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'inbound')
     EXEC('CREATE SCHEMA inbound');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'locations')
     EXEC('CREATE SCHEMA locations');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'operations')
     EXEC('CREATE SCHEMA operations');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'core')
     EXEC('CREATE SCHEMA core');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'suppliers')
     EXEC('CREATE SCHEMA suppliers');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'customers')
     EXEC('CREATE SCHEMA customers');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'logistics')
     EXEC('CREATE SCHEMA logistics');
 GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'warehouse')
     EXEC('CREATE SCHEMA warehouse');
+    EXEC('CREATE SCHEMA outbound');
 GO
 
 /********************************************************************************************

@@ -36,16 +36,24 @@
             exitToolStripMenuItem = new ToolStripMenuItem();
             inboundToolStripMenuItem = new ToolStripMenuItem();
             inventoryToolStripMenuItem = new ToolStripMenuItem();
+            inventoryActiveToolStripMenuItem = new ToolStripMenuItem();
+            materialsToolStripMenuItem = new ToolStripMenuItem();
             movementsToolStripMenuItem = new ToolStripMenuItem();
             countingToolStripMenuItem = new ToolStripMenuItem();
+            shipmentsToolStripMenuItem = new ToolStripMenuItem();
+            outstandingToolStripMenuItem = new ToolStripMenuItem();
+            departedToolStripMenuItem1 = new ToolStripMenuItem();
+            allToolStripMenuItem1 = new ToolStripMenuItem();
             oToolStripMenuItem = new ToolStripMenuItem();
+            outstandiToolStripMenuItem = new ToolStripMenuItem();
+            departedToolStripMenuItem = new ToolStripMenuItem();
+            allToolStripMenuItem = new ToolStripMenuItem();
             adminToolStripMenuItem = new ToolStripMenuItem();
             usersToolStripMenuItem = new ToolStripMenuItem();
             sessionsToolStripMenuItem = new ToolStripMenuItem();
             sessionEventsToolStripMenuItem = new ToolStripMenuItem();
             rolesAndPermissionsToolStripMenuItem = new ToolStripMenuItem();
             locationsToolStripMenuItem = new ToolStripMenuItem();
-            materialsToolStripMenuItem = new ToolStripMenuItem();
             suppliersToolStripMenuItem = new ToolStripMenuItem();
             customersToolStripMenuItem = new ToolStripMenuItem();
             systemToolStripMenuItem = new ToolStripMenuItem();
@@ -56,6 +64,8 @@
             loginAttemptsToolStripMenuItem = new ToolStripMenuItem();
             userChangesToolStripMenuItem = new ToolStripMenuItem();
             skuChangesToolStripMenuItem = new ToolStripMenuItem();
+            warehouseToolStripMenuItem = new ToolStripMenuItem();
+            warehouseTasksToolStripMenuItem = new ToolStripMenuItem();
             helpToolStripMenuItem = new ToolStripMenuItem();
             aboutPeasyWareToolStripMenuItem = new ToolStripMenuItem();
             versionInfoToolStripMenuItem = new ToolStripMenuItem();
@@ -67,7 +77,6 @@
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
             pnlMain = new Panel();
-            inventoryActiveToolStripMenuItem = new ToolStripMenuItem();
             pnlMenuStrip.SuspendLayout();
             menuStrip1.SuspendLayout();
             pnlToolStrip.SuspendLayout();
@@ -86,7 +95,7 @@
             // 
             // menuStrip1
             // 
-            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, inboundToolStripMenuItem, inventoryToolStripMenuItem, movementsToolStripMenuItem, countingToolStripMenuItem, oToolStripMenuItem, adminToolStripMenuItem, systemToolStripMenuItem, helpToolStripMenuItem });
+            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, inboundToolStripMenuItem, inventoryToolStripMenuItem, movementsToolStripMenuItem, countingToolStripMenuItem, shipmentsToolStripMenuItem, oToolStripMenuItem, warehouseToolStripMenuItem, adminToolStripMenuItem, systemToolStripMenuItem, helpToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
             menuStrip1.Size = new Size(1384, 24);
@@ -133,6 +142,20 @@
             inventoryToolStripMenuItem.Size = new Size(69, 20);
             inventoryToolStripMenuItem.Text = "In&ventory";
             // 
+            // inventoryActiveToolStripMenuItem
+            // 
+            inventoryActiveToolStripMenuItem.Name = "inventoryActiveToolStripMenuItem";
+            inventoryActiveToolStripMenuItem.Size = new Size(168, 22);
+            inventoryActiveToolStripMenuItem.Text = "&Inventory (Active)";
+            inventoryActiveToolStripMenuItem.Click += inventoryActiveToolStripMenuItem_Click;
+            // 
+            // materialsToolStripMenuItem
+            // 
+            materialsToolStripMenuItem.Name = "materialsToolStripMenuItem";
+            materialsToolStripMenuItem.Size = new Size(168, 22);
+            materialsToolStripMenuItem.Text = "&Materials";
+            materialsToolStripMenuItem.Click += materialsToolStripMenuItem_Click;
+            // 
             // movementsToolStripMenuItem
             // 
             movementsToolStripMenuItem.Name = "movementsToolStripMenuItem";
@@ -145,11 +168,56 @@
             countingToolStripMenuItem.Size = new Size(69, 20);
             countingToolStripMenuItem.Text = "&Counting";
             // 
+            // shipmentsToolStripMenuItem
+            // 
+            shipmentsToolStripMenuItem.Name = "shipmentsToolStripMenuItem";
+            shipmentsToolStripMenuItem.Size = new Size(75, 20);
+            shipmentsToolStripMenuItem.Text = "Sh&ipments";
+            shipmentsToolStripMenuItem.Click += shipmentsToolStripMenuItem_Click;
+            // 
+            // outstandingToolStripMenuItem
+            // 
+            outstandingToolStripMenuItem.Name = "outstandingToolStripMenuItem";
+            outstandingToolStripMenuItem.Size = new Size(140, 22);
+            outstandingToolStripMenuItem.Text = "&Outstanding";
+            // 
+            // departedToolStripMenuItem1
+            // 
+            departedToolStripMenuItem1.Name = "departedToolStripMenuItem1";
+            departedToolStripMenuItem1.Size = new Size(140, 22);
+            departedToolStripMenuItem1.Text = "&Departed";
+            // 
+            // allToolStripMenuItem1
+            // 
+            allToolStripMenuItem1.Name = "allToolStripMenuItem1";
+            allToolStripMenuItem1.Size = new Size(140, 22);
+            allToolStripMenuItem1.Text = "&All";
+            // 
             // oToolStripMenuItem
             // 
             oToolStripMenuItem.Name = "oToolStripMenuItem";
-            oToolStripMenuItem.Size = new Size(74, 20);
-            oToolStripMenuItem.Text = "&Outbound";
+            oToolStripMenuItem.Size = new Size(79, 20);
+            oToolStripMenuItem.Text = "&Outbounds";
+            oToolStripMenuItem.Click += outstandiToolStripMenuItem_Click;
+            // 
+            // outstandiToolStripMenuItem
+            // 
+            outstandiToolStripMenuItem.Name = "outstandiToolStripMenuItem";
+            outstandiToolStripMenuItem.Size = new Size(180, 22);
+            outstandiToolStripMenuItem.Text = "&Outstanding";
+            outstandiToolStripMenuItem.Click += outstandiToolStripMenuItem_Click;
+            // 
+            // departedToolStripMenuItem
+            // 
+            departedToolStripMenuItem.Name = "departedToolStripMenuItem";
+            departedToolStripMenuItem.Size = new Size(180, 22);
+            departedToolStripMenuItem.Text = "&Departed";
+            // 
+            // allToolStripMenuItem
+            // 
+            allToolStripMenuItem.Name = "allToolStripMenuItem";
+            allToolStripMenuItem.Size = new Size(180, 22);
+            allToolStripMenuItem.Text = "&All";
             // 
             // adminToolStripMenuItem
             // 
@@ -189,13 +257,6 @@
             locationsToolStripMenuItem.Name = "locationsToolStripMenuItem";
             locationsToolStripMenuItem.Size = new Size(191, 22);
             locationsToolStripMenuItem.Text = "&Locations";
-            // 
-            // materialsToolStripMenuItem
-            // 
-            materialsToolStripMenuItem.Name = "materialsToolStripMenuItem";
-            materialsToolStripMenuItem.Size = new Size(191, 22);
-            materialsToolStripMenuItem.Text = "&Materials";
-            materialsToolStripMenuItem.Click += materialsToolStripMenuItem_Click;
             // 
             // suppliersToolStripMenuItem
             // 
@@ -250,17 +311,31 @@
             loginAttemptsToolStripMenuItem.Text = "Login &Attempts";
             // 
             // userChangesToolStripMenuItem
-            //
+            // 
             userChangesToolStripMenuItem.Name = "userChangesToolStripMenuItem";
             userChangesToolStripMenuItem.Size = new Size(156, 22);
             userChangesToolStripMenuItem.Text = "&User changes";
-            //
+            // 
             // skuChangesToolStripMenuItem
-            //
+            // 
             skuChangesToolStripMenuItem.Name = "skuChangesToolStripMenuItem";
             skuChangesToolStripMenuItem.Size = new Size(156, 22);
             skuChangesToolStripMenuItem.Text = "&SKU changes";
             skuChangesToolStripMenuItem.Click += skuChangesToolStripMenuItem_Click;
+            // 
+            // warehouseToolStripMenuItem
+            // 
+            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem });
+            warehouseToolStripMenuItem.Name = "warehouseToolStripMenuItem";
+            warehouseToolStripMenuItem.Size = new Size(80, 20);
+            warehouseToolStripMenuItem.Text = "&Warehouse";
+            // 
+            // warehouseTasksToolStripMenuItem
+            // 
+            warehouseTasksToolStripMenuItem.Name = "warehouseTasksToolStripMenuItem";
+            warehouseTasksToolStripMenuItem.Size = new Size(110, 22);
+            warehouseTasksToolStripMenuItem.Text = "&Tasks";
+            warehouseTasksToolStripMenuItem.Click += warehouseTasksToolStripMenuItem_Click;
             // 
             // helpToolStripMenuItem
             // 
@@ -345,13 +420,6 @@
             pnlMain.Size = new Size(1384, 675);
             pnlMain.TabIndex = 3;
             // 
-            // inventoryActiveToolStripMenuItem
-            // 
-            inventoryActiveToolStripMenuItem.Name = "inventoryActiveToolStripMenuItem";
-            inventoryActiveToolStripMenuItem.Size = new Size(180, 22);
-            inventoryActiveToolStripMenuItem.Text = "&Inventory (Active)";
-            inventoryActiveToolStripMenuItem.Click += inventoryActiveToolStripMenuItem_Click;
-            // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -421,5 +489,14 @@
         private StatusStrip statusStrip1;
         private ToolStripStatusLabel toolStripStatusLabel1;
         private ToolStripMenuItem inventoryActiveToolStripMenuItem;
+        private ToolStripMenuItem outstandiToolStripMenuItem;
+        private ToolStripMenuItem departedToolStripMenuItem;
+        private ToolStripMenuItem allToolStripMenuItem;
+        private ToolStripMenuItem shipmentsToolStripMenuItem;
+        private ToolStripMenuItem outstandingToolStripMenuItem;
+        private ToolStripMenuItem departedToolStripMenuItem1;
+        private ToolStripMenuItem allToolStripMenuItem1;
+        private ToolStripMenuItem warehouseToolStripMenuItem;
+        private ToolStripMenuItem warehouseTasksToolStripMenuItem;
     }
 }

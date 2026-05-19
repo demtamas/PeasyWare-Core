@@ -187,6 +187,7 @@ internal sealed class StubInboundQueryRepo : IInboundQueryRepository
     public IEnumerable<InboundLineDto> GetReceivableLines(string inboundRef) => [];
     public IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef) => [];
     public InboundLineByEanDto? GetReceivableLineByEan(string inboundRef, string ean) => null;
+    public bool BinExists(string binCode) => true;
 }
 
 internal sealed class StubInboundCommandRepo : IInboundCommandRepository

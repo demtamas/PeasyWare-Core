@@ -250,19 +250,34 @@ public partial class InventoryView : BaseView, IToolbarAware
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BinCode),         "Bin",           8));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StorageTypeCode), "Type",          6));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Reference),       "Reference",    12));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),"Last Move",     8));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),  "Last Move At", 12, "dd-MM-yyyy HH:mm"));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.ReceivedAt),      "Received At",  12, "dd-MM-yyyy HH:mm"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.AllocationStatus),  "Alloc",         6));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),  "Last Move",     8));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),    "Last Move At", 12, "dd-MM-yyyy HH:mm"));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.ReceivedAt),        "Received At",  12, "dd-MM-yyyy HH:mm"));
 
         // Colour-code Reference column: order refs in blue, inbound refs in grey
+        // Colour-code Alloc column: CONFIRMED/PICKED in orange, PENDING in yellow
         dgv.CellFormatting += (_, e) =>
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-            if (dgv.Columns[e.ColumnIndex].DataPropertyName != nameof(ActiveInventoryDto.Reference)) return;
+            var propName = dgv.Columns[e.ColumnIndex].DataPropertyName;
             if (dgv.Rows[e.RowIndex].DataBoundItem is not ActiveInventoryDto dto) return;
-            e.CellStyle.ForeColor = dto.OrderRef is not null
-                ? System.Drawing.Color.DarkBlue
-                : System.Drawing.Color.DimGray;
+
+            if (propName == nameof(ActiveInventoryDto.Reference))
+            {
+                e.CellStyle.ForeColor = dto.OrderRef is not null
+                    ? System.Drawing.Color.DarkBlue
+                    : System.Drawing.Color.DimGray;
+            }
+            else if (propName == nameof(ActiveInventoryDto.AllocationStatus))
+            {
+                e.CellStyle.ForeColor = dto.AllocationStatus switch
+                {
+                    "CONFIRMED" or "PICKED" => System.Drawing.Color.DarkOrange,
+                    "PENDING"               => System.Drawing.Color.Goldenrod,
+                    _                       => dgv.DefaultCellStyle.ForeColor
+                };
+            }
         };
     }
 

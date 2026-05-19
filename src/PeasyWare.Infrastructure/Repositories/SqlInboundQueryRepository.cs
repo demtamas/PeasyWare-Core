@@ -313,6 +313,28 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
     }
 
     // ------------------------------------------------------------
+    // Bin validation
+    // ------------------------------------------------------------
+
+    public bool BinExists(string binCode)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT COUNT(1)
+            FROM locations.bins
+            WHERE bin_code = @bin_code COLLATE Latin1_General_CS_AS
+              AND is_active = 1
+        """;
+
+        command.Parameters.Add(new SqlParameter("@bin_code", SqlDbType.NVarChar, 100) { Value = binCode });
+
+        var result = command.ExecuteScalar();
+        return result is int count ? count > 0 : Convert.ToInt32(result ?? 0) > 0;
+    }
+
+    // ------------------------------------------------------------
     // SSCC validation
     // ------------------------------------------------------------
 

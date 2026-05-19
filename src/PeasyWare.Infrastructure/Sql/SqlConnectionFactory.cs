@@ -35,6 +35,7 @@ public sealed class SqlConnectionFactory
         using var command = connection.CreateCommand();
         command.CommandType = CommandType.Text;
         command.CommandText = """
+            SET QUOTED_IDENTIFIER ON;
             EXEC sys.sp_set_session_context @key = N'session_id', @value = @session_id;
             EXEC sys.sp_set_session_context @key = N'user_id', @value = @user_id;
             EXEC sys.sp_set_session_context @key = N'source_app', @value = @source_app;

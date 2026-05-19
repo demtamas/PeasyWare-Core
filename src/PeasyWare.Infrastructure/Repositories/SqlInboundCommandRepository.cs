@@ -387,7 +387,7 @@ public sealed class SqlInboundCommandRepository
         command.CommandText = """
             SELECT inbound_id
             FROM inbound.inbound_deliveries
-            WHERE inbound_ref = @ref
+            WHERE inbound_ref = @ref COLLATE Latin1_General_CS_AS
         """;
 
         command.Parameters.AddWithValue("@ref", inboundRef);

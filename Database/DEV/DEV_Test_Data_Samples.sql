@@ -206,6 +206,10 @@ IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '4')
     INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
     VALUES ('4', 'Aisle 4', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
 
+IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = '5')
+    INSERT INTO locations.zones (zone_code, zone_name, description, is_active, created_at, created_by)
+    VALUES ('5', 'Aisle 5', NULL, 1, SYSUTCDATETIME(), @SystemUserId);
+
 DECLARE @StageId    INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'STAGE');
 DECLARE @RackId     INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'RACK');
 DECLARE @BulkTypeId INT = (SELECT storage_type_id    FROM locations.storage_types    WHERE storage_type_code = 'BULK');
@@ -217,15 +221,24 @@ DECLARE @Z1 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '1');
 DECLARE @Z2 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '2');
 DECLARE @Z3 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '3');
 DECLARE @Z4 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '4');
+DECLARE @Z5 INT = (SELECT zone_id FROM locations.zones WHERE zone_code = '5');
 
 -- Staging bays
-IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY01')
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY01') -- Use it as receiving bay
     INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
     VALUES ('BAY01', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
 
-IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY02')
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY02') -- Use it as receiving bay
     INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
     VALUES ('BAY02', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY11') -- Use it as shipping bay
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BAY11', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
+
+IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BAY12') -- Use it as shipping bay
+    INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
+    VALUES ('BAY12', @StageId, @FloorId, NULL, 999, 1, SYSUTCDATETIME(), @SystemUserId);
 
 -- Bulk bins
 IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BULK01')
@@ -239,14 +252,14 @@ IF NOT EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = 'BULK02')
 -- Rack bins — 8 bays x 4 levels (A=floor, B=mid, C=mid, D=top)
 DECLARE @Bins TABLE (bin_code NVARCHAR(10), sec_id INT, zone_id INT);
 INSERT INTO @Bins VALUES
-    ('R0101A',@FloorId,@Z1),('R0101B',@MidId,@Z1),('R0101C',@MidId,@Z1),('R0101D',@TopId,@Z1),
-    ('R0201A',@FloorId,@Z2),('R0201B',@MidId,@Z2),('R0201C',@MidId,@Z2),('R0201D',@TopId,@Z2),
-    ('R0301A',@FloorId,@Z3),('R0301B',@MidId,@Z3),('R0301C',@MidId,@Z3),('R0301D',@TopId,@Z3),
-    ('R0401A',@FloorId,@Z4),('R0401B',@MidId,@Z4),('R0401C',@MidId,@Z4),('R0401D',@TopId,@Z4),
-    ('R0501A',@FloorId,@Z1),('R0501B',@MidId,@Z1),('R0501C',@MidId,@Z1),('R0501D',@TopId,@Z1),
-    ('R0601A',@FloorId,@Z2),('R0601B',@MidId,@Z2),('R0601C',@MidId,@Z2),('R0601D',@TopId,@Z2),
-    ('R0701A',@FloorId,@Z3),('R0701B',@MidId,@Z3),('R0701C',@MidId,@Z3),('R0701D',@TopId,@Z3),
-    ('R0801A',@FloorId,@Z4),('R0801B',@MidId,@Z4),('R0801C',@MidId,@Z4),('R0801D',@TopId,@Z4);
+    ('R0101A',@FloorId,@Z1),('R0101B',@MidId,@Z1),('R0101C',@MidId,@Z1),('R0101D',@TopId,@Z1), -- Aisle 1
+    ('R0201A',@FloorId,@Z2),('R0201B',@MidId,@Z2),('R0201C',@MidId,@Z2),('R0201D',@TopId,@Z2), -- Aisle 2
+    ('R0301A',@FloorId,@Z2),('R0301B',@MidId,@Z2),('R0301C',@MidId,@Z2),('R0301D',@TopId,@Z2), -- Aisle 2
+    ('R0401A',@FloorId,@Z3),('R0401B',@MidId,@Z3),('R0401C',@MidId,@Z3),('R0401D',@TopId,@Z3), -- Aisle 3
+    ('R0501A',@FloorId,@Z3),('R0501B',@MidId,@Z3),('R0501C',@MidId,@Z3),('R0501D',@TopId,@Z3), -- Aisle 3
+    ('R0601A',@FloorId,@Z4),('R0601B',@MidId,@Z4),('R0601C',@MidId,@Z4),('R0601D',@TopId,@Z4), -- Aisle 4
+    ('R0701A',@FloorId,@Z4),('R0701B',@MidId,@Z4),('R0701C',@MidId,@Z4),('R0701D',@TopId,@Z4), -- Aisle 4
+    ('R0801A',@FloorId,@Z5),('R0801B',@MidId,@Z5),('R0801C',@MidId,@Z5),('R0801D',@TopId,@Z5); -- Aisle 5
 
 INSERT INTO locations.bins (bin_code, storage_type_id, storage_section_id, zone_id, capacity, is_active, created_at, created_by)
 SELECT b.bin_code, @RackId, b.sec_id, b.zone_id, 1, 1, SYSUTCDATETIME(), @SystemUserId
@@ -267,7 +280,7 @@ DECLARE @RackId  INT = (SELECT storage_type_id    FROM locations.storage_types  
 DECLARE @MidId   INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'MID');
 DECLARE @TopId   INT = (SELECT storage_section_id FROM locations.storage_sections WHERE section_code = 'TOP');
 
-IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = '290812')
+IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = 'SKU001')
 BEGIN
     INSERT INTO inventory.skus
         (sku_code, sku_description, ean, uom_code, weight_per_unit,
@@ -275,13 +288,13 @@ BEGIN
          preferred_storage_type_id, preferred_storage_section_id,
          is_hazardous, is_active, created_at, created_by)
     VALUES
-        ('290812', 'First Test Product', '04062139024766',
+        ('SKU001', 'First Test Product', '04062139024766',
          'Each', 700, 80, 0, @RackId, @MidId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
-    PRINT 'SKU 290812 created.';
+    PRINT 'SKU SKU001 created.';
 END
-ELSE PRINT 'SKU 290812 already exists — skipped.';
+ELSE PRINT 'SKU SKU001 already exists — skipped.';
 
-IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = '251130')
+IF NOT EXISTS (SELECT 1 FROM inventory.skus WHERE sku_code = 'SKU002')
 BEGIN
     INSERT INTO inventory.skus
         (sku_code, sku_description, ean, uom_code, weight_per_unit,
@@ -289,16 +302,16 @@ BEGIN
          preferred_storage_type_id, preferred_storage_section_id,
          is_hazardous, is_active, created_at, created_by)
     VALUES
-        ('251130', 'Second Test Product MP18X1', '05010102322523',
+        ('SKU002', 'Second Test Product MP18X1', '05010102322523',
          'Each', 800, 180, 0, @RackId, @TopId, 0, 1, SYSUTCDATETIME(), @SystemUserId);
-    PRINT 'SKU 251130 created.';
+    PRINT 'SKU SKU002 created.';
 END
-ELSE PRINT 'SKU 251130 already exists — skipped.';
+ELSE PRINT 'SKU SKU002 already exists — skipped.';
 GO
 
 -- ============================================================
 -- Inbound 1 — SSCC pre-advised
--- 13 pallets of 290812, matching real Britvic label format
+-- 13 pallets of SKU001, matching real Britvic label format
 -- BBE: 31-01-2027, Batch: 001442331A
 -- ============================================================
 
@@ -306,7 +319,7 @@ DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system'
 DECLARE @SupplierId   INT = (SELECT party_id  FROM core.parties        WHERE party_code  = 'DUMMY_SUPPLIER');
 DECLARE @HaulierId    INT = (SELECT party_id  FROM core.parties        WHERE party_code  = 'DUMMY_HAULIER');
 DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id  = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
-DECLARE @Sku290812    INT = (SELECT sku_id    FROM inventory.skus       WHERE sku_code   = '290812');
+DECLARE @SkuSKU001    INT = (SELECT sku_id    FROM inventory.skus       WHERE sku_code   = 'SKU001');
 
 IF NOT EXISTS (SELECT 1 FROM inbound.inbound_deliveries WHERE inbound_ref = 'TESTINB01')
 BEGIN
@@ -323,7 +336,7 @@ BEGIN
         (inbound_id, line_no, sku_id, expected_qty, received_qty,
          batch_number, best_before_date, created_at, created_by)
     VALUES
-        (@Inb1Id, 10, @Sku290812, 1040, 0, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId);
+        (@Inb1Id, 10, @SkuSKU001, 1040, 0, '001442331A', '2026-12-31', SYSUTCDATETIME(), @SystemUserId);
 
     DECLARE @Inb1LineId INT = SCOPE_IDENTITY();
 
@@ -353,7 +366,7 @@ GO
 
 -- ============================================================
 -- Inbound 2 — Manual (blind)
--- 5 pallets of 251130, no pre-advised units
+-- 5 pallets of SKU002, no pre-advised units
 -- Operator scans product + SSCC labels at receipt
 -- ============================================================
 
@@ -361,7 +374,7 @@ DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system'
 DECLARE @SupplierId   INT = (SELECT party_id  FROM core.parties         WHERE party_code = 'DUMMY_SUPPLIER');
 DECLARE @HaulierId    INT = (SELECT party_id  FROM core.parties         WHERE party_code = 'DUMMY_HAULIER');
 DECLARE @OwnAddrId    INT = (SELECT address_id FROM core.party_addresses WHERE party_id  = (SELECT party_id FROM core.parties WHERE party_code = 'PW_WAREHOUSE01') AND is_primary = 1);
-DECLARE @Sku251130    INT = (SELECT sku_id    FROM inventory.skus        WHERE sku_code  = '251130');
+DECLARE @SkuSKU002    INT = (SELECT sku_id    FROM inventory.skus        WHERE sku_code  = 'SKU002');
 
 IF NOT EXISTS (SELECT 1 FROM inbound.inbound_deliveries WHERE inbound_ref = 'TESTINB02')
 BEGIN
@@ -378,7 +391,7 @@ BEGIN
         (inbound_id, line_no, sku_id, expected_qty, received_qty,
          batch_number, best_before_date, created_at, created_by)
     VALUES
-        (@Inb2Id, 10, @Sku251130, 1080, 0, NULL, NULL, SYSUTCDATETIME(), @SystemUserId);
+        (@Inb2Id, 10, @SkuSKU002, 1080, 0, NULL, NULL, SYSUTCDATETIME(), @SystemUserId);
 
     PRINT 'TESTINB02 created (manual/blind, 600 units expected).';
 END
@@ -388,9 +401,9 @@ GO
 -- ============================================================
 -- Outbound orders + shipments
 --
--- Order 1: 160 units 290812 (2 pallets), any batch
--- Order 2: 240 units 290812 (3 pallets), any batch
--- Order 3: 400 units 290812 (5 pallets), any batch
+-- Order 1: 160 units SKU001 (2 pallets), any batch
+-- Order 2: 240 units SKU001 (3 pallets), any batch
+-- Order 3: 400 units SKU001 (5 pallets), any batch
 --
 -- Shipment 1: carries Order 1 only
 -- Shipment 2: carries Order 2 + Order 3
@@ -404,7 +417,7 @@ DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system'
 IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD01')
 BEGIN
     DECLARE @Ord1Lines NVARCHAR(MAX) = N'[
-        {"line_no":1,"sku_code":"290812","ordered_qty":160,
+        {"line_no":1,"sku_code":"SKU001","ordered_qty":160,
          "requested_batch":null,"requested_bbe":null,"notes":"2 pallets"}
     ]';
     EXEC outbound.usp_create_order
@@ -412,7 +425,7 @@ BEGIN
         @customer_party_code = 'DUMMY_CUSTOMER',
         @haulier_party_code  = 'DUMMY_HAULIER',
         @required_date       = '2027-06-30',
-        @notes               = 'Test order 1 — 2 pallets 290812',
+        @notes               = 'Test order 1 — 2 pallets SKU001',
         @lines_json          = @Ord1Lines,
         @user_id             = @SystemUserId;
     PRINT 'TESTORD01 created.';
@@ -423,7 +436,7 @@ ELSE PRINT 'TESTORD01 already exists — skipped.';
 IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD02')
 BEGIN
     DECLARE @Ord2Lines NVARCHAR(MAX) = N'[
-        {"line_no":1,"sku_code":"290812","ordered_qty":240,
+        {"line_no":1,"sku_code":"SKU001","ordered_qty":240,
          "requested_batch":null,"requested_bbe":null,"notes":"3 pallets"}
     ]';
     EXEC outbound.usp_create_order
@@ -431,7 +444,7 @@ BEGIN
         @customer_party_code = 'DUMMY_CUSTOMER',
         @haulier_party_code  = 'DUMMY_HAULIER',
         @required_date       = '2027-06-30',
-        @notes               = 'Test order 2 — 3 pallets 290812',
+        @notes               = 'Test order 2 — 3 pallets SKU001',
         @lines_json          = @Ord2Lines,
         @user_id             = @SystemUserId;
     PRINT 'TESTORD02 created.';
@@ -442,7 +455,7 @@ ELSE PRINT 'TESTORD02 already exists — skipped.';
 IF NOT EXISTS (SELECT 1 FROM outbound.outbound_orders WHERE order_ref = 'TESTORD03')
 BEGIN
     DECLARE @Ord3Lines NVARCHAR(MAX) = N'[
-        {"line_no":1,"sku_code":"290812","ordered_qty":400,
+        {"line_no":1,"sku_code":"SKU001","ordered_qty":400,
          "requested_batch":null,"requested_bbe":null,"notes":"5 pallets"}
     ]';
     EXEC outbound.usp_create_order
@@ -450,7 +463,7 @@ BEGIN
         @customer_party_code = 'DUMMY_CUSTOMER',
         @haulier_party_code  = 'DUMMY_HAULIER',
         @required_date       = '2027-06-30',
-        @notes               = 'Test order 3 — 5 pallets 290812',
+        @notes               = 'Test order 3 — 5 pallets SKU001',
         @lines_json          = @Ord3Lines,
         @user_id             = @SystemUserId;
     PRINT 'TESTORD03 created.';

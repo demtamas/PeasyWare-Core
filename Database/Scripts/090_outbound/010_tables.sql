@@ -1,3 +1,17 @@
+USE PW_Core_DEV;
+GO
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE TABLE outbound.outbound_order_statuses
+(
+    status_code VARCHAR(10)  NOT NULL PRIMARY KEY,
+    description NVARCHAR(50) NOT NULL,
+    is_terminal BIT          NOT NULL DEFAULT (0)
+);
+GO
+
 INSERT INTO outbound.outbound_order_statuses (status_code, description, is_terminal)
 VALUES
     ('NEW',       'New — created, not yet allocated',      0),
@@ -7,6 +21,23 @@ VALUES
     ('LOADED',    'Loaded onto vehicle',                   0),
     ('SHIPPED',   'Shipped — departed site',               1),
     ('CNL',       'Cancelled',                             1);
+GO
+
+CREATE TABLE outbound.outbound_order_status_transitions
+(
+    from_status_code VARCHAR(10) NOT NULL,
+    to_status_code   VARCHAR(10) NOT NULL,
+    requires_authority BIT       NOT NULL DEFAULT (0),
+
+    CONSTRAINT PK_outbound_order_status_transitions
+        PRIMARY KEY (from_status_code, to_status_code),
+
+    CONSTRAINT FK_oost_from FOREIGN KEY (from_status_code)
+        REFERENCES outbound.outbound_order_statuses(status_code),
+
+    CONSTRAINT FK_oost_to FOREIGN KEY (to_status_code)
+        REFERENCES outbound.outbound_order_statuses(status_code)
+);
 GO
 
 INSERT INTO outbound.outbound_order_status_transitions
@@ -29,235 +60,6 @@ GO
 PRINT 'outbound_order_statuses + transitions created.';
 GO
 
-INSERT INTO outbound.outbound_line_statuses (status_code, description, is_terminal)
-VALUES
-    ('NEW',       'New',                    0),
-    ('ALLOCATED', 'Allocated',              0),
-    ('PICKING',   'Picking in progress',    0),
-    ('PICKED',    'Fully picked',           0),
-    ('CNL',       'Cancelled',              1);
-GO
-
-INSERT INTO outbound.outbound_line_status_transitions
-    (from_status_code, to_status_code, requires_authority)
-VALUES
-    ('NEW',       'ALLOCATED', 0),
-    ('NEW',       'CNL',       1),
-    ('ALLOCATED', 'PICKING',   0),
-    ('ALLOCATED', 'NEW',       1),
-    ('ALLOCATED', 'CNL',       1),
-    ('PICKING',   'PICKED',    0),
-    ('PICKING',   'ALLOCATED', 1),
-    ('PICKING',   'CNL',       1),
-    ('PICKED',    'PICKING',   1);
-GO
-
-PRINT 'outbound_line_statuses + transitions created.';
-GO
-
-INSERT INTO outbound.allocation_statuses (status_code, description, is_terminal)
-VALUES
-    ('PENDING',   'Pending — unit reserved, task not yet created', 0),
-    ('CONFIRMED', 'Confirmed — pick task created',                 0),
-    ('PICKED',    'Picked — physical pick confirmed',              1),
-    ('CANCELLED', 'Cancelled',                                     1);
-GO
-
-PRINT 'allocation_statuses created.';
-GO
-
-INSERT INTO outbound.shipment_statuses (status_code, description, is_terminal)
-VALUES
-    ('OPEN',     'Open — accepting orders',    0),
-    ('LOADING',  'Loading in progress',        0),
-    ('DEPARTED', 'Departed site',              1),
-    ('CNL',      'Cancelled',                  1);
-GO
-
-INSERT INTO outbound.shipment_status_transitions
-    (from_status_code, to_status_code, requires_authority)
-VALUES
-    ('OPEN',    'LOADING',  0),
-    ('OPEN',    'CNL',      1),
-    ('LOADING', 'DEPARTED', 0),
-    ('LOADING', 'OPEN',     1),   -- un-start loading
-    ('LOADING', 'CNL',      1);
-GO
-
-PRINT 'shipment_statuses + transitions created.';
-GO
-
-PRINT 'outbound.outbound_orders created.';
-GO
-
-PRINT 'outbound.outbound_lines created.';
-GO
-
-CREATE UNIQUE INDEX UX_allocations_active_unit
-ON outbound.outbound_allocations (inventory_unit_id)
-WHERE allocation_status <> 'CANCELLED';
-GO
-
-PRINT 'outbound.outbound_allocations created.';
-GO
-
-PRINT 'outbound.shipments created.';
-GO
-
-PRINT 'outbound.shipment_orders created.';
-GO
-
-PRINT 'Outbound indexes created.';
-GO
-
-/********************************************************************************************
-    13. Error codes
-********************************************************************************************/
-INSERT INTO operations.error_messages
-    (error_code, module_code, severity, message_template, tech_messege)
-SELECT v.error_code, v.module_code, v.severity, v.message_template, v.tech_messege
-FROM (VALUES
-
-    -- Order
-    (N'ERRORD01', N'ORD', N'ERROR',
-        N'Order not found.',
-        N'Order: outbound_order_id not found'),
-
-    (N'ERRORD02', N'ORD', N'ERROR',
-        N'Order is not in a valid state for this operation.',
-        N'Order: invalid status transition'),
-
-    (N'ERRORD03', N'ORD', N'ERROR',
-        N'Order reference already exists.',
-        N'Order.Create: duplicate order_ref'),
-
-    (N'ERRORD04', N'ORD', N'ERROR',
-        N'Order has no lines and cannot be processed.',
-        N'Order: no active lines'),
-
-    (N'SUCORD01', N'ORD', N'INFO',
-        N'Order created successfully.',
-        N'Order.Create: success'),
-
-    (N'SUCORD02', N'ORD', N'INFO',
-        N'Order allocated successfully.',
-        N'Order.Allocate: success'),
-
-    (N'SUCORD03', N'ORD', N'INFO',
-        N'Order shipped successfully.',
-        N'Order.Ship: success'),
-
-    -- Allocation
-    (N'ERRALLOC01', N'ALLOC', N'ERROR',
-        N'Insufficient stock available to fulfil this order line.',
-        N'Allocate: not enough PUTAWAY+AVAILABLE units for SKU'),
-
-    (N'ERRALLOC02', N'ALLOC', N'ERROR',
-        N'Requested batch or best-before date not available.',
-        N'Allocate: no units matching requested_batch / requested_bbe'),
-
-    (N'ERRALLOC03', N'ALLOC', N'ERROR',
-        N'Unit is already allocated to another order.',
-        N'Allocate: inventory_unit already has active allocation'),
-
-    (N'SUCALLOC01', N'ALLOC', N'INFO',
-        N'Stock allocated successfully.',
-        N'Allocate: allocation rows created'),
-
-    -- Pick
-    (N'ERRPICK01', N'PICK', N'ERROR',
-        N'Allocation not found or already picked.',
-        N'Pick: allocation_id not found or status terminal'),
-
-    (N'ERRPICK02', N'PICK', N'ERROR',
-        N'Wrong pallet scanned. Expected a different SSCC.',
-        N'Pick.Confirm: scanned SSCC does not match allocated unit'),
-
-    (N'ERRPICK03', N'PICK', N'ERROR',
-        N'Unit is not in the expected location.',
-        N'Pick.Confirm: unit placement bin does not match task source bin'),
-
-    (N'SUCPICK01', N'PICK', N'INFO',
-        N'Pick confirmed successfully.',
-        N'Pick.Confirm: unit transitioned to PKD'),
-
-    -- Shipment
-    (N'ERRSHIP01', N'SHIP', N'ERROR',
-        N'Shipment not found.',
-        N'Shipment: shipment_id not found'),
-
-    (N'ERRSHIP02', N'SHIP', N'ERROR',
-        N'Shipment is not in a valid state for this operation.',
-        N'Shipment: invalid status transition'),
-
-    (N'ERRSHIP03', N'SHIP', N'ERROR',
-        N'Shipment reference already exists.',
-        N'Shipment.Create: duplicate shipment_ref'),
-
-    (N'ERRSHIP04', N'SHIP', N'ERROR',
-        N'Not all orders on this shipment are fully picked.',
-        N'Shipment.Ship: one or more orders not in PICKED or LOADED status'),
-
-    (N'SUCSHIP01', N'SHIP', N'INFO',
-        N'Shipment created successfully.',
-        N'Shipment.Create: success'),
-
-    (N'SUCSHIP02', N'SHIP', N'INFO',
-        N'Shipment departed. All units shipped.',
-        N'Shipment.Ship: all units transitioned to SHP')
-
-) AS v (error_code, module_code, severity, message_template, tech_messege)
-WHERE NOT EXISTS (
-    SELECT 1 FROM operations.error_messages e
-    WHERE e.error_code = v.error_code
-);
-GO
-
-PRINT 'Outbound error codes inserted.';
-GO
-
-GO
-
-
-/********************************************************************************************
-    OUTBOUND STORED PROCEDURES
-    All 7 outbound SPs. CREATE OR ALTER — safe to re-run after DB reset.
-********************************************************************************************/
-
-/********************************************************************************************
-    WIP PATCH — Pick flow improvements
-    Date: 2026-04-18
-
-    1. usp_pick_create: add @destination_bin_code parameter
-       Operator can specify which staging bay to pick into.
-       If NULL, falls back to first active staging bin (existing behaviour).
-********************************************************************************************/
-GO
-
-CREATE TABLE outbound.outbound_order_statuses
-(
-    status_code VARCHAR(10)  NOT NULL PRIMARY KEY,
-    description NVARCHAR(50) NOT NULL,
-    is_terminal BIT          NOT NULL DEFAULT (0)
-);
-GO
-
-CREATE TABLE outbound.outbound_order_status_transitions
-(
-    from_status_code VARCHAR(10) NOT NULL,
-    to_status_code   VARCHAR(10) NOT NULL,
-    requires_authority BIT       NOT NULL DEFAULT (0),
-
-    CONSTRAINT PK_outbound_order_status_transitions
-        PRIMARY KEY (from_status_code, to_status_code),
-
-    CONSTRAINT FK_oost_from FOREIGN KEY (from_status_code)
-        REFERENCES outbound.outbound_order_statuses(status_code),
-
-    CONSTRAINT FK_oost_to FOREIGN KEY (to_status_code)
-        REFERENCES outbound.outbound_order_statuses(status_code)
-);
-GO
 
 /********************************************************************************************
     4. outbound_line_statuses + transitions
@@ -268,6 +70,15 @@ CREATE TABLE outbound.outbound_line_statuses
     description NVARCHAR(50) NOT NULL,
     is_terminal BIT          NOT NULL DEFAULT (0)
 );
+GO
+
+INSERT INTO outbound.outbound_line_statuses (status_code, description, is_terminal)
+VALUES
+    ('NEW',       'New',                    0),
+    ('ALLOCATED', 'Allocated',              0),
+    ('PICKING',   'Picking in progress',    0),
+    ('PICKED',    'Fully picked',           0),
+    ('CNL',       'Cancelled',              1);
 GO
 
 CREATE TABLE outbound.outbound_line_status_transitions
@@ -287,6 +98,24 @@ CREATE TABLE outbound.outbound_line_status_transitions
 );
 GO
 
+INSERT INTO outbound.outbound_line_status_transitions
+    (from_status_code, to_status_code, requires_authority)
+VALUES
+    ('NEW',       'ALLOCATED', 0),
+    ('NEW',       'CNL',       1),
+    ('ALLOCATED', 'PICKING',   0),
+    ('ALLOCATED', 'NEW',       1),
+    ('ALLOCATED', 'CNL',       1),
+    ('PICKING',   'PICKED',    0),
+    ('PICKING',   'ALLOCATED', 1),
+    ('PICKING',   'CNL',       1),
+    ('PICKED',    'PICKING',   1);
+GO
+
+PRINT 'outbound_line_statuses + transitions created.';
+GO
+
+
 /********************************************************************************************
     5. allocation_statuses
 ********************************************************************************************/
@@ -298,6 +127,18 @@ CREATE TABLE outbound.allocation_statuses
 );
 GO
 
+INSERT INTO outbound.allocation_statuses (status_code, description, is_terminal)
+VALUES
+    ('PENDING',   'Pending — unit reserved, task not yet created', 0),
+    ('CONFIRMED', 'Confirmed — pick task created',                 0),
+    ('PICKED',    'Picked — physical pick confirmed',              1),
+    ('CANCELLED', 'Cancelled',                                     1);
+GO
+
+PRINT 'allocation_statuses created.';
+GO
+
+
 /********************************************************************************************
     6. shipment_statuses + transitions
 ********************************************************************************************/
@@ -307,6 +148,14 @@ CREATE TABLE outbound.shipment_statuses
     description NVARCHAR(50) NOT NULL,
     is_terminal BIT          NOT NULL DEFAULT (0)
 );
+GO
+
+INSERT INTO outbound.shipment_statuses (status_code, description, is_terminal)
+VALUES
+    ('OPEN',     'Open — accepting orders',    0),
+    ('LOADING',  'Loading in progress',        0),
+    ('DEPARTED', 'Departed site',              1),
+    ('CNL',      'Cancelled',                  1);
 GO
 
 CREATE TABLE outbound.shipment_status_transitions
@@ -326,12 +175,72 @@ CREATE TABLE outbound.shipment_status_transitions
 );
 GO
 
--- Add shipment FK to outbound_orders now that shipments table exists
-ALTER TABLE outbound.outbound_orders
-ADD CONSTRAINT FK_outbound_orders_shipment
-    FOREIGN KEY (shipment_id)
-    REFERENCES outbound.shipments(shipment_id);
+INSERT INTO outbound.shipment_status_transitions
+    (from_status_code, to_status_code, requires_authority)
+VALUES
+    ('OPEN',    'LOADING',  0),
+    ('OPEN',    'CNL',      1),
+    ('LOADING', 'DEPARTED', 0),
+    ('LOADING', 'OPEN',     1),   -- un-start loading
+    ('LOADING', 'CNL',      1);
 GO
+
+PRINT 'shipment_statuses + transitions created.';
+GO
+
+
+/********************************************************************************************
+    7. outbound_orders
+********************************************************************************************/
+CREATE TABLE outbound.outbound_orders
+(
+    outbound_order_id   INT IDENTITY(1,1) PRIMARY KEY,
+
+    order_ref           NVARCHAR(50)  NOT NULL,
+
+    customer_party_id   INT           NOT NULL,
+    haulier_party_id    INT           NULL,
+
+    -- Linked shipment (set when added to a shipment)
+    shipment_id         INT           NULL,
+
+    order_status_code   VARCHAR(10)   NOT NULL DEFAULT ('NEW'),
+
+    -- How the order entered the system
+    order_source        VARCHAR(10)   NOT NULL DEFAULT ('MANUAL'),
+    -- MANUAL, EDI, API, IMPORT
+
+    required_date       DATE          NULL,
+    notes               NVARCHAR(500) NULL,
+
+    created_at          DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    created_by          INT           NULL,
+    updated_at          DATETIME2(3)  NULL,
+    updated_by          INT           NULL,
+
+    CONSTRAINT UQ_outbound_orders_ref
+        UNIQUE (order_ref),
+
+    CONSTRAINT FK_outbound_orders_customer
+        FOREIGN KEY (customer_party_id)
+        REFERENCES core.parties(party_id),
+
+    CONSTRAINT FK_outbound_orders_haulier
+        FOREIGN KEY (haulier_party_id)
+        REFERENCES core.parties(party_id),
+
+    CONSTRAINT FK_outbound_orders_status
+        FOREIGN KEY (order_status_code)
+        REFERENCES outbound.outbound_order_statuses(status_code),
+
+    CONSTRAINT CK_outbound_orders_source
+        CHECK (order_source IN ('MANUAL','EDI','API','IMPORT'))
+);
+GO
+
+PRINT 'outbound.outbound_orders created.';
+GO
+
 
 /********************************************************************************************
     8. outbound_lines
@@ -381,10 +290,66 @@ CREATE TABLE outbound.outbound_lines
 );
 GO
 
+PRINT 'outbound.outbound_lines created.';
+GO
+
+
+/********************************************************************************************
+    9. outbound_allocations
+    One row per inventory unit allocated to an outbound line.
+    Full-pallet allocation — allocated_qty = unit quantity.
+    TODO: partial pallet support (case picks, pickfaces) — future
+********************************************************************************************/
+CREATE TABLE outbound.outbound_allocations
+(
+    allocation_id       INT IDENTITY(1,1) PRIMARY KEY,
+
+    outbound_line_id    INT           NOT NULL,
+    inventory_unit_id   INT           NOT NULL,
+
+    -- Full pallet: equals inventory_units.quantity at time of allocation
+    allocated_qty       INT           NOT NULL CHECK (allocated_qty > 0),
+
+    allocation_status   VARCHAR(10)   NOT NULL DEFAULT ('PENDING'),
+
+    allocated_at        DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    allocated_by        INT           NULL,
+
+    updated_at          DATETIME2(3)  NULL,
+    updated_by          INT           NULL,
+
+    CONSTRAINT FK_allocations_line
+        FOREIGN KEY (outbound_line_id)
+        REFERENCES outbound.outbound_lines(outbound_line_id),
+
+    CONSTRAINT FK_allocations_unit
+        FOREIGN KEY (inventory_unit_id)
+        REFERENCES inventory.inventory_units(inventory_unit_id),
+
+    CONSTRAINT FK_allocations_status
+        FOREIGN KEY (allocation_status)
+        REFERENCES outbound.allocation_statuses(status_code),
+
+    -- One unit can only be on one active allocation at a time
+    CONSTRAINT UQ_allocations_active_unit
+        UNIQUE (inventory_unit_id)
+        -- Note: this is enforced via filtered index below for active allocations only
+);
+GO
+
 -- Drop the broad UNIQUE — replace with filtered index (active allocations only)
 ALTER TABLE outbound.outbound_allocations
 DROP CONSTRAINT UQ_allocations_active_unit;
 GO
+
+CREATE UNIQUE INDEX UX_allocations_active_unit
+ON outbound.outbound_allocations (inventory_unit_id)
+WHERE allocation_status <> 'CANCELLED';
+GO
+
+PRINT 'outbound.outbound_allocations created.';
+GO
+
 
 /********************************************************************************************
     10. shipments
@@ -431,6 +396,17 @@ CREATE TABLE outbound.shipments
 );
 GO
 
+-- Add shipment FK to outbound_orders now that shipments table exists
+ALTER TABLE outbound.outbound_orders
+ADD CONSTRAINT FK_outbound_orders_shipment
+    FOREIGN KEY (shipment_id)
+    REFERENCES outbound.shipments(shipment_id);
+GO
+
+PRINT 'outbound.shipments created.';
+GO
+
+
 /********************************************************************************************
     11. shipment_orders
     Junction table: one shipment → many orders, one order → one shipment.
@@ -455,6 +431,10 @@ CREATE TABLE outbound.shipment_orders
         REFERENCES outbound.outbound_orders(outbound_order_id)
 );
 GO
+
+PRINT 'outbound.shipment_orders created.';
+GO
+
 
 /********************************************************************************************
     12. Indexes
@@ -489,4 +469,8 @@ GO
 -- Shipment orders: fast lookup by order
 CREATE INDEX IX_shipment_orders_order
 ON outbound.shipment_orders (outbound_order_id);
+GO
+
+PRINT 'Outbound indexes created.';
+GO
 GO

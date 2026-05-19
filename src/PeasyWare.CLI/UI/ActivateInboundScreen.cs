@@ -6,31 +6,37 @@ public static class ActivateInboundScreen
 {
     public static string PromptInboundRef(IEnumerable<ActivatableInboundDto> activatable)
     {
+        var list = activatable.ToList();
+
         Console.WriteLine();
         Console.WriteLine("──────────────────────────");
         Console.WriteLine("Activate Inbound");
         Console.WriteLine("──────────────────────────");
-        Console.WriteLine("Enter inbound ref to activate.");
-        Console.WriteLine("Type 'L' to list activatable inbounds.");
-        Console.WriteLine("Type '0' to go back.");
+
+        // Always show the list upfront if there's anything to show
+        if (list.Count > 0)
+            RenderList(list);
+        else
+            Console.WriteLine("No activatable inbounds found.");
+
+        Console.WriteLine("Type a number to select, ref to activate, or 0 to go back.");
         Console.WriteLine();
 
         while (true)
         {
-            Console.Write("Inbound ref / L / 0: ");
+            Console.Write("# / Inbound ref / 0: ");
             var input = (Console.ReadLine() ?? "").Trim();
 
             if (input == "0") return "";
-            if (input.Equals("L", StringComparison.OrdinalIgnoreCase))
-            {
-                RenderList(activatable);
-                continue;
-            }
+
+            // Numeric selection from list
+            if (int.TryParse(input, out var idx) && idx >= 1 && idx <= list.Count)
+                return list[idx - 1].InboundRef;
 
             if (!string.IsNullOrWhiteSpace(input))
                 return input;
 
-            Console.WriteLine("Please enter a ref, 'L' to list, or '0' to go back.");
+            Console.WriteLine($"Enter a number (1-{list.Count}), a ref, or 0 to go back.");
         }
     }
 
@@ -38,24 +44,14 @@ public static class ActivateInboundScreen
     {
         var list = data.ToList();
         Console.WriteLine();
-
-        if (list.Count == 0)
-        {
-            Console.WriteLine("No activatable inbounds found (EXPECTED with EXPECTED lines).");
-            Console.WriteLine();
-            return;
-        }
-
-        Console.WriteLine("Activatable inbounds:");
         Console.WriteLine("------------------------------------------------------------");
         for (var i = 0; i < list.Count; i++)
         {
-            var d = list[i];
+            var d   = list[i];
             var eta = d.ExpectedArrivalAt?.ToString("yyyy-MM-dd HH:mm") ?? "-";
             Console.WriteLine($"{i + 1,2}. {d.InboundRef,-20} ETA: {eta,-16} Lines: {d.LineCount}");
         }
         Console.WriteLine("------------------------------------------------------------");
-        Console.WriteLine("Tip: copy/paste the ref above into the prompt.");
         Console.WriteLine();
     }
 }

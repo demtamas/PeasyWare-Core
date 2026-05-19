@@ -95,6 +95,13 @@ namespace PeasyWare.Application.Flows
             if (string.IsNullOrWhiteSpace(bin))
                 return;
 
+            if (!queryRepo.BinExists(bin))
+            {
+                Console.WriteLine($"Bin '{bin}' not found or is inactive. Please check and try again.");
+                Console.ReadKey(true);
+                return;
+            }
+
             while (true)
             {
                 var remaining = queryRepo.GetOutstandingSsccCount(inboundRef);
@@ -118,7 +125,12 @@ namespace PeasyWare.Application.Flows
                 if (string.Equals(rawInput, "B", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Write("Enter new receiving bin: ");
-                    bin = Console.ReadLine()?.Trim() ?? "";
+                    bin = (Console.ReadLine()?.Trim() ?? "");
+                    if (!string.IsNullOrWhiteSpace(bin) && !queryRepo.BinExists(bin))
+                    {
+                        Console.WriteLine($"Bin '{bin}' not found or is inactive.");
+                        bin = "";
+                    }
                     continue;
                 }
 

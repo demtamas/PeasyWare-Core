@@ -1,7 +1,7 @@
--------------------------------------------
--- 3.3 EVENTS TABLE
--- Audit trail.
--------------------------------------------
+USE PW_Core_DEV;
+GO
+
+SET QUOTED_IDENTIFIER ON;
 GO
 
 CREATE TABLE operations.setting_categories

@@ -86,8 +86,7 @@ public sealed class ShipFlow
             Console.Clear();
             Console.WriteLine("────────────────────────────────────────────────────────────");
             Console.WriteLine($"Shipment:  {shipment.ShipmentRef}");
-            if (shipment.VehicleRef is not null)
-                Console.WriteLine($"Vehicle:   {shipment.VehicleRef}");
+            Console.WriteLine($"Vehicle:   {(shipment.VehicleRef is not null ? shipment.VehicleRef : "(not set)")}");
             if (shipment.HaulierName is not null)
                 Console.WriteLine($"Haulier:   {shipment.HaulierName}");
             if (shipment.PlannedDeparture is not null)
@@ -106,13 +105,32 @@ public sealed class ShipFlow
                 Console.WriteLine();
             }
 
+            // ── Require vehicle ref ──────────────────────────────────────────
+            Console.Write(shipment.VehicleRef is not null
+                ? $"Vehicle reg [{shipment.VehicleRef}] (Enter to keep, or type new): "
+                : "Enter vehicle registration: ");
+
+            var vehicleInput = Console.ReadLine()?.Trim();
+
+            // Keep existing if user just pressed Enter
+            if (string.IsNullOrWhiteSpace(vehicleInput))
+                vehicleInput = shipment.VehicleRef ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(vehicleInput))
+            {
+                Console.WriteLine("Vehicle registration is required.");
+                Console.ReadKey(true);
+                continue;
+            }
+
+            Console.WriteLine();
             Console.Write("Confirm departure? (Y=yes, 0=cancel): ");
             var confirm = Console.ReadLine()?.Trim();
 
             if (!string.Equals(confirm, "Y", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var result = commandRepo.Ship(shipment.ShipmentId);
+            var result = commandRepo.Ship(shipment.ShipmentId, vehicleInput);
 
             Console.WriteLine();
             Console.WriteLine(result.FriendlyMessage);

@@ -103,7 +103,7 @@ public sealed class BinToBinMoveFlow
 
                 destinationBinCode = binScan.IsValid && binScan.Sscc is not null
                     ? binScan.Sscc
-                    : destRaw;
+                    : destRaw.Trim();
 
                 if (_session.UiMode == UiMode.Trace)
                     Console.WriteLine($"[SCAN] Destination bin: '{destinationBinCode}'");

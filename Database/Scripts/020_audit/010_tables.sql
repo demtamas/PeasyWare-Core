@@ -1,3 +1,9 @@
+USE PW_Core_DEV;
+GO
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
 CREATE TABLE audit.audit_events
 (
     audit_id        BIGINT IDENTITY PRIMARY KEY,

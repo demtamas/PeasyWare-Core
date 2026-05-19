@@ -1,43 +1,7 @@
-/* ============================================================
-   Indexes
-   ============================================================ */
-
--- 1. Unique SSCC + status
-CREATE UNIQUE INDEX ux_inventory_units_external_ref
-ON inventory.inventory_units (external_ref)
-WHERE external_ref IS NOT NULL
-  AND stock_state_code <> 'REV'
-  AND stock_state_code <> 'SHP'
-  AND stock_state_code <> 'MOV';
+USE PW_Core_DEV;
 GO
 
-CREATE NONCLUSTERED INDEX IX_inventory_movements_unit
-ON inventory.inventory_movements(inventory_unit_id, moved_at DESC);
-GO
-
-CREATE NONCLUSTERED INDEX IX_inventory_movements_reference
-ON inventory.inventory_movements(reference_type, reference_id);
-GO
-
-CREATE NONCLUSTERED INDEX IX_inventory_movements_bin
-ON inventory.inventory_movements(to_bin_id, moved_at DESC);
-GO
-
-CREATE NONCLUSTERED INDEX IX_inventory_movements_state_status
-ON inventory.inventory_movements(to_state_code, to_status_code, moved_at DESC);
-GO
-
-/* ============================================================
-   core.parties
-   ------------------------------------------------------------
-   Canonical table for all external business entities
-   (suppliers, customers, hauliers, owners, etc.).
-
-   One row = one real-world legal entity.
-   Roles are assigned separately via core.party_roles.
-
-   This table is intentionally role-agnostic.
-   ============================================================ */
+SET QUOTED_IDENTIFIER ON;
 GO
 
 CREATE TABLE inventory.skus
@@ -226,6 +190,19 @@ CREATE TABLE inventory.inventory_units
 );
 GO
 
+/* ============================================================
+   Indexes
+   ============================================================ */
+
+-- 1. Unique SSCC + status
+CREATE UNIQUE INDEX ux_inventory_units_external_ref
+ON inventory.inventory_units (external_ref)
+WHERE external_ref IS NOT NULL
+  AND stock_state_code <> 'REV'
+  AND stock_state_code <> 'SHP'
+  AND stock_state_code <> 'MOV';
+GO
+
 -- 2. Fast lookup by SKU (stock aggregation, joins)
 CREATE INDEX ix_inventory_units_sku_id
 ON inventory.inventory_units (sku_id);
@@ -386,4 +363,33 @@ CREATE TABLE inventory.inventory_movements
                            CONSTRAINT FK_inventory_movements_reversal
                            REFERENCES inventory.inventory_movements(movement_id)
 );
+GO
+
+CREATE NONCLUSTERED INDEX IX_inventory_movements_unit
+ON inventory.inventory_movements(inventory_unit_id, moved_at DESC);
+GO
+
+CREATE NONCLUSTERED INDEX IX_inventory_movements_reference
+ON inventory.inventory_movements(reference_type, reference_id);
+GO
+
+CREATE NONCLUSTERED INDEX IX_inventory_movements_bin
+ON inventory.inventory_movements(to_bin_id, moved_at DESC);
+GO
+
+CREATE NONCLUSTERED INDEX IX_inventory_movements_state_status
+ON inventory.inventory_movements(to_state_code, to_status_code, moved_at DESC);
+GO
+
+/* ============================================================
+   core.parties
+   ------------------------------------------------------------
+   Canonical table for all external business entities
+   (suppliers, customers, hauliers, owners, etc.).
+
+   One row = one real-world legal entity.
+   Roles are assigned separately via core.party_roles.
+
+   This table is intentionally role-agnostic.
+   ============================================================ */
 GO

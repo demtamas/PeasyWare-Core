@@ -142,6 +142,12 @@ public sealed class RepositoryFactory
         return new SqlWarehouseTaskCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
+    public IWarehouseTaskQueryRepository CreateWarehouseTaskQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlWarehouseTaskQueryRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
     // --------------------------------------------------
     // SKU (API)
     // --------------------------------------------------

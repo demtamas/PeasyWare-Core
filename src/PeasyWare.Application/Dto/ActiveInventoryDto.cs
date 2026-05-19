@@ -32,6 +32,22 @@ public sealed class ActiveInventoryDto
     public string?   OrderRef         { get; init; }
 
     /// <summary>
+    /// Current allocation status (PENDING, CONFIRMED, PICKED) if allocated.
+    /// NULL when not allocated.
+    /// </summary>
+    public string?   AllocationStatus { get; init; }
+
+    /// <summary>
+    /// Username of the operator who allocated this unit.
+    /// </summary>
+    public string?   AllocatedBy      { get; init; }
+
+    /// <summary>
+    /// When the allocation was created.
+    /// </summary>
+    public DateTime? AllocatedAt      { get; init; }
+
+    /// <summary>
     /// Single reference column for the grid:
     /// shows OrderRef when allocated, InboundRef otherwise.
     /// </summary>

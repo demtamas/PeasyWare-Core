@@ -39,8 +39,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
                 COUNT(l.outbound_line_id)                   AS total_lines,
-                SUM(l.allocated_qty)                        AS total_allocated,
-                SUM(l.ordered_qty)                          AS total_ordered
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
@@ -77,8 +78,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
                 COUNT(l.outbound_line_id)                   AS total_lines,
-                SUM(l.allocated_qty)                        AS total_allocated,
-                SUM(l.ordered_qty)                          AS total_ordered
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
@@ -153,6 +155,256 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 BestBeforeDate   = reader.IsDBNull(reader.GetOrdinal("best_before_date")) ? null         : reader.GetString(reader.GetOrdinal("best_before_date"))
             });
 
+        return results;
+    }
+
+    // --------------------------------------------------
+    // Departed orders (SHIPPED / DEPARTED)
+    // --------------------------------------------------
+
+    public IReadOnlyList<OutboundOrderSummaryDto> GetDepartedOrders()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                o.outbound_order_id,
+                o.order_ref,
+                o.order_status_code,
+                p.display_name                              AS customer_name,
+                CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                COUNT(l.outbound_line_id)                   AS total_lines,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
+            FROM outbound.outbound_orders o
+            JOIN core.parties p
+                ON p.party_id = o.customer_party_id
+            LEFT JOIN outbound.outbound_lines l
+                ON l.outbound_order_id = o.outbound_order_id
+               AND l.line_status_code <> 'CNL'
+            WHERE o.order_status_code IN ('SHIPPED', 'DEPARTED')
+            GROUP BY
+                o.outbound_order_id, o.order_ref, o.order_status_code,
+                p.display_name, o.required_date
+            ORDER BY o.required_date DESC, o.order_ref
+        """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<OutboundOrderSummaryDto>();
+        while (reader.Read()) results.Add(ReadOrderSummary(reader));
+        return results;
+    }
+
+    // --------------------------------------------------
+    // All orders
+    // --------------------------------------------------
+
+    public IReadOnlyList<OutboundOrderSummaryDto> GetAllOrders()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                o.outbound_order_id,
+                o.order_ref,
+                o.order_status_code,
+                p.display_name                              AS customer_name,
+                CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                COUNT(l.outbound_line_id)                   AS total_lines,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
+            FROM outbound.outbound_orders o
+            JOIN core.parties p
+                ON p.party_id = o.customer_party_id
+            LEFT JOIN outbound.outbound_lines l
+                ON l.outbound_order_id = o.outbound_order_id
+               AND l.line_status_code <> 'CNL'
+            GROUP BY
+                o.outbound_order_id, o.order_ref, o.order_status_code,
+                p.display_name, o.required_date
+            ORDER BY o.required_date DESC, o.order_status_code, o.order_ref
+        """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<OutboundOrderSummaryDto>();
+        while (reader.Read()) results.Add(ReadOrderSummary(reader));
+        return results;
+    }
+
+    // --------------------------------------------------
+    // Outstanding orders (NEW / ALLOCATED / PICKING / PICKED / LOADED)
+    // --------------------------------------------------
+
+    public IReadOnlyList<OutboundOrderSummaryDto> GetOutstandingOrders()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                o.outbound_order_id,
+                o.order_ref,
+                o.order_status_code,
+                p.display_name                              AS customer_name,
+                CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                COUNT(l.outbound_line_id)                   AS total_lines,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
+            FROM outbound.outbound_orders o
+            JOIN core.parties p
+                ON p.party_id = o.customer_party_id
+            LEFT JOIN outbound.outbound_lines l
+                ON l.outbound_order_id = o.outbound_order_id
+               AND l.line_status_code <> 'CNL'
+            WHERE o.order_status_code NOT IN ('SHIPPED', 'DEPARTED', 'CANCELLED')
+            GROUP BY
+                o.outbound_order_id, o.order_ref, o.order_status_code,
+                p.display_name, o.required_date
+            ORDER BY o.required_date, o.order_status_code, o.order_ref
+        """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<OutboundOrderSummaryDto>();
+        while (reader.Read()) results.Add(ReadOrderSummary(reader));
+        return results;
+    }
+
+    // --------------------------------------------------
+    // Order lines for a single order (Lines tab)
+    // --------------------------------------------------
+
+    public IReadOnlyList<OutboundOrderLineDto> GetOrderLines(int outboundOrderId)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                l.outbound_line_id,
+                l.line_no,
+                s.sku_code,
+                s.sku_description,
+                l.ordered_qty,
+                l.allocated_qty,
+                l.picked_qty,
+                l.line_status_code,
+                l.requested_batch,
+                CONVERT(NVARCHAR(10), l.requested_bbe, 103) AS requested_bbe,
+                l.notes
+            FROM outbound.outbound_lines l
+            JOIN inventory.skus s ON s.sku_id = l.sku_id
+            WHERE l.outbound_order_id = @outbound_order_id
+              AND l.line_status_code  <> 'CNL'
+            ORDER BY l.line_no
+        """;
+
+        command.Parameters.Add(
+            new SqlParameter("@outbound_order_id", SqlDbType.Int)
+            { Value = outboundOrderId });
+
+        using var reader = command.ExecuteReader();
+        var results = new List<OutboundOrderLineDto>();
+
+        while (reader.Read())
+            results.Add(new OutboundOrderLineDto
+            {
+                OutboundLineId  = reader.GetInt32(reader.GetOrdinal("outbound_line_id")),
+                LineNo          = reader.GetInt32(reader.GetOrdinal("line_no")),
+                SkuCode         = reader.GetString(reader.GetOrdinal("sku_code")),
+                SkuDescription  = reader.GetString(reader.GetOrdinal("sku_description")),
+                OrderedQty      = reader.GetInt32(reader.GetOrdinal("ordered_qty")),
+                AllocatedQty    = reader.GetInt32(reader.GetOrdinal("allocated_qty")),
+                PickedQty       = reader.GetInt32(reader.GetOrdinal("picked_qty")),
+                LineStatusCode  = reader.GetString(reader.GetOrdinal("line_status_code")),
+                RequestedBatch  = reader.IsDBNull(reader.GetOrdinal("requested_batch")) ? null : reader.GetString(reader.GetOrdinal("requested_batch")),
+                RequestedBbe    = reader.IsDBNull(reader.GetOrdinal("requested_bbe"))   ? null : reader.GetString(reader.GetOrdinal("requested_bbe")),
+                Notes           = reader.IsDBNull(reader.GetOrdinal("notes"))           ? null : reader.GetString(reader.GetOrdinal("notes"))
+            });
+
+        return results;
+    }
+
+    // --------------------------------------------------
+    // Shipped shipments
+    // --------------------------------------------------
+
+    public IReadOnlyList<ShipmentSummaryDto> GetShippedShipments()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                s.shipment_id,
+                s.shipment_ref,
+                s.shipment_status,
+                s.vehicle_ref,
+                p.display_name                              AS haulier_name,
+                CONVERT(NVARCHAR(16), s.planned_departure, 120) AS planned_departure,
+                COUNT(so.outbound_order_id)                 AS total_orders,
+                SUM(CASE WHEN o.order_status_code = 'PICKED'   THEN 1 ELSE 0 END) AS orders_picked,
+                SUM(CASE WHEN o.order_status_code = 'LOADED'   THEN 1 ELSE 0 END) AS orders_loaded
+            FROM outbound.shipments s
+            LEFT JOIN core.parties p
+                ON p.party_id = s.haulier_party_id
+            LEFT JOIN outbound.shipment_orders so
+                ON so.shipment_id = s.shipment_id
+            LEFT JOIN outbound.outbound_orders o
+                ON o.outbound_order_id = so.outbound_order_id
+            WHERE s.shipment_status IN ('SHIPPED', 'DEPARTED')
+            GROUP BY
+                s.shipment_id, s.shipment_ref, s.shipment_status,
+                s.vehicle_ref, p.display_name, s.planned_departure
+            ORDER BY s.shipment_id DESC
+        """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<ShipmentSummaryDto>();
+        while (reader.Read()) results.Add(ReadShipmentSummary(reader));
+        return results;
+    }
+
+    // --------------------------------------------------
+    // All shipments
+    // --------------------------------------------------
+
+    public IReadOnlyList<ShipmentSummaryDto> GetAllShipments()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                s.shipment_id,
+                s.shipment_ref,
+                s.shipment_status,
+                s.vehicle_ref,
+                p.display_name                              AS haulier_name,
+                CONVERT(NVARCHAR(16), s.planned_departure, 120) AS planned_departure,
+                COUNT(so.outbound_order_id)                 AS total_orders,
+                SUM(CASE WHEN o.order_status_code = 'PICKED'   THEN 1 ELSE 0 END) AS orders_picked,
+                SUM(CASE WHEN o.order_status_code = 'LOADED'   THEN 1 ELSE 0 END) AS orders_loaded
+            FROM outbound.shipments s
+            LEFT JOIN core.parties p
+                ON p.party_id = s.haulier_party_id
+            LEFT JOIN outbound.shipment_orders so
+                ON so.shipment_id = s.shipment_id
+            LEFT JOIN outbound.outbound_orders o
+                ON o.outbound_order_id = so.outbound_order_id
+            GROUP BY
+                s.shipment_id, s.shipment_ref, s.shipment_status,
+                s.vehicle_ref, p.display_name, s.planned_departure
+            ORDER BY s.shipment_id DESC
+        """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<ShipmentSummaryDto>();
+        while (reader.Read()) results.Add(ReadShipmentSummary(reader));
         return results;
     }
 
@@ -252,8 +504,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
                 COUNT(l.outbound_line_id)                   AS total_lines,
-                SUM(l.allocated_qty)                        AS total_allocated,
-                SUM(l.ordered_qty)                          AS total_ordered
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
@@ -289,8 +542,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             CustomerName    = reader.IsDBNull(reader.GetOrdinal("customer_name"))  ? string.Empty : reader.GetString(reader.GetOrdinal("customer_name")),
             RequiredDate    = reader.IsDBNull(reader.GetOrdinal("required_date"))  ? null         : reader.GetString(reader.GetOrdinal("required_date")),
             TotalLines      = reader.GetInt32(reader.GetOrdinal("total_lines")),
+            TotalOrdered    = reader.GetInt32(reader.GetOrdinal("total_ordered")),
             TotalAllocated  = reader.GetInt32(reader.GetOrdinal("total_allocated")),
-            TotalOrdered    = reader.GetInt32(reader.GetOrdinal("total_ordered"))
+            TotalPicked     = reader.IsDBNull(reader.GetOrdinal("total_picked")) ? 0 : reader.GetInt32(reader.GetOrdinal("total_picked"))
         };
 
     private static ShipmentSummaryDto ReadShipmentSummary(SqlDataReader reader) =>

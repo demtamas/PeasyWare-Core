@@ -466,4 +466,18 @@ public partial class MainForm : Form
         }
     }
 
+    private void shipmentsToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateShipmentsView(_session));
+    }
+
+    private void warehouseTasksToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateTasksView(_session));
+    }
+
+    private void outstandiToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateOutstandingOrdersView(_session));
+    }
 }

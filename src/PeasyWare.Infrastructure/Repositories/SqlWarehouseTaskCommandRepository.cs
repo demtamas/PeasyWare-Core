@@ -281,12 +281,43 @@ public sealed class SqlWarehouseTaskCommandRepository
             throw new InvalidOperationException(
                 "Unexpected empty response from bin-to-bin move confirmation.");
 
-        var success = reader.GetBoolean(reader.GetOrdinal("success"));
-        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
 
         return BuildResult(
             action:     "WarehouseTask.BinMove.Confirm",
             resultCode: code,
             data:       new { TaskId = taskId, ScannedBin = scannedBinCode });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Cancel task (supervisor action)
+    // ────────────────────────────────────────────────────────
+
+    public OperationResult CancelTask(int taskId, string? reason = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_cancel_task";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@task_id",    SqlDbType.Int).Value              = taskId;
+        command.Parameters.Add("@reason",     SqlDbType.NVarChar, 200).Value    = (object?)reason ?? DBNull.Value;
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value              = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from task cancellation.");
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult(
+            action:     "WarehouseTask.Cancel",
+            resultCode: code,
+            data:       new { TaskId = taskId, Reason = reason });
     }
 }

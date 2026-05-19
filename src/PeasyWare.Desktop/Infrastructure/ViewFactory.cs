@@ -4,7 +4,9 @@ using PeasyWare.Desktop.Views.Logs;
 using PeasyWare.Desktop.Views.Materials;
 using PeasyWare.Desktop.Views.Sessions;
 using PeasyWare.Desktop.Views.Settings;
+using PeasyWare.Desktop.Views.Shipments;
 using PeasyWare.Desktop.Views.Users;
+using PeasyWare.Desktop.Views.Warehouse;
 using PeasyWare.Infrastructure.Bootstrap;
 using System.Windows.Forms;
 
@@ -76,4 +78,23 @@ public sealed class ViewFactory
         var repo = _runtime.Repositories.CreateAuditQuery(session);
         return new SkuAuditView(repo);
     }
+
+    public UserControl CreateOutstandingOrdersView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateOutboundQuery(session);
+        var commandRepo = _runtime.Repositories.CreateOutboundCommand(session);
+        return new PeasyWare.Desktop.Views.Outbound.OutstandingOrdersView(queryRepo, commandRepo);
+    }
+
+    public UserControl CreateShipmentsView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateOutboundQuery(session);
+        return new ShipmentsView(queryRepo);
+    }
+
+    public UserControl CreateTasksView(SessionContext session)
+    {
+        return new TasksView(_runtime, session);
+    }
+
 }

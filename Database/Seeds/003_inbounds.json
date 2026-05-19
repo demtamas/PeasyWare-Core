@@ -1,0 +1,48 @@
+[
+  {
+    "InboundRef": "TESTINB01",
+    "SupplierPartyCode": "DUMMY_SUPPLIER",
+    "HaulierPartyCode": "DUMMY_HAULIER",
+    "ExpectedArrivalAt": "2026-05-18T06:00:00Z",
+    "Lines": [
+      {
+        "SkuCode": "SKU001",
+        "ExpectedQty": 1040,
+        "BatchNumber": "001442331A",
+        "BestBeforeDate": "2026-12-31",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "250101027140166844", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166851", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166868", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166875", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166882", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166899", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166905", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166912", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166929", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166936", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166943", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166950", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
+          { "Sscc": "250101027140166967", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" }
+        ]
+      }
+    ]
+  },
+  {
+    "InboundRef": "TESTINB02",
+    "SupplierPartyCode": "DUMMY_SUPPLIER",
+    "HaulierPartyCode": "DUMMY_HAULIER",
+    "ExpectedArrivalAt": "2026-05-18T06:00:00Z",
+    "Lines": [
+      {
+        "SkuCode": "SKU002",
+        "ExpectedQty": 1080,
+        "BatchNumber": null,
+        "BestBeforeDate": null,
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": []
+      }
+    ]
+  }
+]

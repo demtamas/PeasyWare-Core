@@ -70,6 +70,13 @@ public sealed class ReceiveManualFlow
         if (string.IsNullOrWhiteSpace(bin))
             return;
 
+        if (!queryRepo.BinExists(bin))
+        {
+            Console.WriteLine($"Bin '{bin}' not found or is inactive.");
+            Console.ReadKey(true);
+            return;
+        }
+
         while (true)
         {
             Console.Clear();
@@ -87,7 +94,14 @@ public sealed class ReceiveManualFlow
             if (string.Equals(firstRaw, "B", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Write("Enter new bin: ");
-                bin = Console.ReadLine()?.Trim() ?? bin;
+                var newBin = Console.ReadLine()?.Trim() ?? "";
+                if (!string.IsNullOrWhiteSpace(newBin))
+                {
+                    if (!queryRepo.BinExists(newBin))
+                        Console.WriteLine($"Bin '{newBin}' not found or is inactive.");
+                    else
+                        bin = newBin;
+                }
                 continue;
             }
 

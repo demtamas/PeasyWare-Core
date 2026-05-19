@@ -1,0 +1,20 @@
+[
+  {
+    "SkuCode": "SKU001",
+    "SkuDescription": "First Test Product",
+    "Ean": "04062139024766",
+    "UomCode": "Each",
+    "WeightPerUnit": 700,
+    "StandardHuQuantity": 80,
+    "IsHazardous": false
+  },
+  {
+    "SkuCode": "SKU002",
+    "SkuDescription": "Second Test Product MP18X1",
+    "Ean": "05010102322523",
+    "UomCode": "Each",
+    "WeightPerUnit": 800,
+    "StandardHuQuantity": 180,
+    "IsHazardous": false
+  }
+]

@@ -1,3 +1,9 @@
+USE PW_Core_DEV;
+GO
+
+SET QUOTED_IDENTIFIER ON;
+GO
+
 CREATE TABLE core.parties
 (
     party_id        INT IDENTITY(1,1) PRIMARY KEY,

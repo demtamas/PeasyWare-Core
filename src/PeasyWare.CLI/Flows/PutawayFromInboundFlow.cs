@@ -147,7 +147,7 @@ namespace PeasyWare.CLI.Flows
                         // Resolve bin code: SSCC-encoded label or plain Code-128
                         var binScan = GtinParser.Parse(rawBin);
 
-                        var resolvedBin = binScan.IsValid && binScan.Sscc is not null
+                var resolvedBin = binScan.IsValid && binScan.Sscc is not null
                             ? binScan.Sscc   // SSCC-encoded bin label (uncommon)
                             : rawBin;        // Plain Code-128 bin label (standard)
 

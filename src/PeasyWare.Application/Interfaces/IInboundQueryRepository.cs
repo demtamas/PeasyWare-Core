@@ -21,4 +21,6 @@ public interface IInboundQueryRepository
     IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef);
 
     InboundLineByEanDto? GetReceivableLineByEan(string inboundRef, string ean);
+
+    bool BinExists(string binCode);
 }

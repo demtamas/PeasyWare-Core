@@ -160,7 +160,7 @@ public sealed class SqlOutboundCommandRepository
     // Ship — confirm departure
     // ────────────────────────────────────────────────────────
 
-    public ShipResult Ship(int shipmentId)
+    public ShipResult Ship(int shipmentId, string vehicleRef)
     {
         EnsureSession();
 
@@ -171,6 +171,7 @@ public sealed class SqlOutboundCommandRepository
         command.CommandType = CommandType.StoredProcedure;
 
         command.Parameters.Add("@shipment_id", SqlDbType.Int).Value              = shipmentId;
+        command.Parameters.Add("@vehicle_ref", SqlDbType.NVarChar, 50).Value     = vehicleRef.Trim();
         command.Parameters.Add("@user_id",     SqlDbType.Int).Value              = _session.UserId;
         command.Parameters.Add("@session_id",  SqlDbType.UniqueIdentifier).Value = _session.SessionId;
 
@@ -269,6 +270,52 @@ public sealed class SqlOutboundCommandRepository
         return BuildResult("Outbound.CreateShipment", code, new { ShipmentRef = shipmentRef, ShipmentId = shipmentId });
     }
 
+    public OperationResult CancelAllocation(int allocationId, string? reason = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_cancel_allocation";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",    _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@allocation_id", SqlDbType.Int)          { Value = allocationId });
+        command.Parameters.Add(new SqlParameter("@reason",        SqlDbType.NVarChar, 200) { Value = (object?)reason ?? DBNull.Value });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRALLOC99", "Unexpected error.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult("Outbound.CancelAllocation", code,
+            new { AllocationId = allocationId, Reason = reason });
+    }
+
+    public OperationResult ReallocateLine(int outboundLineId)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_reallocate_line";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.AddWithValue("@user_id",    _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+        command.Parameters.Add(new SqlParameter("@outbound_line_id", SqlDbType.Int) { Value = outboundLineId });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return OperationResult.Create(false, "ERRALLOC99", "Unexpected error.");
+
+        var success      = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code         = reader.GetString(reader.GetOrdinal("result_code"));
+        var allocationId = success ? reader.GetInt32(reader.GetOrdinal("allocation_id")) : 0;
+
+        return BuildResult("Outbound.ReallocateLine", code,
+            new { OutboundLineId = outboundLineId, NewAllocationId = allocationId });
+    }
+
     public OperationResult AddOrderToShipment(
         string shipmentRef,
         string orderRef)
@@ -293,4 +340,92 @@ public sealed class SqlOutboundCommandRepository
         return BuildResult("Outbound.AddOrderToShipment", code,
             new { ShipmentRef = shipmentRef, OrderRef = orderRef });
     }
+
+    // ────────────────────────────────────────────────────────
+    // Allocate order (Desktop — calls existing usp_allocate_order)
+    // ────────────────────────────────────────────────────────
+
+    public OperationResult AllocateOrder(int outboundOrderId)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_allocate_order";
+        command.CommandType = System.Data.CommandType.StoredProcedure;
+
+        command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value = outboundOrderId;
+        command.Parameters.Add("@user_id", System.Data.SqlDbType.Int).Value = _session.UserId;
+        command.Parameters.Add("@session_id", System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from usp_allocate_order.");
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult("Outbound.AllocateOrder", code,
+            new { OutboundOrderId = outboundOrderId });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Deallocate order (Desktop — calls outbound.usp_deallocate_order)
+    // ────────────────────────────────────────────────────────
+
+    public OperationResult DeallocateOrder(int outboundOrderId)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_deallocate_order";
+        command.CommandType = System.Data.CommandType.StoredProcedure;
+
+        command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value = outboundOrderId;
+        command.Parameters.Add("@user_id", System.Data.SqlDbType.Int).Value = _session.UserId;
+        command.Parameters.Add("@session_id", System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from usp_deallocate_order.");
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult("Outbound.DeallocateOrder", code,
+            new { OutboundOrderId = outboundOrderId });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Cancel order — hard-refuses if anything is beyond NEW
+    // ────────────────────────────────────────────────────────
+
+    public OperationResult CancelOrder(int outboundOrderId)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_cancel_order";
+        command.CommandType = System.Data.CommandType.StoredProcedure;
+
+        command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value = outboundOrderId;
+        command.Parameters.Add("@user_id", System.Data.SqlDbType.Int).Value = _session.UserId;
+        command.Parameters.Add("@session_id", System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from usp_cancel_order.");
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+
+        return BuildResult("Outbound.CancelOrder", code,
+            new { OutboundOrderId = outboundOrderId });
+    }
+
 }

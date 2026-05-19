@@ -12,7 +12,7 @@ namespace PeasyWare.CLI.Flows;
 
 public sealed class PickFlow
 {
-    private readonly AppRuntime     _runtime;
+    private readonly AppRuntime _runtime;
     private readonly SessionContext _session;
 
     public PickFlow(AppRuntime runtime, SessionContext session)
@@ -23,7 +23,7 @@ public sealed class PickFlow
 
     public void Run()
     {
-        var queryRepo   = _runtime.Repositories.CreateOutboundQuery(_session);
+        var queryRepo = _runtime.Repositories.CreateOutboundQuery(_session);
         var commandRepo = _runtime.Repositories.CreateOutboundCommand(_session);
 
         while (true)
@@ -121,11 +121,14 @@ public sealed class PickFlow
                     Console.WriteLine($"[SCAN] Destination staging bin: '{destinationBinCode}'");
             }
 
+        ReloadAndRepick:
+            allocations = queryRepo.GetAllocationsForOrder(order.OutboundOrderId);
+
             var pendingAllocations = allocations
                 .Where(a => a.AllocationStatus == "PENDING" || a.AllocationStatus == "CONFIRMED")
                 .ToList();
 
-            var picked  = 0;
+            var picked = 0;
             var skipped = 0;
 
             foreach (var alloc in pendingAllocations)
@@ -152,17 +155,39 @@ public sealed class PickFlow
                     Console.WriteLine($"Could not create pick task: {taskResult.FriendlyMessage}");
                     if (_session.UiMode == UiMode.Trace)
                         Console.WriteLine($"[TRACE] ResultCode: {taskResult.ResultCode}");
+                    Console.WriteLine();
+                    Console.Write("R=request new allocation  S=skip  0=abort: ");
+                    var choice = Console.ReadLine()?.Trim().ToUpperInvariant();
 
-                    // TODO: Re-allocation request
-                    // When CreatePickTask fails (unit damaged, obstructed, not found etc.),
-                    // offer the operator an option to request a new allocation for this line.
-                    // This would cancel the current allocation and call usp_allocate_order
-                    // for the specific line with the next eligible unit. Requires:
-                    //   - outbound.usp_cancel_allocation (cancel single allocation row)
-                    //   - outbound.usp_reallocate_line (re-run allocation engine per line)
-                    //   - CLI: prompt "R=request new allocation, S=skip, 0=abort"
-                    Console.WriteLine("Press any key to skip this unit.");
-                    Console.ReadKey(true);
+                    if (choice == "0") goto AbortPicking;
+
+                    if (choice == "R")
+                    {
+                        var cancelResult = commandRepo.CancelAllocation(alloc.AllocationId, "Operator requested re-allocation during pick");
+                        if (!cancelResult.Success)
+                        {
+                            Console.WriteLine($"Cancel failed: {cancelResult.FriendlyMessage}");
+                            Console.ReadKey(true);
+                            skipped++;
+                            continue;
+                        }
+
+                        var reallocResult = commandRepo.ReallocateLine(alloc.OutboundLineId);
+                        if (!reallocResult.Success)
+                        {
+                            Console.WriteLine($"Re-allocation failed: {reallocResult.FriendlyMessage}");
+                            Console.WriteLine("No substitute stock available. Line requires supervisor attention.");
+                            Console.ReadKey(true);
+                            skipped++;
+                            continue;
+                        }
+
+                        Console.WriteLine("New allocation created. Refreshing order...");
+                        Thread.Sleep(600);
+                        // Reload allocations and restart the pick session for this order
+                        goto ReloadAndRepick;
+                    }
+
                     skipped++;
                     continue;
                 }
@@ -191,23 +216,41 @@ public sealed class PickFlow
 
                     if (string.Equals(rawBin, "S", StringComparison.OrdinalIgnoreCase))
                     {
-                        // TODO: Re-allocation request
-                        // Operator found the allocated unit inaccessible, damaged, or missing.
-                        // Instead of silently skipping, offer R=request new allocation.
-                        // Flow: cancel current allocation row → re-run allocation engine
-                        // for this line → if new unit found, loop back and retry pick.
-                        // If no substitute available, order line remains partially picked
-                        // and supervisor must resolve manually.
-                        Console.WriteLine("Unit skipped.");
-                        Thread.Sleep(800);
+                        Console.WriteLine();
+                        Console.Write("R=request new allocation  S=skip  0=abort: ");
+                        var skipChoice = Console.ReadLine()?.Trim().ToUpperInvariant();
+
+                        if (skipChoice == "0") goto AbortPicking;
+
+                        if (skipChoice == "R")
+                        {
+                            var cancelResult = commandRepo.CancelAllocation(alloc.AllocationId, "Operator skipped — re-allocation requested");
+                            if (cancelResult.Success)
+                            {
+                                var reallocResult = commandRepo.ReallocateLine(alloc.OutboundLineId);
+                                if (reallocResult.Success)
+                                {
+                                    Console.WriteLine("New allocation created. Refreshing order...");
+                                    Thread.Sleep(600);
+                                    goto ReloadAndRepick;
+                                }
+                                Console.WriteLine($"Re-allocation failed: {reallocResult.FriendlyMessage}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Cancel failed: {cancelResult.FriendlyMessage}");
+                            }
+                            Console.ReadKey(true);
+                        }
+
                         skipped++;
                         break;
                     }
 
-                    var binScan     = GtinParser.Parse(rawBin);
-                    var resolvedBin = binScan.IsValid && binScan.Sscc is not null
+                    var binScan = GtinParser.Parse(rawBin);
+                    var resolvedBin = (binScan.IsValid && binScan.Sscc is not null
                         ? binScan.Sscc
-                        : rawBin;
+                        : rawBin).ToUpperInvariant().Trim();
 
                     if (binScan.IsValid && binScan.IsPalletScan && !binScan.IsProductScan)
                     {
@@ -221,13 +264,16 @@ public sealed class PickFlow
                         continue;
                     }
 
-                    Console.Write($"Scan pallet SSCC [{alloc.Sscc}]: ");
+                    Console.Write($"Scan pallet SSCC [{alloc.Sscc}] (0=abort): ");
                     var rawSscc = Console.ReadLine()?.Trim();
 
                     if (string.IsNullOrWhiteSpace(rawSscc))
                         continue;
 
-                    var ssccScan     = GtinParser.Parse(rawSscc);
+                    if (rawSscc == "0")
+                        goto AbortPicking;
+
+                    var ssccScan = GtinParser.Parse(rawSscc);
                     var resolvedSscc = ssccScan.IsValid && ssccScan.Sscc is not null
                         ? ssccScan.Sscc
                         : rawSscc;
@@ -257,7 +303,7 @@ public sealed class PickFlow
                 }
             }
 
-            AbortPicking:
+        AbortPicking:
 
             Console.Clear();
             Console.WriteLine("────────────────────────────────────────────────────────────");
