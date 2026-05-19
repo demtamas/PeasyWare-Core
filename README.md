@@ -92,16 +92,30 @@ cd PeasyWare-Core
 
 ### 2 — Database
 
-Build the tools project, then use `pwtools` to reset and seed the database:
+Build the tools project, then reset and seed the database schema:
 
 ```powershell
 dotnet build
 tools\PeasyWare.Tools\bin\Debug\net10.0\pwtools.exe reset-db --confirm
 ```
 
-Scripts are in `Database/Scripts/` (90 files, executed in order). Seeds include reference data, bins, test inbounds, orders, and shipments.
+Scripts are in `Database/Scripts/` (90 files, executed in order). This seeds reference data, bins, error codes, and roles.
 
-### 3 — Connection string
+### 3 — Test data (optional)
+
+With the API running, seed test SKUs, inbounds, and outbound orders:
+
+```powershell
+cd Database/Seeds
+.\run_seeds.ps1              # all test data
+.\run_seeds.ps1 -Only 1      # SKUs only
+.\run_seeds.ps1 -Only 2      # Inbounds only
+.\run_seeds.ps1 -Only 1,2    # SKUs + Inbounds
+```
+
+Requires `PEASYWARE_API_KEY` env var set, and the API running on `http://localhost:5000`.
+
+### 4 — Connection string
 
 The app resolves the connection string in this order:
 
@@ -118,7 +132,7 @@ $env:PEASYWARE_DB = "Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=y
 export PEASYWARE_DB="Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;"
 ```
 
-### 4 — Build and run
+### 5 — Build and run
 
 ```bash
 dotnet build
@@ -132,7 +146,7 @@ dotnet run --project src/PeasyWare.Desktop
 
 Initial credentials: `admin` / `admin0` — password change required on first login (min 8 chars, uppercase + lowercase + number).
 
-### 5 — Tests
+### 6 — Tests
 
 ```bash
 dotnet test
