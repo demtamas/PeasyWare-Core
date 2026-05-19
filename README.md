@@ -14,7 +14,7 @@ Built with reference to enterprise platforms such as **SAP EWM**, **Manhattan WM
 - SQL Server — write operations and business logic in stored procedures; read operations via views
 - No ORM — raw ADO.NET with named parameter mapping
 - Event-stream audit trail (`audit.trace_logs`)
-- Windows (Desktop + CLI) / macOS (CLI)
+- Desktop + CLI: Windows. CLI only: macOS, Linux
 
 ---
 
@@ -134,13 +134,13 @@ export PEASYWARE_DB="Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=y
 
 ### 5 — Build and run
 
-```bash
+```powershell
 dotnet build
 
-# RF-style terminal (CLI)
+# RF-style terminal (CLI) — Windows, macOS, Linux
 dotnet run --project src/PeasyWare.CLI
 
-# Desktop application (Windows)
+# Desktop application — Windows only
 dotnet run --project src/PeasyWare.Desktop
 ```
 
