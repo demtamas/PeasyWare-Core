@@ -45,12 +45,25 @@ function Invoke-Api {
     $errMsg   = $null
     $status   = $null
 
+    # Strip null values before sending — avoids deserialisation errors on nullable fields
+    $cleanBody = @{}
+    if ($Body -is [hashtable]) {
+        foreach ($key in $Body.Keys) {
+            if ($null -ne $Body[$key]) { $cleanBody[$key] = $Body[$key] }
+        }
+    } else {
+        foreach ($key in $Body.PSObject.Properties.Name) {
+            $val = $Body.$key
+            if ($null -ne $val) { $cleanBody[$key] = $val }
+        }
+    }
+
     try {
         $response = Invoke-RestMethod `
             -Uri         $Uri `
             -Method      POST `
             -Headers     $headers `
-            -Body        ($Body | ConvertTo-Json -Depth 10 -Compress) `
+            -Body        ($cleanBody | ConvertTo-Json -Depth 10 -Compress) `
             -ContentType "application/json"
 
         # Treat HTTP 200 with success:false as a failure
@@ -68,7 +81,17 @@ function Invoke-Api {
         if ($stream) {
             $reader = [System.IO.StreamReader]::new($stream)
             $raw    = $reader.ReadToEnd()
-            try { $errMsg = ($raw | ConvertFrom-Json).message } catch { }
+            try {
+                $parsed = $raw | ConvertFrom-Json
+                # Show full validation errors if present
+                if ($parsed.errors) {
+                    $errMsg = ($parsed.errors | ConvertTo-Json -Compress)
+                } elseif ($parsed.message) {
+                    $errMsg = $parsed.message
+                } else {
+                    $errMsg = $raw
+                }
+            } catch { $errMsg = $raw }
         }
     }
 

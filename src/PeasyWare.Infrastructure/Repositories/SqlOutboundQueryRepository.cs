@@ -38,6 +38,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
@@ -45,13 +48,16 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
             JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
             WHERE o.order_status_code IN ('ALLOCATED','PICKING')
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
             ORDER BY o.required_date, o.order_ref
         """;
 
@@ -77,6 +83,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
@@ -84,13 +93,16 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
             JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
             WHERE o.order_ref = @order_ref
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
         """;
 
         command.Parameters.Add(new SqlParameter("@order_ref", SqlDbType.NVarChar, 50) { Value = orderRef.Trim() });
@@ -174,6 +186,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name                              AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
@@ -181,13 +196,16 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
             LEFT JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
             WHERE o.order_status_code IN ('SHIPPED', 'DEPARTED')
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
             ORDER BY o.required_date DESC, o.order_ref
         """;
 
@@ -213,6 +231,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name                              AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
@@ -220,12 +241,15 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
             LEFT JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
             ORDER BY o.required_date DESC, o.order_status_code, o.order_ref
         """;
 
@@ -251,6 +275,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name                              AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
@@ -258,13 +285,16 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
             LEFT JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
             WHERE o.order_status_code NOT IN ('SHIPPED', 'DEPARTED', 'CANCELLED')
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
             ORDER BY o.required_date, o.order_status_code, o.order_ref
         """;
 
@@ -488,7 +518,7 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
     }
 
     // --------------------------------------------------
-    // Orders on a shipment (PICKED or LOADED — loadable)
+    // Orders on a shipment (all statuses — for supervisor view)
     // --------------------------------------------------
 
     public IReadOnlyList<OutboundOrderSummaryDto> GetOrdersOnShipment(int shipmentId)
@@ -503,6 +533,9 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
                 o.order_status_code,
                 p.display_name          AS customer_name,
                 CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
                 COUNT(l.outbound_line_id)                   AS total_lines,
                 ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
                 ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
@@ -510,14 +543,18 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             FROM outbound.outbound_orders o
             JOIN core.parties p
                 ON p.party_id = o.customer_party_id
-            JOIN outbound.outbound_lines l
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
+            LEFT JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
-            WHERE o.shipment_id       = @shipment_id
-              AND o.order_status_code IN ('PICKED','LOADED')
+            JOIN outbound.shipment_orders so
+                ON so.outbound_order_id = o.outbound_order_id
+               AND so.shipment_id = @shipment_id
             GROUP BY
                 o.outbound_order_id, o.order_ref, o.order_status_code,
-                p.display_name, o.required_date
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
             ORDER BY o.order_ref
         """;
 
@@ -536,15 +573,18 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
     private static OutboundOrderSummaryDto ReadOrderSummary(SqlDataReader reader) =>
         new OutboundOrderSummaryDto
         {
-            OutboundOrderId = reader.GetInt32(reader.GetOrdinal("outbound_order_id")),
-            OrderRef        = reader.GetString(reader.GetOrdinal("order_ref")),
-            OrderStatusCode = reader.GetString(reader.GetOrdinal("order_status_code")),
-            CustomerName    = reader.IsDBNull(reader.GetOrdinal("customer_name"))  ? string.Empty : reader.GetString(reader.GetOrdinal("customer_name")),
-            RequiredDate    = reader.IsDBNull(reader.GetOrdinal("required_date"))  ? null         : reader.GetString(reader.GetOrdinal("required_date")),
-            TotalLines      = reader.GetInt32(reader.GetOrdinal("total_lines")),
-            TotalOrdered    = reader.GetInt32(reader.GetOrdinal("total_ordered")),
-            TotalAllocated  = reader.GetInt32(reader.GetOrdinal("total_allocated")),
-            TotalPicked     = reader.IsDBNull(reader.GetOrdinal("total_picked")) ? 0 : reader.GetInt32(reader.GetOrdinal("total_picked"))
+            OutboundOrderId      = reader.GetInt32(reader.GetOrdinal("outbound_order_id")),
+            OrderRef             = reader.GetString(reader.GetOrdinal("order_ref")),
+            OrderStatusCode      = reader.GetString(reader.GetOrdinal("order_status_code")),
+            CustomerName         = reader.IsDBNull(reader.GetOrdinal("customer_name"))         ? string.Empty : reader.GetString(reader.GetOrdinal("customer_name")),
+            DeliveryAddressLine1 = reader.IsDBNull(reader.GetOrdinal("delivery_line_1"))       ? null         : reader.GetString(reader.GetOrdinal("delivery_line_1")),
+            DeliveryCity         = reader.IsDBNull(reader.GetOrdinal("delivery_city"))         ? null         : reader.GetString(reader.GetOrdinal("delivery_city")),
+            DeliveryPostalCode   = reader.IsDBNull(reader.GetOrdinal("delivery_postal_code"))  ? null         : reader.GetString(reader.GetOrdinal("delivery_postal_code")),
+            RequiredDate         = reader.IsDBNull(reader.GetOrdinal("required_date"))         ? null         : reader.GetString(reader.GetOrdinal("required_date")),
+            TotalLines           = reader.GetInt32(reader.GetOrdinal("total_lines")),
+            TotalOrdered         = reader.GetInt32(reader.GetOrdinal("total_ordered")),
+            TotalAllocated       = reader.GetInt32(reader.GetOrdinal("total_allocated")),
+            TotalPicked          = reader.IsDBNull(reader.GetOrdinal("total_picked")) ? 0 : reader.GetInt32(reader.GetOrdinal("total_picked"))
         };
 
     private static ShipmentSummaryDto ReadShipmentSummary(SqlDataReader reader) =>

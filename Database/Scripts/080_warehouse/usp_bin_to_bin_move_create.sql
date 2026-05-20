@@ -78,13 +78,24 @@ BEGIN
         -- Resolve destination bin if provided
         IF @destination_bin_code IS NOT NULL
         BEGIN
-            SELECT @destination_bin_id = bin_id
+            DECLARE @dest_bin_is_active BIT;
+
+            SELECT @destination_bin_id = bin_id,
+                   @dest_bin_is_active = is_active
             FROM locations.bins
-            WHERE bin_code = @destination_bin_code COLLATE Latin1_General_CS_AS AND is_active = 1;
+            WHERE bin_code = @destination_bin_code COLLATE Latin1_General_CS_AS;
 
             IF @destination_bin_id IS NULL
             BEGIN
                 SELECT CAST(0 AS BIT) AS success, N'ERRMOVE04' AS result_code,
+                       NULL AS task_id, @inventory_unit_id AS inventory_unit_id,
+                       @source_bin_code AS source_bin_code, @destination_bin_code AS destination_bin_code;
+                ROLLBACK; RETURN;
+            END
+
+            IF @dest_bin_is_active = 0
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRMOVE07' AS result_code,
                        NULL AS task_id, @inventory_unit_id AS inventory_unit_id,
                        @source_bin_code AS source_bin_code, @destination_bin_code AS destination_bin_code;
                 ROLLBACK; RETURN;
@@ -137,10 +148,14 @@ BEGIN
         -- Create move task
         INSERT INTO warehouse.warehouse_tasks
             (task_type_code, inventory_unit_id, source_bin_id, destination_bin_id,
-             task_state_code, expires_at, created_by)
+             task_state_code, expires_at,
+             claimed_by_user_id, claimed_at,
+             created_by)
         VALUES
             ('MOVE', @inventory_unit_id, @source_bin_id, @destination_bin_id,
-             'OPN', @expires_at, @user_id);
+             'OPN', @expires_at,
+             @user_id, @now,
+             @user_id);
 
         SET @task_id = SCOPE_IDENTITY();
 

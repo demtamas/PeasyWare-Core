@@ -88,8 +88,9 @@ public sealed class ViewFactory
 
     public UserControl CreateShipmentsView(SessionContext session)
     {
-        var queryRepo = _runtime.Repositories.CreateOutboundQuery(session);
-        return new ShipmentsView(queryRepo);
+        var queryRepo   = _runtime.Repositories.CreateOutboundQuery(session);
+        var commandRepo = _runtime.Repositories.CreateOutboundCommand(session);
+        return new ShipmentsView(queryRepo, commandRepo);
     }
 
     public UserControl CreateTasksView(SessionContext session)

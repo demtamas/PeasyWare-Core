@@ -200,6 +200,7 @@ CREATE TABLE outbound.outbound_orders
 
     customer_party_id   INT           NOT NULL,
     haulier_party_id    INT           NULL,
+    delivery_address_id INT           NULL,
 
     -- Linked shipment (set when added to a shipment)
     shipment_id         INT           NULL,
@@ -228,6 +229,10 @@ CREATE TABLE outbound.outbound_orders
     CONSTRAINT FK_outbound_orders_haulier
         FOREIGN KEY (haulier_party_id)
         REFERENCES core.parties(party_id),
+
+    CONSTRAINT FK_outbound_orders_delivery_address
+        FOREIGN KEY (delivery_address_id)
+        REFERENCES core.party_addresses(address_id),
 
     CONSTRAINT FK_outbound_orders_status
         FOREIGN KEY (order_status_code)

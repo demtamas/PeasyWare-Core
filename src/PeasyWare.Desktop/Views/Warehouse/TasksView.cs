@@ -19,8 +19,10 @@ public partial class TasksView : BaseView, IToolbarAware
     private ToolStripButton?      _btnCancel;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _chkAllHost;
+    private ToolStripControlHost? _filterHost;
     private TextBox?              _txtSearch;
     private CheckBox?             _chkAll;
+    private ComboBox?             _cmbFilter;
     private ToolStripLabel?       _lblStatus;
 
     private List<WarehouseTaskDto> _tasks = [];
@@ -83,6 +85,13 @@ public partial class TasksView : BaseView, IToolbarAware
             Width    = 90
         };
 
+        _cmbFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
+        _cmbFilter.Items.AddRange(["All types", "PUTAWAY", "PICK", "MOVE"]);
+        _cmbFilter.SelectedIndex = 0;
+        _cmbFilter.SelectedIndexChanged += (_, _) => FilterGrid();
+
+        _filterHost = new ToolStripControlHost(_cmbFilter) { AutoSize = false, Width = 105 };
+
         _lblStatus = new ToolStripLabel("");
 
         toolStrip.Items.Add(_btnRefresh);
@@ -90,6 +99,7 @@ public partial class TasksView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnCancel);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
+        toolStrip.Items.Add(_filterHost);
         toolStrip.Items.Add(_chkAllHost);
         toolStrip.Items.Add(_lblStatus);
     }
@@ -138,6 +148,8 @@ public partial class TasksView : BaseView, IToolbarAware
         dgv.Columns.Add(Col(nameof(WarehouseTaskDto.SourceBin),      "From",        5));
         dgv.Columns.Add(Col(nameof(WarehouseTaskDto.DestinationBin), "To",          5));
         dgv.Columns.Add(Col(nameof(WarehouseTaskDto.ClaimedBy),      "Claimed by",  6));
+        dgv.Columns.Add(Col(nameof(WarehouseTaskDto.CreatedBy),      "Created by",  6));
+        dgv.Columns.Add(Col(nameof(WarehouseTaskDto.CompletedBy),    "Completed by",6));
         dgv.Columns.Add(ColFmt(nameof(WarehouseTaskDto.CreatedAt),   "Created",     9, "dd-MM-yyyy HH:mm"));
         dgv.Columns.Add(ColFmt(nameof(WarehouseTaskDto.UpdatedAt),   "Updated",     9, "dd-MM-yyyy HH:mm"));
     }
@@ -188,15 +200,18 @@ public partial class TasksView : BaseView, IToolbarAware
 
     private void FilterGrid()
     {
-        var term = _txtSearch?.Text.Trim() ?? "";
-        var data = string.IsNullOrEmpty(term)
-            ? _tasks
-            : _tasks.Where(t =>
-                t.Sscc.Contains(term, StringComparison.OrdinalIgnoreCase)                      ||
-                t.SkuCode.Contains(term, StringComparison.OrdinalIgnoreCase)                   ||
-                (t.SourceBin?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)     ||
-                (t.DestinationBin?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)||
-                t.TaskTypeCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+        var term     = _txtSearch?.Text.Trim() ?? "";
+        var typeFilter = _cmbFilter?.SelectedIndex > 0 ? _cmbFilter.SelectedItem?.ToString() : null;
+
+        var data = _tasks
+            .Where(t => typeFilter is null || t.TaskTypeCode == typeFilter)
+            .Where(t => string.IsNullOrEmpty(term) ||
+                t.Sscc.Contains(term, StringComparison.OrdinalIgnoreCase)                       ||
+                t.SkuCode.Contains(term, StringComparison.OrdinalIgnoreCase)                    ||
+                (t.SourceBin?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)      ||
+                (t.DestinationBin?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (t.CreatedBy?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)      ||
+                (t.ClaimedBy?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
             ).ToList();
 
         dgvTasks.DataSource = null;

@@ -55,3 +55,10 @@ WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'E
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRTASK07', N'WAREHOUSE', N'ERROR', N'Task cancellation is not permitted from its current state.', N'warehouse.usp_cancel_task: invalid transition'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRTASK07');
+
+-- Bin move: destination bin inactive / blocked
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRMOVE07', N'WAREHOUSE', N'ERROR',
+    N'Destination bin is inactive or blocked. Choose a different bin.',
+    N'usp_bin_to_bin_move_create: destination bin is_active = 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRMOVE07');

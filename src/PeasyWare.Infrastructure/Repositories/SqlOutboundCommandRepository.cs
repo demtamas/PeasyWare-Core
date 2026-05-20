@@ -209,10 +209,11 @@ public sealed class SqlOutboundCommandRepository
     public OperationResult CreateOrder(
         string             orderRef,
         string             customerPartyCode,
-        string?            haulierPartyCode = null,
-        DateTime?          requiredDate     = null,
-        string?            notes            = null,
-        List<OrderLineDto> lines            = null!)
+        string?            haulierPartyCode  = null,
+        string?            deliveryPartyCode = null,
+        DateTime?          requiredDate      = null,
+        string?            notes             = null,
+        List<OrderLineDto> lines             = null!)
     {
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
@@ -222,12 +223,13 @@ public sealed class SqlOutboundCommandRepository
 
         command.Parameters.AddWithValue("@user_id",              _session.UserId);
         command.Parameters.AddWithValue("@session_id",           _session.SessionId);
-        command.Parameters.Add(new SqlParameter("@order_ref",           SqlDbType.NVarChar, 50)   { Value = orderRef });
-        command.Parameters.Add(new SqlParameter("@customer_party_code", SqlDbType.NVarChar, 50)   { Value = customerPartyCode });
-        command.Parameters.Add(new SqlParameter("@haulier_party_code",  SqlDbType.NVarChar, 50)   { Value = (object?)haulierPartyCode ?? DBNull.Value });
-        command.Parameters.Add(new SqlParameter("@required_date",       SqlDbType.Date)           { Value = (object?)requiredDate     ?? DBNull.Value });
-        command.Parameters.Add(new SqlParameter("@notes",               SqlDbType.NVarChar, 500)  { Value = (object?)notes            ?? DBNull.Value });
-        command.Parameters.Add(new SqlParameter("@lines_json",          SqlDbType.NVarChar, -1)   { Value = System.Text.Json.JsonSerializer.Serialize(lines) });
+        command.Parameters.Add(new SqlParameter("@order_ref",            SqlDbType.NVarChar, 50)   { Value = orderRef });
+        command.Parameters.Add(new SqlParameter("@customer_party_code",  SqlDbType.NVarChar, 50)   { Value = customerPartyCode });
+        command.Parameters.Add(new SqlParameter("@haulier_party_code",   SqlDbType.NVarChar, 50)   { Value = (object?)haulierPartyCode  ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@delivery_party_code",  SqlDbType.NVarChar, 50)   { Value = (object?)deliveryPartyCode ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@required_date",        SqlDbType.Date)           { Value = (object?)requiredDate      ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@notes",                SqlDbType.NVarChar, 500)  { Value = (object?)notes             ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@lines_json",           SqlDbType.NVarChar, -1)   { Value = System.Text.Json.JsonSerializer.Serialize(lines) });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRORD99", "Unexpected error.");

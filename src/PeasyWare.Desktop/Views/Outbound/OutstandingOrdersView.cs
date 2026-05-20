@@ -171,7 +171,9 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
             : _orders.Where(o =>
                 o.OrderRef.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 o.CustomerName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                o.OrderStatusCode.Contains(q, StringComparison.OrdinalIgnoreCase))
+                o.OrderStatusCode.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (o.DeliveryCity?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (o.DeliveryPostalCode?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
               .ToList();
 
         Bind(data);
@@ -350,14 +352,17 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
 
         dgv.Columns.Clear();
 
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.OrderRef), "Order Ref", 12));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.CustomerName), "Customer", 22));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.OrderStatusCode), "Status", 9));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.RequiredDate), "Required", 9));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalLines), "Lines", 4));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalOrdered), "Ordered", 7));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalAllocated), "Allocated", 7));
-        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalPicked), "Picked", 7));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.OrderRef),           "Order Ref",  12));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.CustomerName),         "Customer",   14));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.DeliveryAddressLine1), "Delivery",   14));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.DeliveryCity),         "City",        7));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.DeliveryPostalCode),   "Postcode",    6));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.OrderStatusCode),      "Status",      7));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.RequiredDate),         "Required",    7));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalLines),           "Lines",       3));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalOrdered),         "Ordered",     5));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalAllocated),       "Allocated",   5));
+        dgv.Columns.Add(Col(nameof(OutboundOrderSummaryDto.TotalPicked),          "Picked",      5));
 
         dgv.CellFormatting += (_, e) =>
         {

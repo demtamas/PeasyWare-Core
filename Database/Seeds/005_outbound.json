@@ -1,71 +1,60 @@
 {
   "Orders": [
     {
-      "OrderRef": "TESTORD01",
-      "CustomerPartyCode": "DUMMY_CUSTOMER",
-      "HaulierPartyCode": "DUMMY_HAULIER",
-      "RequiredDate": "2027-06-30",
-      "Notes": "Test order 1 - 2 pallets SKU001",
+      "OrderRef": "ORD-2026-001",
+      "CustomerPartyCode": "PW_CUSTOMER01",
+      "HaulierPartyCode": "PW_HAULIER01",
+      "DeliveryPartyCode": "PW_CUSTOMER01",
+      "RequiredDate": "2026-05-28",
       "Lines": [
-        {
-          "LineNo": 1,
-          "SkuCode": "SKU001",
-          "OrderedQty": 160,
-          "RequestedBatch": null,
-          "RequestedBbe": null,
-          "Notes": "2 pallets"
-        }
+        { "LineNo": 1, "SkuCode": "PWS-001", "OrderedQty": 300 },
+        { "LineNo": 2, "SkuCode": "PWS-002", "OrderedQty": 400 }
       ]
     },
     {
-      "OrderRef": "TESTORD02",
-      "CustomerPartyCode": "DUMMY_CUSTOMER",
-      "HaulierPartyCode": "DUMMY_HAULIER",
-      "RequiredDate": "2027-06-30",
-      "Notes": "Test order 2 - 3 pallets SKU001",
+      "OrderRef": "ORD-2026-002",
+      "CustomerPartyCode": "PW_CUSTOMER01",
+      "HaulierPartyCode": "PW_HAULIER01",
+      "DeliveryPartyCode": "PW_CUSTOMER01",
+      "RequiredDate": "2026-05-28",
       "Lines": [
-        {
-          "LineNo": 1,
-          "SkuCode": "SKU001",
-          "OrderedQty": 240,
-          "RequestedBatch": null,
-          "RequestedBbe": null,
-          "Notes": "3 pallets"
-        }
+        { "LineNo": 1, "SkuCode": "PWS-003", "OrderedQty": 240 },
+        { "LineNo": 2, "SkuCode": "PWS-004", "OrderedQty": 200 }
       ]
     },
     {
-      "OrderRef": "TESTORD03",
-      "CustomerPartyCode": "DUMMY_CUSTOMER",
-      "HaulierPartyCode": "DUMMY_HAULIER",
-      "RequiredDate": "2027-06-30",
-      "Notes": "Test order 3 - 5 pallets SKU001",
+      "OrderRef": "ORD-2026-003",
+      "CustomerPartyCode": "PW_CUSTOMER02",
+      "HaulierPartyCode": "PW_HAULIER02",
+      "DeliveryPartyCode": "PW_CUSTOMER02",
+      "RequiredDate": "2026-05-30",
       "Lines": [
-        {
-          "LineNo": 1,
-          "SkuCode": "SKU001",
-          "OrderedQty": 400,
-          "RequestedBatch": null,
-          "RequestedBbe": null,
-          "Notes": "5 pallets"
-        }
+        { "LineNo": 1, "SkuCode": "PWS-001", "OrderedQty": 180, "RequestedBatch": "B-PA-260601" },
+        { "LineNo": 2, "SkuCode": "PWS-005", "OrderedQty": 160 }
+      ]
+    },
+    {
+      "OrderRef": "ORD-2026-004",
+      "CustomerPartyCode": "PW_CUSTOMER02",
+      "HaulierPartyCode": "PW_HAULIER02",
+      "DeliveryPartyCode": "PW_CUSTOMER02",
+      "RequiredDate": "2026-06-04",
+      "Lines": [
+        { "LineNo": 1, "SkuCode": "PWS-006", "OrderedQty": 300 },
+        { "LineNo": 2, "SkuCode": "PWS-005", "OrderedQty": 240 }
       ]
     }
   ],
   "Shipments": [
     {
-      "ShipmentRef": "TESTSHIP01",
-      "HaulierPartyCode": "DUMMY_HAULIER",
-      "VehicleRef": null,
-      "Notes": "Test shipment 1 - single order",
-      "OrderRefs": [ "TESTORD01" ]
+      "ShipmentRef": "SHIP-2026-001",
+      "HaulierPartyCode": "PW_HAULIER01",
+      "OrderRefs": [ "ORD-2026-001", "ORD-2026-002" ]
     },
     {
-      "ShipmentRef": "TESTSHIP02",
-      "HaulierPartyCode": "DUMMY_HAULIER",
-      "VehicleRef": null,
-      "Notes": "Test shipment 2 - two orders",
-      "OrderRefs": [ "TESTORD02", "TESTORD03" ]
+      "ShipmentRef": "SHIP-2026-002",
+      "HaulierPartyCode": "PW_HAULIER02",
+      "OrderRefs": [ "ORD-2026-003", "ORD-2026-004" ]
     }
   ]
 }

@@ -9,6 +9,8 @@ CREATE OR ALTER PROCEDURE outbound.usp_create_order
     @order_ref           NVARCHAR(50),
     @customer_party_code NVARCHAR(50),
     @haulier_party_code  NVARCHAR(50)     = NULL,
+    @delivery_address_id INT              = NULL,
+    @delivery_party_code NVARCHAR(50)     = NULL,
     @required_date       DATE             = NULL,
     @order_source        VARCHAR(10)      = 'API',
     @notes               NVARCHAR(500)    = NULL,
@@ -49,6 +51,30 @@ BEGIN
         IF @haulier_party_code IS NOT NULL
             SET @haulier_party_id = (SELECT party_id FROM core.parties WHERE party_code = @haulier_party_code COLLATE Latin1_General_CS_AS);
 
+        /* Resolve delivery party code to primary address if provided */
+        IF @delivery_party_code IS NOT NULL AND @delivery_address_id IS NULL
+        BEGIN
+            SELECT @delivery_address_id = a.address_id
+            FROM core.party_addresses a
+            JOIN core.parties p ON p.party_id = a.party_id
+            WHERE p.party_code COLLATE Latin1_General_CS_AS = @delivery_party_code
+              AND a.is_primary  = 1
+              AND a.is_active   = 1;
+        END
+
+        /* Validate delivery address belongs to customer if provided */
+        IF @delivery_address_id IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM core.party_addresses
+               WHERE address_id = @delivery_address_id
+                 AND party_id   = @customer_party_id
+                 AND is_active  = 1
+           )
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRORD06' AS result_code, NULL AS outbound_order_id;
+            ROLLBACK; RETURN;
+        END
+
 
         /* ── 3. Validate lines JSON not empty ── */
         IF @lines_json IS NULL OR ISJSON(@lines_json) = 0
@@ -62,6 +88,7 @@ BEGIN
         INSERT INTO outbound.outbound_orders
         (
             order_ref, customer_party_id, haulier_party_id,
+            delivery_address_id,
             order_status_code, order_source,
             required_date, notes,
             created_at, created_by
@@ -69,6 +96,7 @@ BEGIN
         VALUES
         (
             @order_ref, @customer_party_id, @haulier_party_id,
+            @delivery_address_id,
             'NEW', @order_source,
             @required_date, @notes,
             SYSUTCDATETIME(), @user_id

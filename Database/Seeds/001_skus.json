@@ -1,20 +1,74 @@
 [
   {
-    "SkuCode": "SKU001",
-    "SkuDescription": "First Test Product",
-    "Ean": "04062139024766",
-    "UomCode": "Each",
-    "WeightPerUnit": 700,
-    "StandardHuQuantity": 80,
-    "IsHazardous": false
+    "SkuCode": "PWS-001",
+    "SkuDescription": "Pale Ale 500ml 24x1",
+    "Ean": "05010128502431",
+    "UomCode": "Case",
+    "WeightPerUnit": 14400,
+    "StandardHuQuantity": 60,
+    "IsHazardous": false,
+    "IsBatchRequired": true,
+    "IsFullHuRequired": true,
+    "StorageTypeCode": "RACK"
   },
   {
-    "SkuCode": "SKU002",
-    "SkuDescription": "Second Test Product MP18X1",
-    "Ean": "05010102322523",
-    "UomCode": "Each",
-    "WeightPerUnit": 800,
-    "StandardHuQuantity": 180,
-    "IsHazardous": false
+    "SkuCode": "PWS-002",
+    "SkuDescription": "Lager 330ml 24x1",
+    "Ean": "05010128502448",
+    "UomCode": "Case",
+    "WeightPerUnit": 9600,
+    "StandardHuQuantity": 80,
+    "IsHazardous": false,
+    "IsBatchRequired": true,
+    "IsFullHuRequired": true,
+    "StorageTypeCode": "RACK"
+  },
+  {
+    "SkuCode": "PWS-003",
+    "SkuDescription": "Stout 440ml 24x1",
+    "Ean": "05010128502455",
+    "UomCode": "Case",
+    "WeightPerUnit": 12800,
+    "StandardHuQuantity": 60,
+    "IsHazardous": false,
+    "IsBatchRequired": true,
+    "IsFullHuRequired": true,
+    "StorageTypeCode": "RACK"
+  },
+  {
+    "SkuCode": "PWS-004",
+    "SkuDescription": "IPA 330ml 12x1",
+    "Ean": "05010128502462",
+    "UomCode": "Case",
+    "WeightPerUnit": 5200,
+    "StandardHuQuantity": 100,
+    "IsHazardous": false,
+    "IsBatchRequired": true,
+    "IsFullHuRequired": false,
+    "StorageTypeCode": "RACK"
+  },
+  {
+    "SkuCode": "PWS-005",
+    "SkuDescription": "Cider 500ml 12x1",
+    "Ean": "05010128502479",
+    "UomCode": "Case",
+    "WeightPerUnit": 7800,
+    "StandardHuQuantity": 80,
+    "IsHazardous": false,
+    "IsBatchRequired": true,
+    "IsFullHuRequired": false,
+    "StorageTypeCode": "RACK"
+  },
+  {
+    "SkuCode": "PWS-006",
+    "SkuDescription": "Mineral Water 750ml 12x1",
+    "Ean": "05010128502486",
+    "UomCode": "Case",
+    "WeightPerUnit": 10200,
+    "StandardHuQuantity": 100,
+    "IsHazardous": false,
+    "IsBatchRequired": false,
+    "IsFullHuRequired": false,
+    "StorageTypeCode": "RACK"
   }
 ]

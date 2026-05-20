@@ -9,10 +9,11 @@ public interface IOutboundCommandRepository
     OperationResult CreateOrder(
         string orderRef,
         string customerPartyCode,
-        string? haulierPartyCode = null,
-        DateTime? requiredDate = null,
-        string? notes = null,
-        List<OrderLineDto> lines = null!);
+        string? haulierPartyCode   = null,
+        string? deliveryPartyCode  = null,
+        DateTime? requiredDate     = null,
+        string? notes              = null,
+        List<OrderLineDto> lines   = null!);
 
     OperationResult CreateShipment(
         string shipmentRef,

@@ -12,6 +12,12 @@ public sealed class CreateOrderRequest
 
     public string? HaulierPartyCode { get; init; }
 
+    /// <summary>
+    /// Optional delivery party code. If provided, the primary address for this
+    /// party is used as the delivery address. Must belong to the customer.
+    /// </summary>
+    public string? DeliveryPartyCode { get; init; }
+
     public DateOnly? RequiredDate { get; init; }
 
     public string? Notes { get; init; }

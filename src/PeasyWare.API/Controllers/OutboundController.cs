@@ -26,6 +26,7 @@ public sealed class OutboundController : ControllerBase
             orderRef:          request.OrderRef,
             customerPartyCode: request.CustomerPartyCode,
             haulierPartyCode:  request.HaulierPartyCode,
+            deliveryPartyCode: request.DeliveryPartyCode,
             requiredDate:      request.RequiredDate.HasValue
                                    ? request.RequiredDate.Value.ToDateTime(TimeOnly.MinValue)
                                    : null,

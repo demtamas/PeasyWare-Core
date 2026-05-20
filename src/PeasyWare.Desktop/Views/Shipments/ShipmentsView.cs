@@ -11,9 +11,11 @@ namespace PeasyWare.Desktop.Views.Shipments;
 
 public partial class ShipmentsView : BaseView, IToolbarAware
 {
-    private readonly IOutboundQueryRepository _queryRepo;
+    private readonly IOutboundQueryRepository   _queryRepo;
+    private readonly IOutboundCommandRepository _commandRepo;
 
     private ToolStripButton?      _btnRefresh;
+    private ToolStripButton?      _btnDetails;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _filterHost;
     private TextBox?              _txtSearch;
@@ -21,14 +23,18 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
     private List<ShipmentSummaryDto> _shipments = [];
 
-    public ShipmentsView(IOutboundQueryRepository queryRepo)
+    public ShipmentsView(IOutboundQueryRepository queryRepo, IOutboundCommandRepository commandRepo)
     {
         InitializeComponent();
 
-        _queryRepo = queryRepo;
+        _queryRepo   = queryRepo;
+        _commandRepo = commandRepo;
 
         ConfigureGrid(dgvShipments);
         EnableDoubleBuffering(dgvShipments);
+
+        dgvShipments.SelectionChanged  += (_, _) => UpdateToolbarState();
+        dgvShipments.CellDoubleClick   += (_, e) => { if (e.RowIndex >= 0) Execute(OpenDetails); };
 
         Load += (_, _) => LoadShipments();
     }
@@ -44,6 +50,13 @@ public partial class ShipmentsView : BaseView, IToolbarAware
         _btnRefresh = new ToolStripButton("Refresh") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnRefresh.Click += Wrap(LoadShipments);
 
+        _btnDetails = new ToolStripButton("Shipment details")
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Enabled      = false
+        };
+        _btnDetails.Click += Wrap(OpenDetails);
+
         _txtSearch = new TextBox { PlaceholderText = "Search ref / vehicle / haulier...", Width = 240 };
         _txtSearch.TextChanged += (_, _) => ApplyFilter();
 
@@ -58,8 +71,16 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnDetails);
+        toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
+    }
+
+    private void UpdateToolbarState()
+    {
+        if (_btnDetails is not null)
+            _btnDetails.Enabled = dgvShipments.SelectedRows.Count == 1;
     }
 
     // ==========================================================
@@ -153,5 +174,22 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
         dgvShipments.DataSource = null;
         dgvShipments.DataSource = data;
+    }
+
+    private ShipmentSummaryDto? SelectedShipment() =>
+        dgvShipments.SelectedRows.Count == 0 ? null
+        : dgvShipments.SelectedRows[0].DataBoundItem as ShipmentSummaryDto;
+
+    private void OpenDetails()
+    {
+        var shipment = SelectedShipment();
+        if (shipment is null) return;
+
+        using var form = new ShipmentDetailForm(
+            shipment.ShipmentId,
+            shipment.ShipmentRef,
+            _queryRepo,
+            _commandRepo);
+        form.ShowDialog(this);
     }
 }

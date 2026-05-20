@@ -131,3 +131,11 @@ SELECT N'WARNORD01', N'OUTBOUND', N'WARN',
     N'usp_allocate_order: newly_allocated_qty = 0'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'WARNORD01');
 GO
+
+-- Outbound: delivery address validation
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRORD06', N'OUTBOUND', N'ERROR',
+    N'Delivery address not found or does not belong to the specified customer.',
+    N'usp_create_order: delivery_address_id invalid or not owned by customer_party_id'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRORD06');
+GO

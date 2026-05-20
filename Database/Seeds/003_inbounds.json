@@ -1,47 +1,130 @@
 [
   {
-    "InboundRef": "TESTINB01",
-    "SupplierPartyCode": "DUMMY_SUPPLIER",
-    "HaulierPartyCode": "DUMMY_HAULIER",
-    "ExpectedArrivalAt": "2026-05-18T06:00:00Z",
+    "InboundRef": "INB-2026-001",
+    "SupplierPartyCode": "PW_BREWERY01",
+    "HaulierPartyCode": "PW_HAULIER01",
+    "ExpectedArrivalAt": "2026-05-20T07:00:00Z",
     "Lines": [
       {
-        "SkuCode": "SKU001",
-        "ExpectedQty": 1040,
-        "BatchNumber": "001442331A",
-        "BestBeforeDate": "2026-12-31",
+        "SkuCode": "PWS-001",
+        "ExpectedQty": 600,
+        "BatchNumber": "B-PA-260601",
+        "BestBeforeDate": "2026-12-01",
         "ArrivalStockStatus": "AV",
         "ExpectedUnits": [
-          { "Sscc": "250101027140166844", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166851", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166868", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166875", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166882", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166899", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166905", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166912", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166929", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166936", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166943", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166950", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" },
-          { "Sscc": "250101027140166967", "Quantity": 80, "BatchNumber": "001442331A", "BestBeforeDate": "2026-12-31" }
+          { "Sscc": "340100000000000011", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000012", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000013", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000014", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000015", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000016", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000017", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000018", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000019", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" },
+          { "Sscc": "340100000000000020", "Quantity": 60, "BatchNumber": "B-PA-260601", "BestBeforeDate": "2026-12-01" }
+        ]
+      },
+      {
+        "SkuCode": "PWS-002",
+        "ExpectedQty": 800,
+        "BatchNumber": "B-LG-260701",
+        "BestBeforeDate": "2027-01-01",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000021", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000022", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000023", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000024", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000025", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000026", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000027", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000028", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000029", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" },
+          { "Sscc": "340100000000000030", "Quantity": 80, "BatchNumber": "B-LG-260701", "BestBeforeDate": "2027-01-01" }
+        ]
+      },
+      {
+        "SkuCode": "PWS-003",
+        "ExpectedQty": 480,
+        "BatchNumber": "B-ST-260801",
+        "BestBeforeDate": "2027-02-01",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000031", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000032", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000033", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000034", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000035", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000036", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000037", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000038", "Quantity": 60, "BatchNumber": "B-ST-260801", "BestBeforeDate": "2027-02-01" }
         ]
       }
     ]
   },
   {
-    "InboundRef": "TESTINB02",
-    "SupplierPartyCode": "DUMMY_SUPPLIER",
-    "HaulierPartyCode": "DUMMY_HAULIER",
-    "ExpectedArrivalAt": "2026-05-18T06:00:00Z",
+    "InboundRef": "INB-2026-002",
+    "SupplierPartyCode": "PW_BREWERY01",
+    "HaulierPartyCode": "PW_HAULIER02",
+    "ExpectedArrivalAt": "2026-05-21T08:00:00Z",
     "Lines": [
       {
-        "SkuCode": "SKU002",
-        "ExpectedQty": 1080,
-        "BatchNumber": null,
-        "BestBeforeDate": null,
+        "SkuCode": "PWS-001",
+        "ExpectedQty": 360,
+        "BatchNumber": "B-PA-260801",
+        "BestBeforeDate": "2027-02-01",
         "ArrivalStockStatus": "AV",
-        "ExpectedUnits": []
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000041", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000042", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000043", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000044", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000045", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" },
+          { "Sscc": "340100000000000046", "Quantity": 60, "BatchNumber": "B-PA-260801", "BestBeforeDate": "2027-02-01" }
+        ]
+      },
+      {
+        "SkuCode": "PWS-004",
+        "ExpectedQty": 500,
+        "BatchNumber": "B-IP-260901",
+        "BestBeforeDate": "2027-03-01",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000051", "Quantity": 100, "BatchNumber": "B-IP-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000052", "Quantity": 100, "BatchNumber": "B-IP-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000053", "Quantity": 100, "BatchNumber": "B-IP-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000054", "Quantity": 100, "BatchNumber": "B-IP-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000055", "Quantity": 100, "BatchNumber": "B-IP-260901", "BestBeforeDate": "2027-03-01" }
+        ]
+      },
+      {
+        "SkuCode": "PWS-005",
+        "ExpectedQty": 400,
+        "BatchNumber": "B-CD-260901",
+        "BestBeforeDate": "2027-03-01",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000061", "Quantity": 80, "BatchNumber": "B-CD-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000062", "Quantity": 80, "BatchNumber": "B-CD-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000063", "Quantity": 80, "BatchNumber": "B-CD-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000064", "Quantity": 80, "BatchNumber": "B-CD-260901", "BestBeforeDate": "2027-03-01" },
+          { "Sscc": "340100000000000065", "Quantity": 80, "BatchNumber": "B-CD-260901", "BestBeforeDate": "2027-03-01" }
+        ]
+      },
+      {
+        "SkuCode": "PWS-006",
+        "ExpectedQty": 600,
+        "BatchNumber": null,
+        "BestBeforeDate": "2028-01-01",
+        "ArrivalStockStatus": "AV",
+        "ExpectedUnits": [
+          { "Sscc": "340100000000000071", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" },
+          { "Sscc": "340100000000000072", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" },
+          { "Sscc": "340100000000000073", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" },
+          { "Sscc": "340100000000000074", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" },
+          { "Sscc": "340100000000000075", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" },
+          { "Sscc": "340100000000000076", "Quantity": 100, "BatchNumber": null, "BestBeforeDate": "2028-01-01" }
+        ]
       }
     ]
   }
