@@ -10,6 +10,7 @@ CREATE OR ALTER PROCEDURE inbound.usp_validate_sscc_for_receive
     @staging_bin_code         NVARCHAR(100),
     @scanned_best_before_date DATE          = NULL,
     @scanned_batch_number     NVARCHAR(100) = NULL,
+    @restrict_to_inbound_ref  NVARCHAR(50)  = NULL,
     @user_id                  INT           = NULL,
     @session_id               UNIQUEIDENTIFIER = NULL
 )
@@ -102,7 +103,9 @@ BEGIN
             ON l.inbound_id = d.inbound_id
         JOIN inventory.skus s
             ON l.sku_id = s.sku_id
-        WHERE eu.expected_external_ref = LTRIM(RTRIM(@external_ref));
+        WHERE eu.expected_external_ref = LTRIM(RTRIM(@external_ref))
+          AND (@restrict_to_inbound_ref IS NULL
+               OR d.inbound_ref COLLATE Latin1_General_CS_AS = @restrict_to_inbound_ref);
 
         IF @inbound_line_id IS NULL
         BEGIN

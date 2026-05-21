@@ -347,7 +347,7 @@ public sealed class SqlOutboundCommandRepository
     // Allocate order (Desktop — calls existing usp_allocate_order)
     // ────────────────────────────────────────────────────────
 
-    public OperationResult AllocateOrder(int outboundOrderId)
+    public OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false)
     {
         EnsureSession();
 
@@ -357,9 +357,10 @@ public sealed class SqlOutboundCommandRepository
         command.CommandText = "outbound.usp_allocate_order";
         command.CommandType = System.Data.CommandType.StoredProcedure;
 
-        command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value = outboundOrderId;
-        command.Parameters.Add("@user_id", System.Data.SqlDbType.Int).Value = _session.UserId;
-        command.Parameters.Add("@session_id", System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+        command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value              = outboundOrderId;
+        command.Parameters.Add("@allow_partial",     System.Data.SqlDbType.Bit).Value              = allowPartial;
+        command.Parameters.Add("@user_id",           System.Data.SqlDbType.Int).Value              = _session.UserId;
+        command.Parameters.Add("@session_id",        System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
 
         using var reader = command.ExecuteReader();
 

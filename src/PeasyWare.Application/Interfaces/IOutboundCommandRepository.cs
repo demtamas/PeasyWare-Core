@@ -28,7 +28,7 @@ public interface IOutboundCommandRepository
 
     // ── Allocation management ────────────────────────────────────────────
 
-    OperationResult AllocateOrder(int outboundOrderId);
+    OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false);
 
     OperationResult DeallocateOrder(int outboundOrderId);
 

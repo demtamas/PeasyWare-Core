@@ -13,10 +13,11 @@ public interface IInboundQueryRepository
     IEnumerable<InboundLineDto> GetReceivableLines(string inboundRef);
 
     SsccValidationDto ValidateSsccForInbound(
-        string externalRef,
-        string stagingBin,
-        DateOnly? scannedBestBefore = null,
-        string? scannedBatch = null);
+        string    externalRef,
+        string    stagingBin,
+        DateOnly? scannedBestBefore    = null,
+        string?   scannedBatch         = null,
+        string?   restrictToInboundRef = null);
 
     IEnumerable<InboundReceiptDto> GetReceivableReceipts(string inboundRef);
 

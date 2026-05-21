@@ -81,8 +81,41 @@ BEGIN
         SET bin_id = @destination_bin_id
         WHERE inventory_unit_id = @inventory_unit_id;
 
-        -- Record movement
-        DECLARE @movement_id INT;
+        -- If the unit is RCD and is leaving a staging bin, transition to PTW.
+        -- A bin-to-bin move out of staging = manual putaway, regardless of destination.
+        IF EXISTS (
+            SELECT 1
+            FROM inventory.inventory_units iu
+            JOIN locations.bins b ON b.bin_id = @source_bin_id
+            JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
+            WHERE iu.inventory_unit_id = @inventory_unit_id
+              AND iu.stock_state_code  = 'RCD'
+              AND st.storage_type_code = 'STAGE'
+        )
+        BEGIN
+            UPDATE inventory.inventory_units
+            SET stock_state_code = 'PTW',
+                updated_at       = @now,
+                updated_by       = @user_id
+            WHERE inventory_unit_id = @inventory_unit_id;
+        END
+
+        -- Record movement — capture actual from/to state (may differ if RCD->PTW transition occurred)
+        DECLARE @movement_id  INT;
+        DECLARE @from_state   VARCHAR(3);
+        DECLARE @to_state     VARCHAR(3);
+
+        SELECT @to_state = stock_state_code FROM inventory.inventory_units WHERE inventory_unit_id = @inventory_unit_id;
+
+        SELECT @from_state =
+            CASE
+                WHEN @to_state = 'PTW' AND EXISTS (
+                    SELECT 1 FROM locations.bins b
+                    JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
+                    WHERE b.bin_id = @source_bin_id AND st.storage_type_code = 'STAGE'
+                ) THEN 'RCD'
+                ELSE @to_state
+            END;
 
         INSERT INTO inventory.inventory_movements
             (inventory_unit_id, sku_id, moved_qty,
@@ -94,7 +127,7 @@ BEGIN
         SELECT
             @inventory_unit_id, @sku_id, quantity,
             @source_bin_id, @destination_bin_id,
-            stock_state_code, stock_state_code,  -- PTW->PTW, state unchanged during move
+            @from_state, @to_state,
             stock_status_code, stock_status_code,
             'MOVE', 'TASK', @task_id,
             @now, @user_id, @session_id
@@ -120,28 +153,4 @@ BEGIN
         SELECT CAST(0 AS BIT) AS success, N'ERRMOVE99' AS result_code;
     END CATCH
 END;
-GO
-PRINT 'warehouse.usp_bin_to_bin_move_confirm created.';
-GO
-
-PRINT '------------------------------------------------------------';
-PRINT 'Bin-to-bin move SPs complete.';
-PRINT '------------------------------------------------------------';
-GO
-
--- ── Fix: usp_putaway_confirm_task stock state comment correction ────────────────
--- PTW = PUTAWAY (final racked state, not "in progress" as previously assumed).
--- The confirm SP was already setting PTW correctly.
--- The real issue was that usp_bin_to_bin_move_create was rejecting PTW state.
--- Fix: allow PTW in the move create SP (already done above).
--- This SP rewrite is retained to fix the from_state_code in the movement record
--- (was recording RCD->PTW but should be PTW->PTW for a putaway confirm).
-
-
--- ============================================================
--- inventory.v_skus + usp_update_sku
--- Merged from WIP: 2026-05-09
--- ============================================================
-
--- ── v_skus ────────────────────────────────────────────────────────────────────
 GO

@@ -217,6 +217,25 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
 
         var result = _commandRepo.AllocateOrder(order.OutboundOrderId);
 
+        // Insufficient stock — offer partial
+        if (!result.Success && result.ResultCode is "ERRALLOC01" or "ERRALLOC02")
+        {
+            var offerPartial = MessageBox.Show(this,
+                $"Insufficient stock to fully allocate {order.OrderRef}.\n\nAllocate whatever stock is currently available (partial allocation)?",
+                "Partial Allocation",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (offerPartial == DialogResult.Yes)
+                result = _commandRepo.AllocateOrder(order.OutboundOrderId, allowPartial: true);
+            else
+            {
+                Execute(LoadOrders);
+                return;
+            }
+        }
+
         if (!result.Success)
         {
             MessageBox.Show(this, result.FriendlyMessage, "Allocation Failed",
@@ -225,10 +244,14 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
             return;
         }
 
-        // Success — offer to open the detail form so the supervisor can see what was allocated
-        var openDetail = MessageBox.Show(this,
-            $"Order {order.OrderRef} allocated successfully.\n\nOpen order details to review allocated stock?",
-            "Allocation Complete",
+        // Success or partial success
+        var isPartial = result.ResultCode == "WARNORD01";
+        var title     = isPartial ? "Partial Allocation" : "Allocation Complete";
+        var msg       = isPartial
+            ? $"Order {order.OrderRef} partially allocated — some lines could not be fully filled.\n\nOpen order details to review?"
+            : $"Order {order.OrderRef} allocated successfully.\n\nOpen order details to review allocated stock?";
+
+        var openDetail = MessageBox.Show(this, msg, title,
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Information,
             MessageBoxDefaultButton.Button1);

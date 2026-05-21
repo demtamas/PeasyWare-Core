@@ -22,14 +22,16 @@ public sealed class InboundReceivingService
     public SsccValidationDto ValidateSscc(
         string externalRef,
         string bin,
-        DateOnly? scannedBestBefore = null,
-        string? scannedBatch = null)
+        DateOnly? scannedBestBefore    = null,
+        string?   scannedBatch         = null,
+        string?   restrictToInboundRef = null)
     {
         return _queryRepo.ValidateSsccForInbound(
             externalRef,
             bin,
             scannedBestBefore,
-            scannedBatch);
+            scannedBatch,
+            restrictToInboundRef);
     }
 
     public OperationResult ConfirmSscc(

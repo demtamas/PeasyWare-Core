@@ -171,8 +171,9 @@ namespace PeasyWare.Application.Flows
                 var validation = service.ValidateSscc(
                     scanInput,
                     bin,
-                    scannedBestBefore: scan.BestBefore,
-                    scannedBatch:      scan.Batch);
+                    scannedBestBefore:    scan.BestBefore,
+                    scannedBatch:         scan.Batch,
+                    restrictToInboundRef: inboundRef);
 
                 if (_session.UiMode == UiMode.Trace)
                 {

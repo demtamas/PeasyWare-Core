@@ -170,10 +170,11 @@ internal sealed class StubInboundQueryRepo : IInboundQueryRepository
     };
 
     public SsccValidationDto ValidateSsccForInbound(
-        string externalRef,
-        string stagingBin,
-        DateOnly? scannedBestBefore = null,
-        string?   scannedBatch      = null)
+        string    externalRef,
+        string    stagingBin,
+        DateOnly? scannedBestBefore    = null,
+        string?   scannedBatch         = null,
+        string?   restrictToInboundRef = null)
     {
         ValidateSsccCalled = true;
         LastExternalRef    = externalRef;

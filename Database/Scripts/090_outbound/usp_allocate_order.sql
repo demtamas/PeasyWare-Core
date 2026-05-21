@@ -7,7 +7,8 @@ GO
 CREATE OR ALTER PROCEDURE outbound.usp_allocate_order
 (
     @outbound_order_id  INT,
-    @user_id            INT           = NULL,
+    @allow_partial      BIT              = 0,
+    @user_id            INT              = NULL,
     @session_id         UNIQUEIDENTIFIER = NULL
 )
 AS
@@ -169,15 +170,28 @@ BEGIN
             /* ── Check line fully allocated ── */
             IF @remaining > 0
             BEGIN
-                CLOSE line_cursor;
-                DEALLOCATE line_cursor;
-
-                IF @req_batch IS NOT NULL OR @req_bbe IS NOT NULL
-                    SELECT CAST(0 AS BIT) AS success, N'ERRALLOC02' AS result_code, @outbound_order_id AS outbound_order_id;
-                ELSE
-                    SELECT CAST(0 AS BIT) AS success, N'ERRALLOC01' AS result_code, @outbound_order_id AS outbound_order_id;
-
-                ROLLBACK; RETURN;
+                IF @allow_partial = 0
+                BEGIN
+                    CLOSE line_cursor;
+                    DEALLOCATE line_cursor;
+                    IF @req_batch IS NOT NULL OR @req_bbe IS NOT NULL
+                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC02' AS result_code, @outbound_order_id AS outbound_order_id;
+                    ELSE
+                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC01' AS result_code, @outbound_order_id AS outbound_order_id;
+                    ROLLBACK; RETURN;
+                END
+                /* Partial mode: record what was allocated on this line, move to next */
+                IF @allocated_total - @remaining > 0 OR @newly_allocated_qty > 0
+                BEGIN
+                    UPDATE outbound.outbound_lines
+                    SET allocated_qty    = @ordered_qty - @remaining,
+                        line_status_code = CASE WHEN @ordered_qty - @remaining > 0 THEN 'ALLOCATED' ELSE line_status_code END,
+                        updated_at       = @now,
+                        updated_by       = @user_id
+                    WHERE outbound_line_id = @line_id;
+                END
+                FETCH NEXT FROM line_cursor INTO @line_id, @sku_id, @ordered_qty, @req_batch, @req_bbe;
+                CONTINUE;
             END
 
             /* ── Update line ── */
