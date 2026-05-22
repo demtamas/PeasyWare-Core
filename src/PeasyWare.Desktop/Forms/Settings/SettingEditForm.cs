@@ -28,18 +28,23 @@ public partial class SettingEditForm : Form
 
     private void ConfigureWindow()
     {
-        Text = $"Edit setting – {_setting.DisplayName ?? _setting.SettingName}";
+        Text = $"Edit setting — {_setting.DisplayName ?? _setting.SettingName}";
     }
-
-    // --------------------------------------------------
-    // Initial UI state
-    // --------------------------------------------------
 
     private void InitializeForm()
     {
         lblSettingName.Text = _setting.DisplayName ?? _setting.SettingName;
-        lblDescription.Text = _setting.Description ?? "";
-        lblType.Text = _setting.DataType ?? "";
+        lblSubtitle.Text    = _setting.SettingName;
+        lblDescription.Text = _setting.Description ?? "No description available.";
+        lblType.Text        = _setting.DataType switch
+        {
+            "bool"   => "Boolean (true / false)",
+            "string" => _setting.IsEnum ? "Enumeration (select from list)" : "Text",
+            "int"    => _setting.IsRange
+                ? $"Integer ({_setting.RangeMin ?? 0} – {_setting.RangeMax ?? 999999})"
+                : "Integer",
+            var t    => t ?? "unknown"
+        };
 
         BuildEditor();
     }

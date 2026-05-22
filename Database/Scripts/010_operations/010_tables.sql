@@ -17,9 +17,11 @@ VALUES
 ('auth','Authentication',20),
 ('inbound','Inbound',30),
 ('warehouse','Warehouse',40),
-('logging','Logging',50),
-('audit','Audit',60),
-('client','Client',70);
+('inventory','Inventory',45),
+('outbound','Outbound',50),
+('logging','Logging',60),
+('audit','Audit',70),
+('client','Client',80);
 
 -------------------------------------------
 -- 3.2 Settings table

@@ -76,7 +76,7 @@ public sealed class SqlSettingsQueryRepository : ISettingsQueryRepository
 
                 Category = reader.IsDBNull(ordCategory) ? null : reader.GetString(ordCategory),
                 CategoryName = reader.IsDBNull(ordCategoryName) ? null : reader.GetString(ordCategoryName),
-                CategoryOrder = reader.GetInt32(ordCategoryOrder),
+                CategoryOrder = reader.IsDBNull(ordCategoryOrder) ? 999 : reader.GetInt32(ordCategoryOrder),
 
                 DisplayOrder = reader.GetInt32(ordDisplayOrder),
 
