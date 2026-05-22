@@ -414,4 +414,182 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
             ArrivalStockStatusCode = reader.IsDBNull(colArrivalStatus)     ? "AV" : reader.GetString(colArrivalStatus)
         };
     }
+
+    // ── Desktop inbound list ───────────────────────────────────────────────
+
+    public IReadOnlyList<InboundDeliverySummaryDto> GetInboundDeliveries(string? statusFilter = null)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                d.inbound_id,
+                d.inbound_ref,
+                d.inbound_status_code,
+                s.display_name                              AS supplier_name,
+                h.display_name                              AS haulier_name,
+                CONVERT(NVARCHAR(16), d.expected_arrival_at, 120) AS expected_arrival,
+                d.inbound_mode_code                             AS inbound_mode,
+                COUNT(DISTINCT l.inbound_line_id)           AS total_lines,
+                ISNULL(SUM(l.expected_qty), 0)              AS total_expected,
+                ISNULL(SUM(l.received_qty), 0)              AS total_received,
+                ISNULL(SUM(l.expected_qty - l.received_qty), 0) AS total_outstanding,
+                COUNT(DISTINCT eu.inbound_expected_unit_id) AS total_units
+            FROM inbound.inbound_deliveries d
+            JOIN core.parties s ON s.party_id = d.supplier_party_id
+            LEFT JOIN core.parties h ON h.party_id = d.haulier_party_id
+            LEFT JOIN inbound.inbound_lines l
+                ON l.inbound_id = d.inbound_id
+               AND l.line_state_code <> 'CNL'
+            LEFT JOIN inbound.inbound_expected_units eu
+                ON eu.inbound_line_id = l.inbound_line_id
+            WHERE (@status IS NULL OR d.inbound_status_code = @status)
+            GROUP BY
+                d.inbound_id, d.inbound_ref, d.inbound_status_code,
+                s.display_name, h.display_name,
+                d.expected_arrival_at, d.inbound_mode_code
+            ORDER BY d.expected_arrival_at DESC, d.inbound_ref
+        """;
+
+        command.Parameters.Add(new SqlParameter("@status", SqlDbType.NVarChar, 10)
+            { Value = (object?)statusFilter ?? DBNull.Value });
+
+        using var reader = command.ExecuteReader();
+        var results = new List<InboundDeliverySummaryDto>();
+
+        while (reader.Read())
+        {
+            results.Add(new InboundDeliverySummaryDto
+            {
+                InboundId        = reader.GetInt32(reader.GetOrdinal("inbound_id")),
+                InboundRef       = reader.GetString(reader.GetOrdinal("inbound_ref")),
+                StatusCode       = reader.GetString(reader.GetOrdinal("inbound_status_code")),
+                SupplierName     = reader.IsDBNull(reader.GetOrdinal("supplier_name"))   ? null : reader.GetString(reader.GetOrdinal("supplier_name")),
+                HaulierName      = reader.IsDBNull(reader.GetOrdinal("haulier_name"))    ? null : reader.GetString(reader.GetOrdinal("haulier_name")),
+                ExpectedArrival  = reader.IsDBNull(reader.GetOrdinal("expected_arrival")) ? null : reader.GetString(reader.GetOrdinal("expected_arrival")),
+                InboundMode      = reader.IsDBNull(reader.GetOrdinal("inbound_mode"))    ? null : reader.GetString(reader.GetOrdinal("inbound_mode")),
+                TotalLines       = reader.GetInt32(reader.GetOrdinal("total_lines")),
+                TotalExpected    = reader.GetInt32(reader.GetOrdinal("total_expected")),
+                TotalReceived    = reader.GetInt32(reader.GetOrdinal("total_received")),
+                TotalOutstanding = reader.GetInt32(reader.GetOrdinal("total_outstanding")),
+                TotalUnits       = reader.GetInt32(reader.GetOrdinal("total_units"))
+            });
+        }
+
+        return results;
+    }
+
+    public IReadOnlyList<InboundDeliveryLineDto> GetInboundLines(int inboundId)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                l.inbound_line_id,
+                l.line_no,
+                s.sku_code,
+                s.sku_description,
+                l.batch_number,
+                CONVERT(NVARCHAR(10), l.best_before_date, 103) AS best_before_date,
+                l.line_state_code,
+                l.expected_qty,
+                l.received_qty,
+                l.expected_qty - l.received_qty AS outstanding_qty,
+                COUNT(eu.inbound_expected_unit_id) AS unit_count
+            FROM inbound.inbound_lines l
+            JOIN inventory.skus s ON s.sku_id = l.sku_id
+            LEFT JOIN inbound.inbound_expected_units eu ON eu.inbound_line_id = l.inbound_line_id
+            WHERE l.inbound_id = @inbound_id
+              AND l.line_state_code <> 'CNL'
+            GROUP BY
+                l.inbound_line_id, l.line_no, s.sku_code, s.sku_description,
+                l.batch_number, l.best_before_date,
+                l.line_state_code, l.expected_qty, l.received_qty
+            ORDER BY l.line_no
+        """;
+
+        command.Parameters.Add(new SqlParameter("@inbound_id", SqlDbType.Int) { Value = inboundId });
+
+        using var reader = command.ExecuteReader();
+        var results = new List<InboundDeliveryLineDto>();
+
+        while (reader.Read())
+        {
+            results.Add(new InboundDeliveryLineDto
+            {
+                InboundLineId  = reader.GetInt32(reader.GetOrdinal("inbound_line_id")),
+                LineNo         = reader.GetInt32(reader.GetOrdinal("line_no")),
+                SkuCode        = reader.GetString(reader.GetOrdinal("sku_code")),
+                SkuDescription = reader.GetString(reader.GetOrdinal("sku_description")),
+                BatchNumber    = reader.IsDBNull(reader.GetOrdinal("batch_number"))    ? null : reader.GetString(reader.GetOrdinal("batch_number")),
+                BestBeforeDate = reader.IsDBNull(reader.GetOrdinal("best_before_date"))      ? null : reader.GetString(reader.GetOrdinal("best_before_date")),
+                LineStatusCode = reader.GetString(reader.GetOrdinal("line_state_code")),
+                ExpectedQty    = reader.GetInt32(reader.GetOrdinal("expected_qty")),
+                ReceivedQty    = reader.GetInt32(reader.GetOrdinal("received_qty")),
+                OutstandingQty = reader.GetInt32(reader.GetOrdinal("outstanding_qty")),
+                UnitCount      = reader.GetInt32(reader.GetOrdinal("unit_count"))
+            });
+        }
+
+        return results;
+    }
+
+    public IReadOnlyList<InboundUnitDto> GetInboundUnits(int inboundLineId)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                eu.inbound_expected_unit_id,
+                eu.expected_external_ref                       AS sscc,
+                eu.batch_number,
+                CONVERT(NVARCHAR(10), eu.best_before_date, 103) AS best_before_date,
+                eu.expected_quantity                           AS quantity,
+                CASE
+                    WHEN r.receipt_id IS NOT NULL
+                         AND r.reversed_receipt_id IS NULL     THEN 'RECEIVED'
+                    WHEN r.reversed_receipt_id IS NOT NULL     THEN 'REVERSED'
+                    ELSE 'OUTSTANDING'
+                END                                            AS unit_status,
+                CONVERT(NVARCHAR(16), r.received_at, 120)      AS received_at,
+                b.bin_code                                     AS received_bin,
+                u.username                                     AS received_by
+            FROM inbound.inbound_expected_units eu
+            LEFT JOIN inbound.inbound_receipts r
+                ON r.inbound_expected_unit_id = eu.inbound_expected_unit_id
+               AND r.is_reversal = 0
+            LEFT JOIN inventory.inventory_units iu ON iu.inventory_unit_id = r.inventory_unit_id
+            LEFT JOIN inventory.inventory_placements p ON p.inventory_unit_id = iu.inventory_unit_id
+            LEFT JOIN locations.bins b ON b.bin_id = p.bin_id
+            LEFT JOIN auth.users u ON u.id = r.received_by_user_id
+            WHERE eu.inbound_line_id = @line_id
+            ORDER BY eu.inbound_expected_unit_id
+        """;
+
+        command.Parameters.Add(new SqlParameter("@line_id", SqlDbType.Int) { Value = inboundLineId });
+
+        using var reader = command.ExecuteReader();
+        var results = new List<InboundUnitDto>();
+
+        while (reader.Read())
+        {
+            results.Add(new InboundUnitDto
+            {
+                ExpectedUnitId = reader.GetInt32(reader.GetOrdinal("inbound_expected_unit_id")),
+                Sscc           = reader.GetString(reader.GetOrdinal("sscc")),
+                BatchNumber    = reader.IsDBNull(reader.GetOrdinal("batch_number"))    ? null : reader.GetString(reader.GetOrdinal("batch_number")),
+                BestBeforeDate = reader.IsDBNull(reader.GetOrdinal("best_before_date")) ? null : reader.GetString(reader.GetOrdinal("best_before_date")),
+                Quantity       = reader.GetInt32(reader.GetOrdinal("quantity")),
+                UnitStatus     = reader.GetString(reader.GetOrdinal("unit_status")),
+                ReceivedAt     = reader.IsDBNull(reader.GetOrdinal("received_at"))     ? null : reader.GetString(reader.GetOrdinal("received_at")),
+                ReceivedBin    = reader.IsDBNull(reader.GetOrdinal("received_bin"))    ? null : reader.GetString(reader.GetOrdinal("received_bin")),
+                ReceivedBy     = reader.IsDBNull(reader.GetOrdinal("received_by"))     ? null : reader.GetString(reader.GetOrdinal("received_by"))
+            });
+        }
+
+        return results;
+    }
 }

@@ -20,6 +20,7 @@ public sealed class SkuChangeLogDto
     public bool?     ActiveBefore       { get; init; }
     public string?   StorageBefore      { get; init; }
     public string?   SectionBefore      { get; init; }
+    public string?   OwnerBefore        { get; init; }
 
     // After
     public string?   DescAfter          { get; init; }
@@ -33,4 +34,5 @@ public sealed class SkuChangeLogDto
     public bool?     ActiveAfter        { get; init; }
     public string?   StorageAfter       { get; init; }
     public string?   SectionAfter       { get; init; }
+    public string?   OwnerAfter         { get; init; }
 }

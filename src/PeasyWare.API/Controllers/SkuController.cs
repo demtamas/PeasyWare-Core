@@ -28,11 +28,18 @@ public sealed class SkuController : ControllerBase
             uomCode:            request.UomCode,
             weightPerUnit:      request.WeightPerUnit,
             standardHuQuantity: request.StandardHuQuantity,
-            isHazardous:        request.IsHazardous);
+            isHazardous:        request.IsHazardous,
+            ownerPartyCode:     request.OwnerPartyCode,
+            storageTypeCode:    request.StorageTypeCode);
 
         if (!result.Success)
         {
-            var status = result.ResultCode == "ERRSKU02" ? 409 : 400;
+            var status = result.ResultCode switch
+            {
+                "ERRSKU02" => 409,
+                "ERRSKU03" or "ERRSKU04" => 422,
+                _ => 400
+            };
             return StatusCode(status, ApiResponse.Fail(result.ResultCode, result.FriendlyMessage));
         }
 

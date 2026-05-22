@@ -31,7 +31,9 @@ SELECT
     ob.allocated_by,
     ob.allocated_at,
     -- Inbound reference
-    inb.inbound_ref
+    inb.inbound_ref,
+    -- Stock owner (from SKU definition)
+    owner_p.display_name                                AS owner_name
 FROM inventory.inventory_units iu
 JOIN inventory.skus s
     ON s.sku_id = iu.sku_id
@@ -70,6 +72,7 @@ LEFT JOIN
     JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
     WHERE r.is_reversal = 0
 ) inb ON inb.inventory_unit_id = iu.inventory_unit_id
+LEFT JOIN core.parties owner_p ON owner_p.party_id = s.owner_party_id
 LEFT JOIN
 (
     SELECT
@@ -79,14 +82,9 @@ LEFT JOIN
         alloc_usr.username  AS allocated_by,
         a.allocated_at
     FROM outbound.outbound_allocations a
-    JOIN outbound.outbound_lines l
-        ON l.outbound_line_id = a.outbound_line_id
-    JOIN outbound.outbound_orders o
-        ON o.outbound_order_id = l.outbound_order_id
-    LEFT JOIN auth.users alloc_usr
-        ON alloc_usr.id = a.allocated_by
-    WHERE a.allocation_status NOT IN ('CANCELLED')
-) ob ON ob.inventory_unit_id = iu.inventory_unit_id
-WHERE iu.stock_state_code <> 'REV'
-  AND iu.stock_state_code <> 'SHP';
+    JOIN outbound.outbound_lines ol ON ol.outbound_line_id = a.outbound_line_id
+    JOIN outbound.outbound_orders o ON o.outbound_order_id = ol.outbound_order_id
+    LEFT JOIN auth.users alloc_usr ON alloc_usr.id = a.allocated_by
+    WHERE a.allocation_status <> 'CANCELLED'
+) ob ON ob.inventory_unit_id = iu.inventory_unit_id;
 GO

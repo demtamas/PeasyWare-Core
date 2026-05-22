@@ -40,7 +40,9 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         bool     isBatchRequired          = false,
         bool     isFullHuRequired         = false,
         string?  preferredStorageTypeCode = null,
-        string?  preferredSectionCode     = null)
+        string?  preferredSectionCode     = null,
+        string?  ownerPartyCode           = null,
+        string?  storageTypeCode          = null)
     {
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
@@ -59,8 +61,9 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         command.Parameters.Add(new SqlParameter("@is_hazardous",                   SqlDbType.Bit)           { Value = isHazardous });
         command.Parameters.Add(new SqlParameter("@is_batch_required",              SqlDbType.Bit)           { Value = isBatchRequired });
         command.Parameters.Add(new SqlParameter("@is_full_hu_required",            SqlDbType.Bit)           { Value = isFullHuRequired });
-        command.Parameters.Add(new SqlParameter("@preferred_storage_type_code",    SqlDbType.NVarChar, 50)  { Value = (object?)preferredStorageTypeCode  ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@preferred_storage_type_code",    SqlDbType.NVarChar, 50)  { Value = (object?)(storageTypeCode ?? preferredStorageTypeCode) ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@preferred_storage_section_code", SqlDbType.NVarChar, 50)  { Value = (object?)preferredSectionCode      ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@owner_party_code",               SqlDbType.NVarChar, 50)  { Value = (object?)ownerPartyCode            ?? DBNull.Value });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRSKU99", "Unexpected error.");
@@ -84,7 +87,8 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         bool     isFullHuRequired         = false,
         bool     isActive                 = true,
         string?  preferredStorageTypeCode = null,
-        string?  preferredSectionCode     = null)
+        string?  preferredSectionCode     = null,
+        string?  ownerPartyCode           = null)
     {
         // Fetch before-state for audit trail
         object? before = null;
@@ -138,6 +142,7 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         command.Parameters.Add(new SqlParameter("@is_active",                      SqlDbType.Bit)           { Value = isActive });
         command.Parameters.Add(new SqlParameter("@preferred_storage_type_code",    SqlDbType.NVarChar, 50)  { Value = (object?)preferredStorageTypeCode  ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@preferred_storage_section_code", SqlDbType.NVarChar, 50)  { Value = (object?)preferredSectionCode      ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@owner_party_code",               SqlDbType.NVarChar, 50)  { Value = (object?)ownerPartyCode            ?? DBNull.Value });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRSKU99", "Unexpected error.");
@@ -157,7 +162,8 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
             IsFullHuRequired   = isFullHuRequired,
             IsActive           = isActive,
             StorageTypeCode    = preferredStorageTypeCode,
-            SectionCode        = preferredSectionCode
+            SectionCode        = preferredSectionCode,
+            OwnerPartyCode     = ownerPartyCode
         };
 
         return BuildResult("Sku.Update", code, new { SkuCode = skuCode, Before = before, After = after });

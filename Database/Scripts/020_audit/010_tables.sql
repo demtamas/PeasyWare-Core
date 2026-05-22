@@ -187,7 +187,27 @@ VALUES
 
 ('pw.site_name','Site name','client',30,'Test Warehouse 001','string',
  NULL,
- 'Human-readable site name');
+ 'Human-readable site name'),
+
+--------------------------------------------------
+-- INVENTORY / MULTI-OWNER
+--------------------------------------------------
+
+('inventory.enable_multi_owner','Enable multi-owner mode','inventory',10,'false','bool',
+ '{"type":"bool"}',
+ 'When enabled, each SKU must be assigned an owner party. Used in 3PL environments.'),
+
+('inventory.default_owner_party_code','Default stock owner party code','inventory',20,'PW_WAREHOUSE01','string',
+ NULL,
+ 'Party code used as the default stock owner when multi-owner mode is disabled'),
+
+--------------------------------------------------
+-- OUTBOUND
+--------------------------------------------------
+
+('outbound.allocation_strategy','Allocation strategy','outbound',10,'FEFO','string',
+ '{"type":"enum","values":["FEFO","FIFO","LIFO","NONE"]}',
+ 'Stock allocation strategy: FEFO (First Expired First Out), FIFO, LIFO, or NONE (system default)');
 
 ---------------------------------------------------------------
 -- AUDIT: SETTINGS CHANGE LOG

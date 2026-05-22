@@ -28,6 +28,7 @@ SELECT
     TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.IsActive')           AS BIT)           AS active_before,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.StorageTypeCode')      AS storage_before,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.SectionCode')          AS section_before,
+    JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.OwnerPartyCode')       AS owner_before,
 
     -- After state
     JSON_VALUE(t.payload_json, '$.Data.Outcome.After.SkuDescription')        AS desc_after,
@@ -40,11 +41,10 @@ SELECT
     TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.After.IsHazardous')         AS BIT)           AS hazardous_after,
     TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.After.IsActive')            AS BIT)           AS active_after,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.After.StorageTypeCode')       AS storage_after,
-    JSON_VALUE(t.payload_json, '$.Data.Outcome.After.SectionCode')           AS section_after
+    JSON_VALUE(t.payload_json, '$.Data.Outcome.After.SectionCode')           AS section_after,
+    JSON_VALUE(t.payload_json, '$.Data.Outcome.After.OwnerPartyCode')        AS owner_after
 
 FROM audit.trace_logs t
 LEFT JOIN auth.users u ON u.id = t.user_id
 WHERE t.action IN ('Sku.Create', 'Sku.Update');
-GO
-PRINT 'audit.v_sku_changes: updated JSON paths to $.Data.Outcome.*';
 GO

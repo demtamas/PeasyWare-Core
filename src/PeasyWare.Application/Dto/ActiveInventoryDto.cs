@@ -24,6 +24,7 @@ public sealed class ActiveInventoryDto
     /// Populated from the most recent non-reversal inbound receipt.
     /// </summary>
     public string?   InboundRef       { get; init; }
+    public string?   OwnerName        { get; init; }
 
     /// <summary>
     /// The outbound order reference if this unit is currently allocated.

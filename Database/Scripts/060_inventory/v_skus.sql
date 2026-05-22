@@ -23,15 +23,16 @@ SELECT
     s.created_at,
     cu.username                 AS created_by_username,
     s.updated_at,
-    uu.username                 AS updated_by_username
+    uu.username                 AS updated_by_username,
+    s.owner_party_id,
+    op.party_code               AS owner_party_code,
+    op.display_name             AS owner_name
 FROM inventory.skus s
 LEFT JOIN locations.storage_types    st ON st.storage_type_id    = s.preferred_storage_type_id
 LEFT JOIN locations.storage_sections ss ON ss.storage_section_id = s.preferred_storage_section_id
 LEFT JOIN auth.users cu              ON cu.id = s.created_by
-LEFT JOIN auth.users uu              ON uu.id = s.updated_by;
+LEFT JOIN auth.users uu              ON uu.id = s.updated_by
+LEFT JOIN core.parties op            ON op.party_id = s.owner_party_id;
 GO
 PRINT 'inventory.v_skus created.';
-GO
-
--- ── Error codes ───────────────────────────────────────────────────────────────
 GO

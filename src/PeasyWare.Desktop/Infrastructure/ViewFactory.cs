@@ -1,4 +1,5 @@
 ﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Desktop.Views.Inbound;
 using PeasyWare.Desktop.Views.Inventory;
 using PeasyWare.Desktop.Views.Logs;
 using PeasyWare.Desktop.Views.Materials;
@@ -84,6 +85,12 @@ public sealed class ViewFactory
         var queryRepo = _runtime.Repositories.CreateOutboundQuery(session);
         var commandRepo = _runtime.Repositories.CreateOutboundCommand(session);
         return new PeasyWare.Desktop.Views.Outbound.OutstandingOrdersView(queryRepo, commandRepo);
+    }
+
+    public UserControl CreateInboundView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateInboundQuery(session);
+        return new InboundView(queryRepo);
     }
 
     public UserControl CreateShipmentsView(SessionContext session)

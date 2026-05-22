@@ -22,6 +22,7 @@ public sealed class SkuEditForm : Form
     private readonly NumericUpDown _nudHuQty        = new() { Minimum = 0, Maximum = 9999 };
     private readonly ComboBox      _cboStorageType  = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox      _cboSection      = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox      _cboOwner        = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly CheckBox      _chkBatchReq     = new() { Text = "Batch number required" };
     private readonly CheckBox      _chkFullHuReq    = new() { Text = "Full HU required" };
     private readonly CheckBox      _chkHazardous    = new() { Text = "Hazardous" };
@@ -39,6 +40,7 @@ public sealed class SkuEditForm : Form
     public int      StandardHuQuantity => (int)_nudHuQty.Value;
     public string?  PreferredStorageTypeCode => (_cboStorageType.SelectedItem as StorageLookup)?.Code;
     public string?  PreferredSectionCode     => (_cboSection.SelectedItem as StorageLookup)?.Code;
+    public string?  OwnerPartyCode           => (_cboOwner.SelectedItem as StorageLookup)?.Code;
     public bool     IsBatchRequired    => _chkBatchReq.Checked;
     public bool     IsFullHuRequired   => _chkFullHuReq.Checked;
     public bool     IsHazardous        => _chkHazardous.Checked;
@@ -49,12 +51,13 @@ public sealed class SkuEditForm : Form
     public SkuEditForm(
         SkuDto? dto,
         IReadOnlyList<StorageLookup> storageTypes,
-        IReadOnlyList<StorageLookup> sections)
+        IReadOnlyList<StorageLookup> sections,
+        IReadOnlyList<StorageLookup> owners)
     {
         _isEdit = dto is not null && !string.IsNullOrEmpty(dto.SkuCode);
         Text    = _isEdit ? $"Edit SKU — {dto!.SkuCode}" : "New SKU";
 
-        BuildLayout(storageTypes, sections);
+        BuildLayout(storageTypes, sections, owners);
         WireValidation();
 
         if (dto is not null)
@@ -63,9 +66,10 @@ public sealed class SkuEditForm : Form
 
     private void BuildLayout(
         IReadOnlyList<StorageLookup> storageTypes,
-        IReadOnlyList<StorageLookup> sections)
+        IReadOnlyList<StorageLookup> sections,
+        IReadOnlyList<StorageLookup> owners)
     {
-        Size            = new Size(500, 540);
+        Size            = new Size(500, 570);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
         MinimizeBox     = false;
@@ -76,30 +80,37 @@ public sealed class SkuEditForm : Form
         _cboUom.Items.AddRange(new object[] { "Each", "Case", "Pallet", "KG", "L" });
         _cboUom.SelectedIndex = 0;
 
-        // Storage type dropdown — blank = no preference
+        // Storage type dropdown
         _cboStorageType.Items.Add(new StorageLookup(null, "(No preference)"));
         foreach (var st in storageTypes)
             _cboStorageType.Items.Add(st);
         _cboStorageType.SelectedIndex = 0;
         _cboStorageType.DisplayMember = "Display";
 
-        // Section dropdown — blank = no preference
+        // Section dropdown
         _cboSection.Items.Add(new StorageLookup(null, "(No preference)"));
         foreach (var s in sections)
             _cboSection.Items.Add(s);
         _cboSection.SelectedIndex = 0;
         _cboSection.DisplayMember = "Display";
 
+        // Owner dropdown
+        _cboOwner.Items.Add(new StorageLookup(null, "(Default)"));
+        foreach (var o in owners)
+            _cboOwner.Items.Add(o);
+        _cboOwner.SelectedIndex = 0;
+        _cboOwner.DisplayMember = "Display";
+
         var table = new TableLayoutPanel
         {
             Dock        = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount    = 13,
+            RowCount    = 14,
             Padding     = new Padding(12),
             AutoSize    = false
         };
 
-        for (int i = 0; i < 13; i++)
+        for (int i = 0; i < 14; i++)
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -114,6 +125,7 @@ public sealed class SkuEditForm : Form
         AddRow(table, row++, "HU Quantity",          _nudHuQty);
         AddRow(table, row++, "Preferred Storage",    _cboStorageType);
         AddRow(table, row++, "Preferred Section",    _cboSection);
+        AddRow(table, row++, "Owner",                _cboOwner);
 
         // Checkboxes — span both columns for full width, fixed height
         _chkBatchReq.AutoSize  = false;
@@ -222,6 +234,7 @@ public sealed class SkuEditForm : Form
 
         SelectLookup(_cboStorageType, dto.PreferredStorageTypeCode);
         SelectLookup(_cboSection,     dto.PreferredSectionCode);
+        SelectLookup(_cboOwner,       dto.OwnerPartyCode);
     }
 
     private static void SelectLookup(ComboBox cbo, string? code)

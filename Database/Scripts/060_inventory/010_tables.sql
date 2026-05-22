@@ -25,6 +25,9 @@ CREATE TABLE inventory.skus
     -- Batch / lot control
     is_batch_required       BIT NOT NULL DEFAULT (0), -- If 1, batch number is mandatory at receiving time
 
+    -- Stock owner (used in multi-owner / 3PL mode)
+    owner_party_id          INT NULL,
+
     -- Storage intent (THIS is what putaway reads)
     preferred_storage_type_id   INT NOT NULL,
     preferred_storage_section_id INT NULL,
@@ -46,7 +49,11 @@ CREATE TABLE inventory.skus
 
     CONSTRAINT fk_skus_storage_section
         FOREIGN KEY (preferred_storage_section_id)
-        REFERENCES locations.storage_sections(storage_section_id)
+        REFERENCES locations.storage_sections(storage_section_id),
+
+    CONSTRAINT fk_skus_owner_party
+        FOREIGN KEY (owner_party_id)
+        REFERENCES core.parties(party_id)
 );
 GO
 

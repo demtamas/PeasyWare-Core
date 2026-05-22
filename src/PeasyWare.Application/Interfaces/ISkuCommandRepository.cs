@@ -13,7 +13,9 @@ public interface ISkuCommandRepository
         bool     isBatchRequired            = false,
         bool     isFullHuRequired           = false,
         string?  preferredStorageTypeCode   = null,
-        string?  preferredSectionCode       = null);
+        string?  preferredSectionCode       = null,
+        string?  ownerPartyCode             = null,
+        string?  storageTypeCode            = null);
 
     OperationResult UpdateSku(
         string   skuCode,
@@ -27,5 +29,6 @@ public interface ISkuCommandRepository
         bool     isFullHuRequired           = false,
         bool     isActive                   = true,
         string?  preferredStorageTypeCode   = null,
-        string?  preferredSectionCode       = null);
+        string?  preferredSectionCode       = null,
+        string?  ownerPartyCode             = null);
 }

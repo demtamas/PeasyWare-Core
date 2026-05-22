@@ -466,6 +466,11 @@ public partial class MainForm : Form
         }
     }
 
+    private void inboundToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateInboundView(_session));
+    }
+
     private void shipmentsToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateShipmentsView(_session));

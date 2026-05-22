@@ -28,6 +28,7 @@ public partial class MaterialsView : BaseView, IToolbarAware
     private bool                 _showAll = false;
     private List<StorageLookup>  _storageTypes = new();
     private List<StorageLookup>  _sections     = new();
+    private List<StorageLookup>  _owners       = new();
 
     public MaterialsView(
         ISkuQueryRepository   queryRepo,
@@ -137,6 +138,20 @@ public partial class MaterialsView : BaseView, IToolbarAware
             while (r.Read())
                 _sections.Add(new StorageLookup(r.GetString(0), $"{r.GetString(0)} — {r.GetString(1)}"));
         }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT p.party_code, p.display_name
+                FROM core.parties p
+                JOIN core.party_roles pr ON pr.party_id = p.party_id
+                WHERE pr.role_code = 'OWNER' AND p.is_active = 1
+                ORDER BY p.display_name
+                """;
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                _owners.Add(new StorageLookup(r.GetString(0), $"{r.GetString(1)} ({r.GetString(0)})"));
+        }
     }
 
     private void ApplyFilter()
@@ -148,6 +163,7 @@ public partial class MaterialsView : BaseView, IToolbarAware
             : _skus.Where(s =>
                 s.SkuCode.Contains(q, StringComparison.OrdinalIgnoreCase)        ||
                 s.SkuDescription.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (s.OwnerName ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 (s.Ean ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
               .ToList();
 
@@ -169,7 +185,7 @@ public partial class MaterialsView : BaseView, IToolbarAware
 
     private void AddNew()
     {
-        using var form = new SkuEditForm(null, _storageTypes, _sections);
+        using var form = new SkuEditForm(null, _storageTypes, _sections, _owners);
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.CreateSku(
@@ -183,7 +199,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isBatchRequired:          form.IsBatchRequired,
             isFullHuRequired:         form.IsFullHuRequired,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
-            preferredSectionCode:     form.PreferredSectionCode);
+            preferredSectionCode:     form.PreferredSectionCode,
+            ownerPartyCode:           form.OwnerPartyCode);
 
         if (!result.Success)
         {
@@ -202,7 +219,7 @@ public partial class MaterialsView : BaseView, IToolbarAware
     {
         if (GetSelectedSku() is not SkuDto dto) return;
 
-        using var form = new SkuEditForm(dto, _storageTypes, _sections);
+        using var form = new SkuEditForm(dto, _storageTypes, _sections, _owners);
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.UpdateSku(
@@ -217,7 +234,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isFullHuRequired:         form.IsFullHuRequired,
             isActive:                 form.IsActive,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
-            preferredSectionCode:     form.PreferredSectionCode);
+            preferredSectionCode:     form.PreferredSectionCode,
+            ownerPartyCode:           form.OwnerPartyCode);
 
         if (!result.Success)
         {
@@ -243,7 +261,7 @@ public partial class MaterialsView : BaseView, IToolbarAware
             Ean            = null
         };
 
-        using var form = new SkuEditForm(template, _storageTypes, _sections);
+        using var form = new SkuEditForm(template, _storageTypes, _sections, _owners);
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
         var result = _commandRepo.CreateSku(
@@ -257,7 +275,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isBatchRequired:          form.IsBatchRequired,
             isFullHuRequired:         form.IsFullHuRequired,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
-            preferredSectionCode:     form.PreferredSectionCode);
+            preferredSectionCode:     form.PreferredSectionCode,
+            ownerPartyCode:           form.OwnerPartyCode);
 
         if (!result.Success)
         {
@@ -324,11 +343,12 @@ public partial class MaterialsView : BaseView, IToolbarAware
         dgv.Columns.Clear();
 
         dgv.Columns.Add(Col(nameof(SkuDto.SkuCode),                   "SKU Code",       10));
-        dgv.Columns.Add(Col(nameof(SkuDto.SkuDescription),              "Description",    25));
-        dgv.Columns.Add(Col(nameof(SkuDto.Ean),                         "EAN",            10));
+        dgv.Columns.Add(Col(nameof(SkuDto.SkuDescription),              "Description",    22));
+        dgv.Columns.Add(Col(nameof(SkuDto.OwnerName),                   "Owner",           9));
+        dgv.Columns.Add(Col(nameof(SkuDto.Ean),                         "EAN",             9));
         dgv.Columns.Add(Col(nameof(SkuDto.UomCode),                     "UOM",             5));
-        dgv.Columns.Add(Col(nameof(SkuDto.PreferredStorageTypeCode),    "Storage",         7));
-        dgv.Columns.Add(Col(nameof(SkuDto.PreferredSectionCode),         "Section",         7));
+        dgv.Columns.Add(Col(nameof(SkuDto.PreferredStorageTypeCode),    "Storage",         6));
+        dgv.Columns.Add(Col(nameof(SkuDto.PreferredSectionCode),         "Section",         6));
         dgv.Columns.Add(Col(nameof(SkuDto.WeightPerUnit),               "Weight (kg)",     7,
             new DataGridViewCellStyle { Format = "F3", Alignment = DataGridViewContentAlignment.MiddleRight }));
         dgv.Columns.Add(Col(nameof(SkuDto.StandardHuQuantity),          "HU Qty",          5,

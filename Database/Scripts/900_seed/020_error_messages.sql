@@ -89,3 +89,13 @@ GO
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRSHIP05', N'OUTBOUND', N'ERROR', N'Vehicle registration is required before departure.', N'outbound.usp_ship: @vehicle_ref is null or empty'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSHIP05');
+
+-- ERRSKU03: owner party not found
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSKU03', N'SKU', N'ERROR', N'Owner party not found or inactive.', N'inventory.usp_create_sku: @owner_party_code not found in core.parties'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSKU03');
+
+-- ERRSKU04: owner required in multi-owner mode
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSKU04', N'SKU', N'ERROR', N'Owner is required when multi-owner mode is enabled.', N'inventory.usp_create_sku: @owner_party_code is null but inventory.enable_multi_owner = true'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSKU04');

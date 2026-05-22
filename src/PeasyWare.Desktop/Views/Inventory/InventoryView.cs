@@ -119,7 +119,8 @@ public partial class InventoryView : BaseView, IToolbarAware
                 (i.SkuCode        ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 (i.BatchNumber    ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 (i.BinCode        ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                (i.SkuDescription ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
+                (i.SkuDescription ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (i.OwnerName      ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
               .ToList();
 
         Bind(data.ToList());
@@ -249,7 +250,8 @@ public partial class InventoryView : BaseView, IToolbarAware
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StockStatus),     "Status",        6));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.BinCode),         "Bin",           8));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.StorageTypeCode), "Type",          6));
-        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Reference),       "Reference",    12));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.Reference),       "Reference",    11));
+        dgv.Columns.Add(Col(nameof(ActiveInventoryDto.OwnerName),         "Owner",         9));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.AllocationStatus),  "Alloc",         6));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementType),  "Last Move",     8));
         dgv.Columns.Add(Col(nameof(ActiveInventoryDto.LastMovementAt),    "Last Move At", 12, "dd-MM-yyyy HH:mm"));

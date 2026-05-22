@@ -18,6 +18,7 @@ CREATE OR ALTER PROCEDURE inventory.usp_update_sku
     @is_active                      BIT              = 1,
     @preferred_storage_type_code    NVARCHAR(50)     = NULL,
     @preferred_storage_section_code NVARCHAR(50)     = NULL,
+    @owner_party_code               NVARCHAR(50)     = NULL,
     @user_id                        INT              = NULL,
     @session_id                     UNIQUEIDENTIFIER = NULL
 )
@@ -52,6 +53,23 @@ BEGIN
                 ELSE (SELECT preferred_storage_section_id FROM inventory.skus WHERE sku_code = @sku_code)
             END;
 
+        -- Resolve owner: if provided, validate and use; otherwise keep existing
+        DECLARE @owner_party_id INT = NULL;
+        IF @owner_party_code IS NOT NULL
+        BEGIN
+            SET @owner_party_id = (SELECT party_id FROM core.parties WHERE party_code = @owner_party_code COLLATE Latin1_General_CS_AS AND is_active = 1);
+            IF @owner_party_id IS NULL
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRSKU03' AS result_code;
+                ROLLBACK; RETURN;
+            END
+        END
+        ELSE
+        BEGIN
+            -- Keep existing owner
+            SELECT @owner_party_id = owner_party_id FROM inventory.skus WHERE sku_code = @sku_code;
+        END
+
         UPDATE inventory.skus
         SET sku_description              = @sku_description,
             ean                          = @ean,
@@ -64,6 +82,7 @@ BEGIN
             is_active                    = @is_active,
             preferred_storage_type_id    = @storage_type_id,
             preferred_storage_section_id = @storage_section_id,
+            owner_party_id               = @owner_party_id,
             updated_at                   = SYSUTCDATETIME(),
             updated_by                   = @user_id
         WHERE sku_code = @sku_code;
@@ -77,40 +96,4 @@ BEGIN
         SELECT CAST(0 AS BIT) AS success, N'ERRSKU99' AS result_code;
     END CATCH
 END;
-GO
-PRINT 'inventory.usp_update_sku updated — full parameter set, code-based storage resolution.';
-GO
-
--- ============================================================
--- Bin code strict case enforcement + audit.v_sku_changes update
--- Merged from WIP: 2026-05-15
--- ============================================================
-
--- ── inbound.usp_receive_inbound_line ─────────────────────────────────────────
-
-
--- ── warehouse.usp_putaway_confirm_task ────────────────────────────────────────
-
-
--- ── warehouse.usp_bin_to_bin_move_create ─────────────────────────────────────
-
-
--- ── warehouse.usp_bin_to_bin_move_confirm ────────────────────────────────────
-
-
-PRINT '------------------------------------------------------------';
-PRINT 'Bin code strict case enforcement complete.';
-PRINT 'All UPPER() removed from bin lookups. LTRIM/RTRIM retained.';
-PRINT '';
-PRINT 'NOTE: outbound.usp_pick_create and usp_pick_confirm still have';
-PRINT 'UPPER() on destination bin — fix in next WIP cycle when pick';
-PRINT 'flow is being tested end-to-end.';
-PRINT '------------------------------------------------------------';
-GO
-
--- ── audit.v_sku_changes: update JSON paths from Data.Data to Data.Outcome ──
--- RepositoryBase.BuildResult now uses 'Outcome' instead of 'Data' for the
--- action-specific payload, eliminating the confusing Data.Data nesting.
--- Historical rows (before this change) will return NULL from this view
--- since they still have the old $.Data.Data path.
 GO

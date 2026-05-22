@@ -24,4 +24,12 @@ public interface IInboundQueryRepository
     InboundLineByEanDto? GetReceivableLineByEan(string inboundRef, string ean);
 
     bool BinExists(string binCode);
+
+    // ── Desktop views ────────────────────────────────────────────────────
+
+    IReadOnlyList<InboundDeliverySummaryDto> GetInboundDeliveries(string? statusFilter = null);
+
+    IReadOnlyList<InboundDeliveryLineDto> GetInboundLines(int inboundId);
+
+    IReadOnlyList<InboundUnitDto> GetInboundUnits(int inboundLineId);
 }

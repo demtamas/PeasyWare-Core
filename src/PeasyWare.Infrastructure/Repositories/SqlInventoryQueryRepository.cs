@@ -82,7 +82,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                 bin_code, zone_code, storage_type_code,
                 received_at, received_by,
                 last_movement_type, last_movement_at, last_moved_by,
-                inbound_ref, order_ref,
+                inbound_ref, owner_name, order_ref,
                 allocation_status, allocated_by, allocated_at
             FROM inventory.v_active_inventory
             WHERE sscc = @sscc
@@ -112,7 +112,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                 bin_code, zone_code, storage_type_code,
                 received_at, received_by,
                 last_movement_type, last_movement_at, last_moved_by,
-                inbound_ref, order_ref,
+                inbound_ref, owner_name, order_ref,
                 allocation_status, allocated_by, allocated_at
             FROM inventory.v_active_inventory
             WHERE bin_code = @bin_code
@@ -185,6 +185,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
         var colLastMvAt    = reader.GetOrdinal("last_movement_at");
         var colLastMvBy    = reader.GetOrdinal("last_moved_by");
         var colInboundRef     = reader.GetOrdinal("inbound_ref");
+        var colOwnerName       = reader.GetOrdinal("owner_name");
         var colOrderRef        = reader.GetOrdinal("order_ref");
         var colAllocStatus     = reader.GetOrdinal("allocation_status");
         var colAllocatedBy     = reader.GetOrdinal("allocated_by");
@@ -210,6 +211,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
             LastMovementAt   = reader.IsDBNull(colLastMvAt)    ? null : reader.GetDateTime(colLastMvAt),
             LastMovedBy      = reader.IsDBNull(colLastMvBy)    ? null : reader.GetString(colLastMvBy),
             InboundRef       = reader.IsDBNull(colInboundRef)  ? null : reader.GetString(colInboundRef),
+            OwnerName        = reader.IsDBNull(colOwnerName)   ? null : reader.GetString(colOwnerName),
             OrderRef         = reader.IsDBNull(colOrderRef)    ? null : reader.GetString(colOrderRef),
             AllocationStatus = reader.IsDBNull(colAllocStatus)  ? null : reader.GetString(colAllocStatus),
             AllocatedBy      = reader.IsDBNull(colAllocatedBy)  ? null : reader.GetString(colAllocatedBy),
@@ -233,7 +235,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                        quantity, stock_state, stock_status, bin_code, zone_code,
                        storage_type_code, received_at, received_by,
                        last_movement_type, last_movement_at, last_moved_by,
-                       inbound_ref, order_ref,
+                       inbound_ref, owner_name, order_ref,
                        allocation_status, allocated_by, allocated_at
                 FROM inventory.v_active_inventory
                 ORDER BY bin_code, sku_code
@@ -246,7 +248,7 @@ public sealed class SqlInventoryQueryRepository : IInventoryQueryRepository
                        quantity, stock_state, stock_status, bin_code, zone_code,
                        storage_type_code, received_at, received_by,
                        last_movement_type, last_movement_at, last_moved_by,
-                       inbound_ref, order_ref,
+                       inbound_ref, owner_name, order_ref,
                        allocation_status, allocated_by, allocated_at
                 FROM inventory.v_active_inventory
                 WHERE sscc        LIKE @term

@@ -16,6 +16,7 @@ public sealed class SqlSkuQueryRepository : ISkuQueryRepository
                weight_per_unit, standard_hu_quantity, is_hazardous,
                is_batch_required, is_full_hu_required, is_active,
                preferred_storage_type_code, preferred_section_code,
+               owner_party_code, owner_name,
                created_at, created_by_username,
                updated_at, updated_by_username
         FROM inventory.v_skus
@@ -72,6 +73,8 @@ public sealed class SqlSkuQueryRepository : ISkuQueryRepository
         IsActive                 = r.GetBoolean(r.GetOrdinal("is_active")),
         PreferredStorageTypeCode = r.IsDBNull(r.GetOrdinal("preferred_storage_type_code")) ? null : r.GetString(r.GetOrdinal("preferred_storage_type_code")),
         PreferredSectionCode     = r.IsDBNull(r.GetOrdinal("preferred_section_code"))      ? null : r.GetString(r.GetOrdinal("preferred_section_code")),
+        OwnerPartyCode           = r.IsDBNull(r.GetOrdinal("owner_party_code"))            ? null : r.GetString(r.GetOrdinal("owner_party_code")),
+        OwnerName                = r.IsDBNull(r.GetOrdinal("owner_name"))                  ? null : r.GetString(r.GetOrdinal("owner_name")),
         CreatedAt                = r.IsDBNull(r.GetOrdinal("created_at"))               ? null : r.GetDateTime(r.GetOrdinal("created_at")),
         CreatedByUsername        = r.IsDBNull(r.GetOrdinal("created_by_username"))      ? null : r.GetString(r.GetOrdinal("created_by_username")),
         UpdatedAt                = r.IsDBNull(r.GetOrdinal("updated_at"))               ? null : r.GetDateTime(r.GetOrdinal("updated_at")),

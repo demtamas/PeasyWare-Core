@@ -134,6 +134,7 @@
             inboundToolStripMenuItem.Name = "inboundToolStripMenuItem";
             inboundToolStripMenuItem.Size = new Size(64, 20);
             inboundToolStripMenuItem.Text = "&Inbound";
+            inboundToolStripMenuItem.Click += inboundToolStripMenuItem_Click;
             // 
             // inventoryToolStripMenuItem
             // 

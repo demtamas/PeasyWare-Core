@@ -21,4 +21,10 @@ public sealed class CreateSkuRequest
     public int StandardHuQuantity { get; init; } = 0;
 
     public bool IsHazardous { get; init; } = false;
+
+    [MaxLength(50)]
+    public string? OwnerPartyCode { get; init; }
+
+    [MaxLength(50)]
+    public string? StorageTypeCode { get; init; }
 }

@@ -15,6 +15,8 @@ public sealed record SkuDto
     public bool     IsActive                  { get; init; }
     public string?  PreferredStorageTypeCode  { get; init; }
     public string?  PreferredSectionCode      { get; init; }
+    public string?  OwnerPartyCode            { get; init; }
+    public string?  OwnerName                 { get; init; }
     public DateTime? CreatedAt               { get; init; }
     public string?  CreatedByUsername         { get; init; }
     public DateTime? UpdatedAt               { get; init; }

@@ -169,6 +169,15 @@ internal sealed class StubInboundQueryRepo : IInboundQueryRepository
         Success = true, FriendlyMessage = "OK"
     };
 
+    public IReadOnlyList<InboundDeliverySummaryDto> GetInboundDeliveries(string? statusFilter = null)
+        => Array.Empty<InboundDeliverySummaryDto>();
+
+    public IReadOnlyList<InboundDeliveryLineDto> GetInboundLines(int inboundId)
+        => Array.Empty<InboundDeliveryLineDto>();
+
+    public IReadOnlyList<InboundUnitDto> GetInboundUnits(int inboundLineId)
+        => Array.Empty<InboundUnitDto>();
+
     public SsccValidationDto ValidateSsccForInbound(
         string    externalRef,
         string    stagingBin,
