@@ -466,10 +466,28 @@ public partial class MainForm : Form
         }
     }
 
+    private void movementsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateMovementsView(_session));
+
     private void inboundToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateInboundView(_session));
     }
+
+    private void allPartiesToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreatePartiesView(_session));
+
+    private void suppliersPartiesMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreatePartiesView(_session, "SUPPLIER"));
+
+    private void customersPartiesMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreatePartiesView(_session, "CUSTOMER"));
+
+    private void hauliersPartiesMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreatePartiesView(_session, "HAULIER"));
+
+    private void ownersPartiesMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreatePartiesView(_session, "OWNER"));
 
     private void shipmentsToolStripMenuItem_Click(object sender, EventArgs e)
     {

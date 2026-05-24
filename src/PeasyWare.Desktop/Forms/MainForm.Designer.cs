@@ -48,6 +48,14 @@
             outstandiToolStripMenuItem = new ToolStripMenuItem();
             departedToolStripMenuItem = new ToolStripMenuItem();
             allToolStripMenuItem = new ToolStripMenuItem();
+            suppliersToolStripMenuItem = new ToolStripMenuItem();
+            customersToolStripMenuItem = new ToolStripMenuItem();
+            partiesToolStripMenuItem = new ToolStripMenuItem();
+            allPartiesToolStripMenuItem = new ToolStripMenuItem();
+            suppliersPartiesMenuItem = new ToolStripMenuItem();
+            customersPartiesMenuItem = new ToolStripMenuItem();
+            hauliersPartiesMenuItem = new ToolStripMenuItem();
+            ownersPartiesMenuItem = new ToolStripMenuItem();
             adminToolStripMenuItem = new ToolStripMenuItem();
             usersToolStripMenuItem = new ToolStripMenuItem();
             sessionsToolStripMenuItem = new ToolStripMenuItem();
@@ -95,7 +103,7 @@
             // 
             // menuStrip1
             // 
-            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, inboundToolStripMenuItem, inventoryToolStripMenuItem, movementsToolStripMenuItem, countingToolStripMenuItem, shipmentsToolStripMenuItem, oToolStripMenuItem, warehouseToolStripMenuItem, adminToolStripMenuItem, systemToolStripMenuItem, helpToolStripMenuItem });
+            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, inboundToolStripMenuItem, inventoryToolStripMenuItem, movementsToolStripMenuItem, countingToolStripMenuItem, shipmentsToolStripMenuItem, oToolStripMenuItem, warehouseToolStripMenuItem, partiesToolStripMenuItem, adminToolStripMenuItem, systemToolStripMenuItem, helpToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
             menuStrip1.Size = new Size(1384, 24);
@@ -162,6 +170,7 @@
             movementsToolStripMenuItem.Name = "movementsToolStripMenuItem";
             movementsToolStripMenuItem.Size = new Size(82, 20);
             movementsToolStripMenuItem.Text = "&Movements";
+            movementsToolStripMenuItem.Click += movementsToolStripMenuItem_Click;
             // 
             // countingToolStripMenuItem
             // 
@@ -220,9 +229,51 @@
             allToolStripMenuItem.Size = new Size(180, 22);
             allToolStripMenuItem.Text = "&All";
             // 
+            // partiesToolStripMenuItem
+            // 
+            partiesToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { allPartiesToolStripMenuItem, suppliersPartiesMenuItem, customersPartiesMenuItem, hauliersPartiesMenuItem, ownersPartiesMenuItem });
+            partiesToolStripMenuItem.Name = "partiesToolStripMenuItem";
+            partiesToolStripMenuItem.Size = new Size(58, 20);
+            partiesToolStripMenuItem.Text = "&Parties";
+            // 
+            // allPartiesToolStripMenuItem
+            // 
+            allPartiesToolStripMenuItem.Name = "allPartiesToolStripMenuItem";
+            allPartiesToolStripMenuItem.Size = new Size(140, 22);
+            allPartiesToolStripMenuItem.Text = "&All parties";
+            allPartiesToolStripMenuItem.Click += allPartiesToolStripMenuItem_Click;
+            // 
+            // suppliersPartiesMenuItem
+            // 
+            suppliersPartiesMenuItem.Name = "suppliersPartiesMenuItem";
+            suppliersPartiesMenuItem.Size = new Size(140, 22);
+            suppliersPartiesMenuItem.Text = "&Suppliers";
+            suppliersPartiesMenuItem.Click += suppliersPartiesMenuItem_Click;
+            // 
+            // customersPartiesMenuItem
+            // 
+            customersPartiesMenuItem.Name = "customersPartiesMenuItem";
+            customersPartiesMenuItem.Size = new Size(140, 22);
+            customersPartiesMenuItem.Text = "&Customers";
+            customersPartiesMenuItem.Click += customersPartiesMenuItem_Click;
+            // 
+            // hauliersPartiesMenuItem
+            // 
+            hauliersPartiesMenuItem.Name = "hauliersPartiesMenuItem";
+            hauliersPartiesMenuItem.Size = new Size(140, 22);
+            hauliersPartiesMenuItem.Text = "&Hauliers";
+            hauliersPartiesMenuItem.Click += hauliersPartiesMenuItem_Click;
+            // 
+            // ownersPartiesMenuItem
+            // 
+            ownersPartiesMenuItem.Name = "ownersPartiesMenuItem";
+            ownersPartiesMenuItem.Size = new Size(140, 22);
+            ownersPartiesMenuItem.Text = "&Owners";
+            ownersPartiesMenuItem.Click += ownersPartiesMenuItem_Click;
+            // 
             // adminToolStripMenuItem
             // 
-            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem, locationsToolStripMenuItem, suppliersToolStripMenuItem, customersToolStripMenuItem });
+            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem, locationsToolStripMenuItem });
             adminToolStripMenuItem.Name = "adminToolStripMenuItem";
             adminToolStripMenuItem.Size = new Size(55, 20);
             adminToolStripMenuItem.Text = "&Admin";
@@ -476,6 +527,12 @@
         private ToolStripMenuItem rolesAndPermissionsToolStripMenuItem;
         private ToolStripMenuItem locationsToolStripMenuItem;
         private ToolStripMenuItem materialsToolStripMenuItem;
+        private ToolStripMenuItem partiesToolStripMenuItem;
+        private ToolStripMenuItem allPartiesToolStripMenuItem;
+        private ToolStripMenuItem suppliersPartiesMenuItem;
+        private ToolStripMenuItem customersPartiesMenuItem;
+        private ToolStripMenuItem hauliersPartiesMenuItem;
+        private ToolStripMenuItem ownersPartiesMenuItem;
         private ToolStripMenuItem suppliersToolStripMenuItem;
         private ToolStripMenuItem customersToolStripMenuItem;
         private ToolStripMenuItem sToolStripMenuItem;

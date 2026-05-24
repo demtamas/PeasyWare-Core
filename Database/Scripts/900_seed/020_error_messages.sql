@@ -99,3 +99,18 @@ WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'E
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRSKU04', N'SKU', N'ERROR', N'Owner is required when multi-owner mode is enabled.', N'inventory.usp_create_sku: @owner_party_code is null but inventory.enable_multi_owner = true'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSKU04');
+
+-- ERRPARTY01: party code already exists
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRPARTY01', N'PARTY', N'ERROR', N'A party with this code already exists.', N'core.usp_create_party: duplicate party_code'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRPARTY01');
+
+-- ERRPARTY02: party not found
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRPARTY02', N'PARTY', N'ERROR', N'Party not found.', N'core.usp_update_party: party_id not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRPARTY02');
+
+-- ERRPARTY99: unexpected error
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRPARTY99', N'PARTY', N'ERROR', N'Unexpected error processing party.', N'core.usp_create_party/usp_update_party: unhandled exception'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRPARTY99');

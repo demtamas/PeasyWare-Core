@@ -167,6 +167,32 @@ public sealed class RepositoryFactory
     public IAuditQueryRepository CreateAuditQuery(SessionContext session)
         => new SqlAuditQueryRepository(_factory, session);
 
+    // --------------------------------------------------
+    // PARTIES
+    // --------------------------------------------------
+
+    public IPartyQueryRepository CreatePartyQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlPartyQueryRepository(_factory, session);
+    }
+
+    public IPartyCommandRepository CreatePartyCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlPartyCommandRepository(_factory, session);
+    }
+
+    // --------------------------------------------------
+    // MOVEMENTS
+    // --------------------------------------------------
+
+    public IMovementQueryRepository CreateMovementQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlMovementQueryRepository(_factory, session);
+    }
+
     /// <summary>
     /// Replaces the system session used by sessionless overloads.
     /// Called by AppStartup.InitializeForApi() after the api user

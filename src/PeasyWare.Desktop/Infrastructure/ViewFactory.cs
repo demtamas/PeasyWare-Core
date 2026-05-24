@@ -1,6 +1,8 @@
 ﻿using PeasyWare.Application.Contexts;
 using PeasyWare.Desktop.Views.Inbound;
 using PeasyWare.Desktop.Views.Inventory;
+using PeasyWare.Desktop.Views.Movements;
+using PeasyWare.Desktop.Views.Parties;
 using PeasyWare.Desktop.Views.Logs;
 using PeasyWare.Desktop.Views.Materials;
 using PeasyWare.Desktop.Views.Sessions;
@@ -91,6 +93,19 @@ public sealed class ViewFactory
     {
         var queryRepo = _runtime.Repositories.CreateInboundQuery(session);
         return new InboundView(queryRepo);
+    }
+
+    public UserControl CreatePartiesView(SessionContext session, string? roleFilter = null)
+    {
+        var queryRepo   = _runtime.Repositories.CreatePartyQuery(session);
+        var commandRepo = _runtime.Repositories.CreatePartyCommand(session);
+        return new PartiesView(queryRepo, commandRepo, roleFilter);
+    }
+
+    public UserControl CreateMovementsView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateMovementQuery(session);
+        return new MovementsView(queryRepo);
     }
 
     public UserControl CreateShipmentsView(SessionContext session)
