@@ -8,66 +8,32 @@ using System.Text.Json.Serialization;
 
 public sealed class InfrastructureLogger : ILogger
 {
-    private readonly RuntimeSettings _settings;
+    private readonly RuntimeSettings     _settings;
     private readonly SqlConnectionFactory _factory;
     private SessionContext? _session;
 
-    public InfrastructureLogger(
-        RuntimeSettings settings,
-        SqlConnectionFactory factory)
+    public InfrastructureLogger(RuntimeSettings settings, SqlConnectionFactory factory)
     {
         _settings = settings;
-        _factory = factory;
+        _factory  = factory;
     }
 
-    public void SetSession(SessionContext session)
-    {
-        _session = session;
-    }
+    public void SetSession(SessionContext session) => _session = session;
 
-    // --------------------------------------------------------
-    // Interface-required methods (simple wrappers)
-    // --------------------------------------------------------
+    public void Info(string action, object? data)  => Log("INFO",  action, data);
+    public void Warn(string action, object? data)  => Log("WARN",  action, data);
+    public void Error(string action, object? data) => Log("ERROR", action, data);
 
-    public void Info(string message)
-        => Log("INFO", message, null);
-
-    public void Warn(string message)
-        => Log("WARN", message, null);
-
-    public void Error(string message)
-        => Log("ERROR", message, null);
-
-    public void Error(string message, Exception ex)
-        => Log("ERROR", message, new
+    public void Error(string action, object? data, Exception ex) =>
+        Log("ERROR", action, new
         {
-            Exception = ex.Message,
-            ex.StackTrace
-        });
-
-    public void Error(string message, Exception ex, object context)
-        => Log("ERROR", message, new
-        {
-            Context = context,
+            Context   = data,
             Exception = ex.Message,
             ex.StackTrace
         });
 
     // --------------------------------------------------------
-    // New structured methods (preferred usage)
-    // --------------------------------------------------------
-
-    public void Info(string action, object? data)
-        => Log("INFO", action, data);
-
-    public void Warn(string action, object? data)
-        => Log("WARN", action, data);
-
-    public void Error(string action, object? data)
-        => Log("ERROR", action, data);
-
-    // --------------------------------------------------------
-    // Core logging
+    // Core write
     // --------------------------------------------------------
 
     private void Log(string level, string action, object? data)
@@ -80,16 +46,16 @@ public sealed class InfrastructureLogger : ILogger
             using var connection = _factory.Create();
             connection.Open();
 
-            using var command = connection.CreateCommand();
-            command.CommandText = "audit.usp_log_trace";
-            command.CommandType = CommandType.StoredProcedure;
+            using var command    = connection.CreateCommand();
+            command.CommandText  = "audit.usp_log_trace";
+            command.CommandType  = CommandType.StoredProcedure;
 
             var payload = new
             {
                 Timestamp = DateTime.UtcNow,
-                Level = level,
-                Action = action,
-                Session = _session == null ? null : new
+                Level     = level,
+                Action    = action,
+                Session   = _session == null ? null : new
                 {
                     _session.UserId,
                     _session.SessionId,
@@ -107,8 +73,8 @@ public sealed class InfrastructureLogger : ILogger
 
             command.Parameters.Add("@correlation_id", SqlDbType.UniqueIdentifier)
                 .Value = ExtractCorrelationId(data)
-                     ?? (object?)_session?.CorrelationId
-                     ?? DBNull.Value;
+                      ?? (object?)_session?.CorrelationId
+                      ?? DBNull.Value;
 
             command.Parameters.Add("@user_id", SqlDbType.Int)
                 .Value = _session is null ? DBNull.Value : _session.UserId;
@@ -135,17 +101,10 @@ public sealed class InfrastructureLogger : ILogger
 
     private static Guid? ExtractCorrelationId(object? data)
     {
-        if (data == null)
-            return null;
-
+        if (data == null) return null;
         var prop = data.GetType().GetProperty("CorrelationId");
-        if (prop == null)
-            return null;
-
+        if (prop == null) return null;
         var value = prop.GetValue(data);
-
-        return value is Guid g && g != Guid.Empty
-            ? g
-            : null;
+        return value is Guid g && g != Guid.Empty ? g : null;
     }
 }

@@ -69,6 +69,7 @@
             operationalSettingsToolStripMenuItem = new ToolStripMenuItem();
             clientSettingsToolStripMenuItem = new ToolStripMenuItem();
             logsToolStripMenuItem = new ToolStripMenuItem();
+            allEventsToolStripMenuItem = new ToolStripMenuItem();
             loginAttemptsToolStripMenuItem = new ToolStripMenuItem();
             userChangesToolStripMenuItem = new ToolStripMenuItem();
             skuChangesToolStripMenuItem = new ToolStripMenuItem();
@@ -351,16 +352,24 @@
             // 
             // logsToolStripMenuItem
             // 
-            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem, skuChangesToolStripMenuItem });
+            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { allEventsToolStripMenuItem, loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem, skuChangesToolStripMenuItem });
             logsToolStripMenuItem.Name = "logsToolStripMenuItem";
             logsToolStripMenuItem.Size = new Size(116, 22);
             logsToolStripMenuItem.Text = "&Logs";
+            // 
+            // allEventsToolStripMenuItem
+            // 
+            allEventsToolStripMenuItem.Name = "allEventsToolStripMenuItem";
+            allEventsToolStripMenuItem.Size = new Size(156, 22);
+            allEventsToolStripMenuItem.Text = "&All events";
+            allEventsToolStripMenuItem.Click += allEventsToolStripMenuItem_Click;
             // 
             // loginAttemptsToolStripMenuItem
             // 
             loginAttemptsToolStripMenuItem.Name = "loginAttemptsToolStripMenuItem";
             loginAttemptsToolStripMenuItem.Size = new Size(156, 22);
             loginAttemptsToolStripMenuItem.Text = "Login &Attempts";
+            loginAttemptsToolStripMenuItem.Click += loginAttemptsToolStripMenuItem_Click;
             // 
             // userChangesToolStripMenuItem
             // 
@@ -539,6 +548,7 @@
         private ToolStripMenuItem sessionEventsToolStripMenuItem;
         private ToolStrip mainToolStrip;
         private ToolStripMenuItem logsToolStripMenuItem;
+        private ToolStripMenuItem allEventsToolStripMenuItem;
         private ToolStripMenuItem loginAttemptsToolStripMenuItem;
         private ToolStripMenuItem userChangesToolStripMenuItem;
         private ToolStripMenuItem skuChangesToolStripMenuItem;

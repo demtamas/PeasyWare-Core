@@ -108,6 +108,15 @@ public sealed class ViewFactory
         return new MovementsView(queryRepo);
     }
 
+    public UserControl CreateEventLogView(SessionContext session, string? actionFilter = null)
+    {
+        var queryRepo = _runtime.Repositories.CreateEventLogQuery(session);
+        var view      = new PeasyWare.Desktop.Views.Logs.EventLogView(queryRepo);
+        if (actionFilter is not null)
+            view.SetActionFilter(actionFilter);
+        return view;
+    }
+
     public UserControl CreateShipmentsView(SessionContext session)
     {
         var queryRepo   = _runtime.Repositories.CreateOutboundQuery(session);

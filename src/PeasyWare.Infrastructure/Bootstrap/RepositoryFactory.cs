@@ -193,6 +193,16 @@ public sealed class RepositoryFactory
         return new SqlMovementQueryRepository(_factory, session);
     }
 
+    // --------------------------------------------------
+    // EVENT LOG
+    // --------------------------------------------------
+
+    public IEventLogQueryRepository CreateEventLogQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlEventLogQueryRepository(_factory, session);
+    }
+
     /// <summary>
     /// Replaces the system session used by sessionless overloads.
     /// Called by AppStartup.InitializeForApi() after the api user

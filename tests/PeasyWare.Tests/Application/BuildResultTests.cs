@@ -254,14 +254,9 @@ internal sealed class CapturingLogger : ILogger
     public string? LastAction  { get; private set; }
     public object? LastPayload { get; private set; }
 
-    public void Info(string action, object? data) { InfoCalls++; LastAction = action; LastPayload = data; }
-    public void Warn(string action, object? data) { WarnCalls++; LastAction = action; LastPayload = data; }
-
     public void SetSession(SessionContext session) { }
-    public void Info(string message)               { InfoCalls++; }
-    public void Warn(string message)               { WarnCalls++; }
-    public void Error(string message)              { }
-    public void Error(string message, Exception ex) { }
-    public void Error(string message, Exception ex, object context) { }
+    public void Info(string action, object? data)  { InfoCalls++; LastAction = action; LastPayload = data; }
+    public void Warn(string action, object? data)  { WarnCalls++; LastAction = action; LastPayload = data; }
     public void Error(string action, object? data) { }
+    public void Error(string action, object? data, Exception ex) { }
 }

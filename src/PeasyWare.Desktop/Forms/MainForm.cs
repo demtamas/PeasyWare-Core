@@ -469,6 +469,12 @@ public partial class MainForm : Form
     private void movementsToolStripMenuItem_Click(object sender, EventArgs e)
         => ShowView(_views.CreateMovementsView(_session));
 
+    private void allEventsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateEventLogView(_session));
+
+    private void loginAttemptsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateEventLogView(_session, actionFilter: "AuthService.Login"));
+
     private void inboundToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateInboundView(_session));
