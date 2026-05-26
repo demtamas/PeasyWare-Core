@@ -111,7 +111,12 @@ internal static class ResetDbCommand
             var relative = Path.GetRelativePath(scriptsRoot, script);
             Console.Write($"  Running {relative}...");
 
-            var (exitCode, stderr) = RunSqlCmd(sqlcmd, script, builder.DataSource, builder.IntegratedSecurity);
+            var (exitCode, stderr) = RunSqlCmd(
+                sqlcmd,
+                script,
+                builder.DataSource,
+                builder.IntegratedSecurity,
+                builder.TrustServerCertificate);
 
             if (exitCode == 0)
             {
@@ -182,11 +187,14 @@ internal static class ResetDbCommand
         string sqlcmd,
         string scriptPath,
         string server,
-        bool trustedConnection)
+        bool   trustedConnection,
+        bool   trustServerCert = false)
     {
-        var args = trustedConnection
-            ? $"-S \"{server}\" -E -i \"{scriptPath}\" -b"
-            : $"-S \"{server}\" -i \"{scriptPath}\" -b";
+        var authPart = trustedConnection ? "-E" : "";
+        var certPart = trustServerCert   ? "-C" : "";
+
+        var args = $"-S \"{server}\" {authPart} {certPart} -i \"{scriptPath}\" -b"
+            .Replace("  ", " ").Trim();
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {

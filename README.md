@@ -138,6 +138,8 @@ $env:PEASYWARE_DB = "Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=y
 export PEASYWARE_DB="Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;"
 ```
 
+> `TrustServerCertificate=True` is required for local SQL Server instances with self-signed certificates (default on most dev setups). `pwtools reset-db` reads this from the connection string and passes `-C` to sqlcmd automatically.
+
 ### 5 — Build and run
 
 ```powershell
