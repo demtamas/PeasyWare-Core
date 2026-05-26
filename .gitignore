@@ -518,6 +518,10 @@ $RECYCLE.BIN/
 # PeasyWare project rules
 # -----------------------------
 
+# Exempt source code folders that match generic ignore patterns
+!src/**/Logs/
+!src/**/Logs/**
+
 # SQL Server local databases
 *.mdf
 *.ldf
