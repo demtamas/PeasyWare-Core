@@ -19,6 +19,7 @@ public partial class InboundView : BaseView, IToolbarAware
     private ToolStripButton?      _btnRefresh;
     private ToolStripButton?      _btnNew;
     private ToolStripButton?      _btnDetails;
+    private ToolStripButton?      _btnCancel;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _filterHost;
     private TextBox?              _txtSearch;
@@ -62,6 +63,13 @@ public partial class InboundView : BaseView, IToolbarAware
         _btnNew = new ToolStripButton("New inbound") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnNew.Click += Wrap(NewInbound);
 
+        _btnCancel = new ToolStripButton("Cancel inbound")
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Enabled      = false
+        };
+        _btnCancel.Click += Wrap(CancelSelected);
+
         _btnDetails = new ToolStripButton("Inbound details")
         {
             DisplayStyle = ToolStripItemDisplayStyle.Text,
@@ -82,6 +90,7 @@ public partial class InboundView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnNew);
+        toolStrip.Items.Add(_btnCancel);
         toolStrip.Items.Add(_btnDetails);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
@@ -90,8 +99,12 @@ public partial class InboundView : BaseView, IToolbarAware
 
     private void UpdateToolbarState()
     {
+        var selected = Selected();
         if (_btnDetails is not null)
-            _btnDetails.Enabled = dgvInbound.SelectedRows.Count == 1;
+            _btnDetails.Enabled = selected is not null;
+        if (_btnCancel is not null)
+            _btnCancel.Enabled = selected is not null
+                && selected.StatusCode is "EXP" or "ACT";
     }
 
     // ==========================================================
@@ -203,6 +216,32 @@ public partial class InboundView : BaseView, IToolbarAware
     private InboundDeliverySummaryDto? Selected() =>
         dgvInbound.SelectedRows.Count == 0 ? null
         : dgvInbound.SelectedRows[0].DataBoundItem as InboundDeliverySummaryDto;
+
+    private void CancelSelected()
+    {
+        var delivery = Selected();
+        if (delivery is null) return;
+
+        var confirm = MessageBox.Show(
+            this,
+            $"Cancel inbound delivery {delivery.InboundRef}?\n\nThis cannot be undone.",
+            "Confirm Cancellation",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var result = _commandRepo.CancelInbound(delivery.InboundRef);
+
+        if (!result.Success)
+        {
+            MessageBox.Show(this, result.FriendlyMessage, "Cannot Cancel",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        Execute(LoadDeliveries);
+    }
 
     private void NewInbound()
     {

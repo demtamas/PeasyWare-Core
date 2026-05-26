@@ -29,4 +29,7 @@ public interface IOutboundQueryRepository
     ShipmentSummaryDto? GetShipmentByRef(string shipmentRef);
 
     IReadOnlyList<OutboundOrderSummaryDto> GetOrdersOnShipment(int shipmentId);
+
+    /// <summary>Orders that are PICKED and not yet assigned to any active shipment.</summary>
+    IReadOnlyList<OutboundOrderSummaryDto> GetOrdersEligibleForShipment();
 }

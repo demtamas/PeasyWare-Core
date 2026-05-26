@@ -360,6 +360,58 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
     }
 
     // --------------------------------------------------
+    // Orders eligible for shipment (PICKED, not on any active shipment)
+    // --------------------------------------------------
+
+    public IReadOnlyList<OutboundOrderSummaryDto> GetOrdersEligibleForShipment()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT
+                o.outbound_order_id,
+                o.order_ref,
+                o.order_status_code,
+                p.display_name                              AS customer_name,
+                CONVERT(NVARCHAR(10), o.required_date, 103) AS required_date,
+                da.line_1       AS delivery_line_1,
+                da.city         AS delivery_city,
+                da.postal_code  AS delivery_postal_code,
+                COUNT(l.outbound_line_id)                   AS total_lines,
+                ISNULL(SUM(l.ordered_qty),   0)             AS total_ordered,
+                ISNULL(SUM(l.allocated_qty), 0)             AS total_allocated,
+                ISNULL(SUM(l.picked_qty),    0)             AS total_picked
+            FROM outbound.outbound_orders o
+            JOIN core.parties p
+                ON p.party_id = o.customer_party_id
+            LEFT JOIN core.party_addresses da
+                ON da.address_id = o.delivery_address_id
+            LEFT JOIN outbound.outbound_lines l
+                ON l.outbound_order_id = o.outbound_order_id
+               AND l.line_status_code <> 'CNL'
+            WHERE o.order_status_code = 'PICKED'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM outbound.shipment_orders so
+                  JOIN outbound.shipments s ON s.shipment_id = so.shipment_id
+                  WHERE so.outbound_order_id = o.outbound_order_id
+                    AND s.shipment_status NOT IN ('CNL', 'DEPARTED')
+              )
+            GROUP BY
+                o.outbound_order_id, o.order_ref, o.order_status_code,
+                p.display_name, o.required_date,
+                da.line_1, da.city, da.postal_code
+            ORDER BY o.required_date, o.order_ref
+            """;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<OutboundOrderSummaryDto>();
+        while (reader.Read()) results.Add(ReadOrderSummary(reader));
+        return results;
+    }
+
+    // --------------------------------------------------
     // Shipped shipments
     // --------------------------------------------------
 

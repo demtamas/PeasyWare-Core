@@ -15,8 +15,11 @@ public partial class ShipmentsView : BaseView, IToolbarAware
     private readonly IOutboundCommandRepository  _commandRepo;
     private readonly IShipmentManifestRepository _manifestRepo;
     private readonly ISettingsQueryRepository    _settingsRepo;
+    private readonly IPartyQueryRepository       _partyRepo;
 
     private ToolStripButton?      _btnRefresh;
+    private ToolStripButton?      _btnNew;
+    private ToolStripButton?      _btnCancelShipment;
     private ToolStripButton?      _btnDetails;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _filterHost;
@@ -29,7 +32,8 @@ public partial class ShipmentsView : BaseView, IToolbarAware
         IOutboundQueryRepository    queryRepo,
         IOutboundCommandRepository  commandRepo,
         IShipmentManifestRepository manifestRepo,
-        ISettingsQueryRepository    settingsRepo)
+        ISettingsQueryRepository    settingsRepo,
+        IPartyQueryRepository       partyRepo)
     {
         InitializeComponent();
 
@@ -37,6 +41,7 @@ public partial class ShipmentsView : BaseView, IToolbarAware
         _commandRepo  = commandRepo;
         _manifestRepo = manifestRepo;
         _settingsRepo = settingsRepo;
+        _partyRepo    = partyRepo;
 
         ConfigureGrid(dgvShipments);
         EnableDoubleBuffering(dgvShipments);
@@ -57,6 +62,16 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
         _btnRefresh = new ToolStripButton("Refresh") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnRefresh.Click += Wrap(LoadShipments);
+
+        _btnNew = new ToolStripButton("New shipment") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnNew.Click += Wrap(NewShipment);
+
+        _btnCancelShipment = new ToolStripButton("Cancel shipment")
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Enabled      = false
+        };
+        _btnCancelShipment.Click += Wrap(CancelSelected);
 
         _btnDetails = new ToolStripButton("Shipment details")
         {
@@ -79,16 +94,12 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnNew);
+        toolStrip.Items.Add(_btnCancelShipment);
         toolStrip.Items.Add(_btnDetails);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
-    }
-
-    private void UpdateToolbarState()
-    {
-        if (_btnDetails is not null)
-            _btnDetails.Enabled = dgvShipments.SelectedRows.Count == 1;
     }
 
     // ==========================================================
@@ -201,5 +212,53 @@ public partial class ShipmentsView : BaseView, IToolbarAware
             _manifestRepo,
             _settingsRepo);
         form.ShowDialog(this);
+    }
+
+    private void UpdateToolbarState()
+    {
+        var s = SelectedShipment();
+        if (_btnDetails        is not null) _btnDetails.Enabled        = s is not null;
+        if (_btnCancelShipment is not null) _btnCancelShipment.Enabled = s is not null
+            && s.ShipmentStatus is "OPEN" or "LOADING";
+    }
+
+    private void NewShipment()
+    {
+        using var form = new CreateShipmentForm(_commandRepo, _queryRepo, _partyRepo);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        MessageBox.Show(this,
+            $"Shipment {form.CreatedShipmentRef} created successfully.",
+            "Created",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+
+        Execute(LoadShipments);
+    }
+
+    private void CancelSelected()
+    {
+        var shipment = SelectedShipment();
+        if (shipment is null) return;
+
+        var confirm = MessageBox.Show(
+            this,
+            $"Cancel shipment {shipment.ShipmentRef}?\n\nOrders on this shipment will be removed from it.",
+            "Confirm Cancellation",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var result = _commandRepo.CancelShipment(shipment.ShipmentRef);
+
+        if (!result.Success)
+        {
+            MessageBox.Show(this, result.FriendlyMessage, "Cannot Cancel",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        Execute(LoadShipments);
     }
 }

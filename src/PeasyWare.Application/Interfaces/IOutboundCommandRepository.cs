@@ -26,6 +26,10 @@ public interface IOutboundCommandRepository
         string shipmentRef,
         string orderRef);
 
+    OperationResult CancelShipment(
+        string  shipmentRef,
+        string? reason = null);
+
     // ── Allocation management ────────────────────────────────────────────
 
     OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false);

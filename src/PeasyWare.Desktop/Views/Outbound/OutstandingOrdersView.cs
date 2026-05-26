@@ -11,10 +11,13 @@ namespace PeasyWare.Desktop.Views.Outbound;
 
 public partial class OutstandingOrdersView : BaseView, IToolbarAware
 {
-    private readonly IOutboundQueryRepository _queryRepo;
+    private readonly IOutboundQueryRepository   _queryRepo;
     private readonly IOutboundCommandRepository _commandRepo;
+    private readonly ISkuQueryRepository        _skuRepo;
+    private readonly IPartyQueryRepository      _partyRepo;
 
     private ToolStripButton? _btnRefresh;
+    private ToolStripButton? _btnNew;
     private ToolStripButton? _btnAllocate;
     private ToolStripButton? _btnCancelOrder;
     private ToolStripButton? _btnOrderDetails;
@@ -26,13 +29,17 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
     private List<OutboundOrderSummaryDto> _orders = new();
 
     public OutstandingOrdersView(
-        IOutboundQueryRepository queryRepo,
-        IOutboundCommandRepository commandRepo)
+        IOutboundQueryRepository   queryRepo,
+        IOutboundCommandRepository commandRepo,
+        ISkuQueryRepository        skuRepo,
+        IPartyQueryRepository      partyRepo)
     {
         InitializeComponent();
 
-        _queryRepo = queryRepo;
+        _queryRepo   = queryRepo;
         _commandRepo = commandRepo;
+        _skuRepo     = skuRepo;
+        _partyRepo   = partyRepo;
 
         ConfigureGrid(dgvOrders);
         EnableDoubleBuffering(dgvOrders);
@@ -52,6 +59,9 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
 
         _btnRefresh = new ToolStripButton("Refresh") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnRefresh.Click += Wrap(RefreshOrders);
+
+        _btnNew = new ToolStripButton("New order") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnNew.Click += Wrap(NewOrder);
 
         _txtSearch = new TextBox
         {
@@ -104,6 +114,8 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
         _btnOrderDetails.Click += Wrap(OpenOrderDetails);
 
         toolStrip.Items.Add(_btnRefresh);
+        toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnNew);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
@@ -186,6 +198,24 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
     }
 
     private void RefreshOrders() => Execute(LoadOrders);
+
+    // ==========================================================
+    // New order
+    // ==========================================================
+
+    private void NewOrder()
+    {
+        using var form = new CreateOrderForm(_commandRepo, _skuRepo, _partyRepo);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        MessageBox.Show(this,
+            $"Order {form.CreatedOrderRef} created successfully.",
+            "Order Created",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+
+        Execute(LoadOrders);
+    }
 
     // ==========================================================
     // Allocate

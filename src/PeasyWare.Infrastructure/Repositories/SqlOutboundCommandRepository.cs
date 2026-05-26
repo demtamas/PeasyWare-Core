@@ -343,6 +343,30 @@ public sealed class SqlOutboundCommandRepository
             new { ShipmentRef = shipmentRef, OrderRef = orderRef });
     }
 
+    public OperationResult CancelShipment(
+        string  shipmentRef,
+        string? reason = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "outbound.usp_cancel_shipment";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add(new SqlParameter("@shipment_ref", SqlDbType.NVarChar, 50)  { Value = shipmentRef });
+        command.Parameters.Add(new SqlParameter("@reason",       SqlDbType.NVarChar, 200) { Value = (object?)reason ?? DBNull.Value });
+        command.Parameters.AddWithValue("@user_id",    _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Outbound.CancelShipment", "ERRSHIP99", new { ShipmentRef = shipmentRef });
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+        return BuildResult("Outbound.CancelShipment", code, new { ShipmentRef = shipmentRef });
+    }
+
     // ────────────────────────────────────────────────────────
     // Allocate order (Desktop — calls existing usp_allocate_order)
     // ────────────────────────────────────────────────────────

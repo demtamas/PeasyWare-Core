@@ -12,6 +12,10 @@ public interface IInboundCommandRepository
         string?   haulierPartyCode  = null,
         DateTime? expectedArrivalAt = null);
 
+    OperationResult CancelInbound(
+        string  inboundRef,
+        string? reason = null);
+
     OperationResult AddInboundLine(
         string    inboundRef,
         string    skuCode,

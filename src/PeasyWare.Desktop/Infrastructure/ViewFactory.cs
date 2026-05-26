@@ -84,9 +84,11 @@ public sealed class ViewFactory
 
     public UserControl CreateOutstandingOrdersView(SessionContext session)
     {
-        var queryRepo = _runtime.Repositories.CreateOutboundQuery(session);
+        var queryRepo   = _runtime.Repositories.CreateOutboundQuery(session);
         var commandRepo = _runtime.Repositories.CreateOutboundCommand(session);
-        return new PeasyWare.Desktop.Views.Outbound.OutstandingOrdersView(queryRepo, commandRepo);
+        var skuRepo     = _runtime.Repositories.CreateSkuQuery(session);
+        var partyRepo   = _runtime.Repositories.CreatePartyQuery(session);
+        return new PeasyWare.Desktop.Views.Outbound.OutstandingOrdersView(queryRepo, commandRepo, skuRepo, partyRepo);
     }
 
     public UserControl CreateInboundView(SessionContext session)
@@ -132,7 +134,8 @@ public sealed class ViewFactory
         var commandRepo  = _runtime.Repositories.CreateOutboundCommand(session);
         var manifestRepo = _runtime.Repositories.CreateShipmentManifest(session);
         var settingsRepo = _runtime.SettingsQueryRepository;
-        return new ShipmentsView(queryRepo, commandRepo, manifestRepo, settingsRepo);
+        var partyRepo    = _runtime.Repositories.CreatePartyQuery(session);
+        return new ShipmentsView(queryRepo, commandRepo, manifestRepo, settingsRepo, partyRepo);
     }
 
     public UserControl CreateTasksView(SessionContext session)

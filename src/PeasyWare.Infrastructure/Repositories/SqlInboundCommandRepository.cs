@@ -284,6 +284,30 @@ public sealed class SqlInboundCommandRepository
     // API creation methods
     // ──────────────────────────────────────────────────────────────────────
 
+    public OperationResult CancelInbound(
+        string  inboundRef,
+        string? reason = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "inbound.usp_cancel_inbound";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add(new SqlParameter("@inbound_ref", SqlDbType.NVarChar, 50)  { Value = inboundRef });
+        command.Parameters.Add(new SqlParameter("@reason",      SqlDbType.NVarChar, 200) { Value = (object?)reason ?? DBNull.Value });
+        command.Parameters.AddWithValue("@user_id",    _session.UserId);
+        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Inbound.Cancel", "ERRINB99", new { InboundRef = inboundRef });
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+        return BuildResult("Inbound.Cancel", code, new { InboundRef = inboundRef });
+    }
+
     public OperationResult CreateInbound(
         string    inboundRef,
         string    supplierPartyCode,

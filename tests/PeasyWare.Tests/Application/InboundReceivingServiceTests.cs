@@ -247,6 +247,9 @@ internal sealed class StubInboundCommandRepo : IInboundCommandRepository
     public OperationResult ReverseInboundReceipt(
         int receiptId, string? reasonCode = null, string? reasonText = null) =>
         OperationResult.Create(true, "SUC", "OK");
+
+    public OperationResult CancelInbound(string inboundRef, string? reason = null) =>
+        OperationResult.Create(true, "SUCINB03", "Cancelled.");
 }
 
 internal sealed class StubErrorMessageResolver : IErrorMessageResolver

@@ -53,6 +53,31 @@ INSERT INTO operations.error_messages (error_code, module_code, severity, messag
 SELECT N'ERRINBU01', N'INB', N'ERROR', N'This SSCC is already registered on this inbound delivery.', N'inbound.usp_create_expected_unit: duplicate sscc on inbound'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRINBU01');
 
+-- SUCINB03: inbound cancelled
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCINB03', N'INB', N'SUCCESS', N'Inbound delivery cancelled.', N'inbound.usp_cancel_inbound: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCINB03');
+
+-- ERRINB03: inbound not found
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRINB03', N'INB', N'ERROR', N'Inbound delivery not found.', N'inbound.usp_cancel_inbound: inbound_ref not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRINB03');
+
+-- ERRINB04: already terminal
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRINB04', N'INB', N'ERROR', N'This inbound is already closed or cancelled.', N'inbound.usp_cancel_inbound: status is CLS or CNL'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRINB04');
+
+-- ERRINB05: receiving in progress
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRINB05', N'INB', N'ERROR', N'Cannot cancel — receiving is in progress on this delivery.', N'inbound.usp_cancel_inbound: status is RCV'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRINB05');
+
+-- ERRINB06: receipts exist
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRINB06', N'INB', N'ERROR', N'Cannot cancel — units have already been received against this delivery. Reverse all receipts first.', N'inbound.usp_cancel_inbound: receipts exist on activated inbound'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRINB06');
+
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRORD02', N'ORD', N'ERROR', N'An order with this reference already exists.', N'outbound.usp_create_order: duplicate order_ref'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRORD02');
@@ -89,6 +114,26 @@ GO
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRSHIP05', N'OUTBOUND', N'ERROR', N'Vehicle registration is required before departure.', N'outbound.usp_ship: @vehicle_ref is null or empty'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSHIP05');
+
+-- SUCSHIP04: shipment cancelled
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSHIP04', N'SHIP', N'SUCCESS', N'Shipment cancelled.', N'outbound.usp_cancel_shipment: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSHIP04');
+
+-- ERRSHIP06: shipment not found
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSHIP06', N'SHIP', N'ERROR', N'Shipment not found.', N'outbound.usp_cancel_shipment: shipment_ref not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSHIP06');
+
+-- ERRSHIP07: shipment already terminal
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSHIP07', N'SHIP', N'ERROR', N'This shipment has already departed or been cancelled.', N'outbound.usp_cancel_shipment: status is DEPARTED or CNL'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSHIP07');
+
+-- ERRSHIP08: orders in progress
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSHIP08', N'SHIP', N'ERROR', N'Cannot cancel — orders on this shipment are being picked or have been loaded. Reverse picks first.', N'outbound.usp_cancel_shipment: orders in PICKING/PICKED/LOADED state'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSHIP08');
 
 -- ERRSKU03: owner party not found
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
