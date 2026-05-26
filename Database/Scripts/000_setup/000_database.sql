@@ -1,13 +1,7 @@
-USE PW_Core_DEV;
+USE master;
 GO
 
 SET QUOTED_IDENTIFIER ON;
-GO
-
-------------------------------------------------------------
--- Detect environment
-------------------------------------------------------------
-USE master;
 GO
 
 DECLARE @db sysname       = N'PW_Core_DEV';
