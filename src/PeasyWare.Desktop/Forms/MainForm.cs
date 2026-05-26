@@ -475,6 +475,9 @@ public partial class MainForm : Form
     private void loginAttemptsToolStripMenuItem_Click(object sender, EventArgs e)
         => ShowView(_views.CreateEventLogView(_session, actionFilter: "AuthService.Login"));
 
+    private void userChangesToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateUserActivityView(_session));
+
     private void inboundToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateInboundView(_session));

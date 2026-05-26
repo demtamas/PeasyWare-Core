@@ -203,6 +203,16 @@ public sealed class RepositoryFactory
         return new SqlEventLogQueryRepository(_factory, session);
     }
 
+    // --------------------------------------------------
+    // SHIPMENT MANIFEST
+    // --------------------------------------------------
+
+    public IShipmentManifestRepository CreateShipmentManifest(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlShipmentManifestRepository(_factory, session);
+    }
+
     /// <summary>
     /// Replaces the system session used by sessionless overloads.
     /// Called by AppStartup.InitializeForApi() after the api user

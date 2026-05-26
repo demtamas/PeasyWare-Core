@@ -91,8 +91,11 @@ public sealed class ViewFactory
 
     public UserControl CreateInboundView(SessionContext session)
     {
-        var queryRepo = _runtime.Repositories.CreateInboundQuery(session);
-        return new InboundView(queryRepo);
+        var queryRepo   = _runtime.Repositories.CreateInboundQuery(session);
+        var commandRepo = _runtime.Repositories.CreateInboundCommand(session);
+        var skuRepo     = _runtime.Repositories.CreateSkuQuery(session);
+        var partyRepo   = _runtime.Repositories.CreatePartyQuery(session);
+        return new InboundView(queryRepo, commandRepo, skuRepo, partyRepo);
     }
 
     public UserControl CreatePartiesView(SessionContext session, string? roleFilter = null)
@@ -117,11 +120,19 @@ public sealed class ViewFactory
         return view;
     }
 
+    public UserControl CreateUserActivityView(SessionContext session)
+    {
+        var queryRepo = _runtime.Repositories.CreateEventLogQuery(session);
+        return new PeasyWare.Desktop.Views.Logs.UserActivityView(queryRepo);
+    }
+
     public UserControl CreateShipmentsView(SessionContext session)
     {
-        var queryRepo   = _runtime.Repositories.CreateOutboundQuery(session);
-        var commandRepo = _runtime.Repositories.CreateOutboundCommand(session);
-        return new ShipmentsView(queryRepo, commandRepo);
+        var queryRepo    = _runtime.Repositories.CreateOutboundQuery(session);
+        var commandRepo  = _runtime.Repositories.CreateOutboundCommand(session);
+        var manifestRepo = _runtime.Repositories.CreateShipmentManifest(session);
+        var settingsRepo = _runtime.SettingsQueryRepository;
+        return new ShipmentsView(queryRepo, commandRepo, manifestRepo, settingsRepo);
     }
 
     public UserControl CreateTasksView(SessionContext session)

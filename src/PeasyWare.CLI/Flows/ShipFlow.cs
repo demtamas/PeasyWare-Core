@@ -1,7 +1,11 @@
 using PeasyWare.Application;
 using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Services;
 using PeasyWare.Infrastructure.Bootstrap;
 using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
 
 namespace PeasyWare.CLI.Flows;
 
@@ -143,6 +147,9 @@ public sealed class ShipFlow
                 if (_session.UiMode == UiMode.Trace)
                     Console.WriteLine($"[TRACE] ResultCode: {result.ResultCode}");
 
+                // ── Auto-print delivery note if enabled ──────────────────────
+                TryAutoPrint(shipment.ShipmentRef);
+
                 Console.WriteLine();
                 Console.WriteLine("Press any key to return.");
                 Console.ReadKey(true);
@@ -155,6 +162,52 @@ public sealed class ShipFlow
 
                 Console.ReadKey(true);
             }
+        }
+    }
+
+    private void TryAutoPrint(string shipmentRef)
+    {
+        try
+        {
+            var settings = _runtime.SettingsQueryRepository.GetSettings();
+
+            var autoPrint = settings
+                .FirstOrDefault(s => s.SettingName == "printing.auto_print_delivery_note")
+                ?.SettingValue == "true";
+
+            if (!autoPrint) return;
+
+            var printerName = settings
+                .FirstOrDefault(s => s.SettingName == "printing.delivery_note_printer")
+                ?.SettingValue ?? "";
+
+            var copiesStr = settings
+                .FirstOrDefault(s => s.SettingName == "printing.delivery_note_copies")
+                ?.SettingValue ?? "2";
+
+            var copies = int.TryParse(copiesStr, out var c) ? c : 2;
+
+            var manifestRepo = _runtime.Repositories.CreateShipmentManifest(_session);
+            var manifest     = manifestRepo.GetManifest(shipmentRef);
+
+            if (manifest is null || manifest.Lines.Count == 0)
+            {
+                Console.WriteLine("[Print] No manifest data found — delivery note skipped.");
+                return;
+            }
+
+            Console.WriteLine($"[Print] Printing delivery note ({copies} cop{(copies == 1 ? "y" : "ies")})...");
+
+            // CLI can only open in browser — silent print requires WinForms (Desktop only)
+            var html     = DeliveryNoteRenderer.Render(manifest);
+            var safe     = manifest.ShipmentRef.Replace("/", "-").Replace("\\", "-");
+            var tempFile = Path.Combine(Path.GetTempPath(), $"PeasyWare_DN_{safe}_{DateTime.Now:yyyyMMddHHmmss}.html");
+            File.WriteAllText(tempFile, html, System.Text.Encoding.UTF8);
+            Process.Start(new ProcessStartInfo { FileName = tempFile, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Print] Delivery note failed: {ex.Message}");
         }
     }
 }

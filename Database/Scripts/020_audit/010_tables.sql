@@ -207,7 +207,23 @@ VALUES
 
 ('outbound.allocation_strategy','Allocation strategy','outbound',10,'FEFO','string',
  '{"type":"enum","values":["FEFO","FIFO","LIFO","NONE"]}',
- 'Stock allocation strategy: FEFO (First Expired First Out), FIFO, LIFO, or NONE (system default)');
+ 'Stock allocation strategy: FEFO (First Expired First Out), FIFO, LIFO, or NONE (system default)'),
+
+--------------------------------------------------
+-- PRINTING
+--------------------------------------------------
+
+('printing.auto_print_delivery_note','Auto-print delivery note','printing',10,'false','bool',
+ '{"type":"bool"}',
+ 'When enabled, prints a delivery note automatically when vehicle reg is entered at ship time'),
+
+('printing.delivery_note_printer','Delivery note printer','printing',20,'','string',
+ NULL,
+ 'Printer name for delivery note. Leave blank to use system default printer'),
+
+('printing.delivery_note_copies','Delivery note copies','printing',30,'2','int',
+ '{"type":"range","min":1,"max":5}',
+ 'Number of delivery note copies to print (1-5)');
 
 ---------------------------------------------------------------
 -- AUDIT: SETTINGS CHANGE LOG

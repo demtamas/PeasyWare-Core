@@ -11,9 +11,13 @@ namespace PeasyWare.Desktop.Views.Inbound;
 
 public partial class InboundView : BaseView, IToolbarAware
 {
-    private readonly IInboundQueryRepository _queryRepo;
+    private readonly IInboundQueryRepository   _queryRepo;
+    private readonly IInboundCommandRepository _commandRepo;
+    private readonly ISkuQueryRepository       _skuRepo;
+    private readonly IPartyQueryRepository     _partyRepo;
 
     private ToolStripButton?      _btnRefresh;
+    private ToolStripButton?      _btnNew;
     private ToolStripButton?      _btnDetails;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _filterHost;
@@ -22,11 +26,18 @@ public partial class InboundView : BaseView, IToolbarAware
 
     private List<InboundDeliverySummaryDto> _deliveries = [];
 
-    public InboundView(IInboundQueryRepository queryRepo)
+    public InboundView(
+        IInboundQueryRepository   queryRepo,
+        IInboundCommandRepository commandRepo,
+        ISkuQueryRepository       skuRepo,
+        IPartyQueryRepository     partyRepo)
     {
         InitializeComponent();
 
-        _queryRepo = queryRepo;
+        _queryRepo   = queryRepo;
+        _commandRepo = commandRepo;
+        _skuRepo     = skuRepo;
+        _partyRepo   = partyRepo;
 
         ConfigureGrid(dgvInbound);
         EnableDoubleBuffering(dgvInbound);
@@ -48,6 +59,9 @@ public partial class InboundView : BaseView, IToolbarAware
         _btnRefresh = new ToolStripButton("Refresh") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnRefresh.Click += Wrap(LoadDeliveries);
 
+        _btnNew = new ToolStripButton("New inbound") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnNew.Click += Wrap(NewInbound);
+
         _btnDetails = new ToolStripButton("Inbound details")
         {
             DisplayStyle = ToolStripItemDisplayStyle.Text,
@@ -67,6 +81,7 @@ public partial class InboundView : BaseView, IToolbarAware
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnNew);
         toolStrip.Items.Add(_btnDetails);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
@@ -188,6 +203,20 @@ public partial class InboundView : BaseView, IToolbarAware
     private InboundDeliverySummaryDto? Selected() =>
         dgvInbound.SelectedRows.Count == 0 ? null
         : dgvInbound.SelectedRows[0].DataBoundItem as InboundDeliverySummaryDto;
+
+    private void NewInbound()
+    {
+        using var form = new CreateInboundForm(_commandRepo, _skuRepo, _partyRepo);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        MessageBox.Show(this,
+            $"Inbound {form.CreatedInboundRef} created successfully.",
+            "Inbound Created",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+
+        Execute(LoadDeliveries);
+    }
 
     private void OpenDetails()
     {

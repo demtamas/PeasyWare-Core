@@ -1,6 +1,8 @@
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Services;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Services;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -11,23 +13,29 @@ namespace PeasyWare.Desktop.Views.Shipments;
 
 public sealed class ShipmentDetailForm : Form
 {
-    private readonly int                       _shipmentId;
-    private readonly string                    _shipmentRef;
-    private readonly IOutboundQueryRepository  _queryRepo;
+    private readonly int                        _shipmentId;
+    private readonly string                     _shipmentRef;
+    private readonly IOutboundQueryRepository   _queryRepo;
     private readonly IOutboundCommandRepository _commandRepo;
+    private readonly IShipmentManifestRepository _manifestRepo;
+    private readonly ISettingsQueryRepository   _settingsRepo;
 
     private DataGridView _dgvOrders = null!;
 
     public ShipmentDetailForm(
-        int                        shipmentId,
-        string                     shipmentRef,
-        IOutboundQueryRepository   queryRepo,
-        IOutboundCommandRepository commandRepo)
+        int                         shipmentId,
+        string                      shipmentRef,
+        IOutboundQueryRepository    queryRepo,
+        IOutboundCommandRepository  commandRepo,
+        IShipmentManifestRepository manifestRepo,
+        ISettingsQueryRepository    settingsRepo)
     {
-        _shipmentId  = shipmentId;
-        _shipmentRef = shipmentRef;
-        _queryRepo   = queryRepo;
-        _commandRepo = commandRepo;
+        _shipmentId   = shipmentId;
+        _shipmentRef  = shipmentRef;
+        _queryRepo    = queryRepo;
+        _commandRepo  = commandRepo;
+        _manifestRepo = manifestRepo;
+        _settingsRepo = settingsRepo;
 
         BuildUi();
         Load += (_, _) => LoadOrders();
@@ -133,6 +141,15 @@ public sealed class ShipmentDetailForm : Form
         };
         btnOrderDetail.Click += (_, _) => OpenOrderDetail();
 
+        var btnPrintManifest = new Button
+        {
+            Text     = "Print manifest",
+            Width    = 110,
+            Height   = 28,
+            Location = new Point(126, 7)
+        };
+        btnPrintManifest.Click += (_, _) => PrintManifest();
+
         var btnClose = new Button
         {
             Text        = "Close",
@@ -143,7 +160,7 @@ public sealed class ShipmentDetailForm : Form
         btnClose.Location = new Point(pnlFooter.Width - 96, 7);
         btnClose.Anchor   = AnchorStyles.Right | AnchorStyles.Top;
 
-        pnlFooter.Controls.AddRange([btnOrderDetail, btnClose]);
+        pnlFooter.Controls.AddRange([btnOrderDetail, btnPrintManifest, btnClose]);
 
         Controls.Add(_dgvOrders);
         Controls.Add(pnlFooter);
@@ -158,6 +175,43 @@ public sealed class ShipmentDetailForm : Form
         var orders = _queryRepo.GetOrdersOnShipment(_shipmentId).ToList();
         _dgvOrders.DataSource = null;
         _dgvOrders.DataSource = orders;
+    }
+
+    private void PrintManifest()
+    {
+        var manifest = _manifestRepo.GetManifest(_shipmentRef);
+
+        if (manifest is null || manifest.Lines.Count == 0)
+        {
+            MessageBox.Show(this,
+                $"No shipped units found for {_shipmentRef}.\n\nThe shipment may not have departed yet.",
+                "No manifest data",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        // Check auto-print setting
+        var settings       = _settingsRepo.GetSettings();
+        var autoPrint      = settings.FirstOrDefault(s => s.SettingName == "printing.auto_print_delivery_note")?.SettingValue == "true";
+        var printerName    = settings.FirstOrDefault(s => s.SettingName == "printing.delivery_note_printer")?.SettingValue ?? "";
+        var copiesStr      = settings.FirstOrDefault(s => s.SettingName == "printing.delivery_note_copies")?.SettingValue ?? "2";
+        var copies         = int.TryParse(copiesStr, out var c) ? c : 2;
+
+        if (autoPrint && !string.IsNullOrWhiteSpace(printerName))
+        {
+            DeliveryNotePrinter.PrintSilent(manifest, printerName, copies);
+            MessageBox.Show(this,
+                $"Delivery note sent to printer: {printerName} ({copies} cop{(copies == 1 ? "y" : "ies")}).",
+                "Printed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        else
+        {
+            // Browser fallback
+            DeliveryNotePrinter.OpenInBrowser(manifest);
+        }
     }
 
     private void OpenOrderDetail()

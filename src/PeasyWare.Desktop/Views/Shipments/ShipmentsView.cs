@@ -11,8 +11,10 @@ namespace PeasyWare.Desktop.Views.Shipments;
 
 public partial class ShipmentsView : BaseView, IToolbarAware
 {
-    private readonly IOutboundQueryRepository   _queryRepo;
-    private readonly IOutboundCommandRepository _commandRepo;
+    private readonly IOutboundQueryRepository    _queryRepo;
+    private readonly IOutboundCommandRepository  _commandRepo;
+    private readonly IShipmentManifestRepository _manifestRepo;
+    private readonly ISettingsQueryRepository    _settingsRepo;
 
     private ToolStripButton?      _btnRefresh;
     private ToolStripButton?      _btnDetails;
@@ -23,12 +25,18 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
     private List<ShipmentSummaryDto> _shipments = [];
 
-    public ShipmentsView(IOutboundQueryRepository queryRepo, IOutboundCommandRepository commandRepo)
+    public ShipmentsView(
+        IOutboundQueryRepository    queryRepo,
+        IOutboundCommandRepository  commandRepo,
+        IShipmentManifestRepository manifestRepo,
+        ISettingsQueryRepository    settingsRepo)
     {
         InitializeComponent();
 
-        _queryRepo   = queryRepo;
-        _commandRepo = commandRepo;
+        _queryRepo    = queryRepo;
+        _commandRepo  = commandRepo;
+        _manifestRepo = manifestRepo;
+        _settingsRepo = settingsRepo;
 
         ConfigureGrid(dgvShipments);
         EnableDoubleBuffering(dgvShipments);
@@ -189,7 +197,9 @@ public partial class ShipmentsView : BaseView, IToolbarAware
             shipment.ShipmentId,
             shipment.ShipmentRef,
             _queryRepo,
-            _commandRepo);
+            _commandRepo,
+            _manifestRepo,
+            _settingsRepo);
         form.ShowDialog(this);
     }
 }

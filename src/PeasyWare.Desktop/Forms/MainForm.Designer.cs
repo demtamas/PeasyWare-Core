@@ -376,6 +376,7 @@
             userChangesToolStripMenuItem.Name = "userChangesToolStripMenuItem";
             userChangesToolStripMenuItem.Size = new Size(156, 22);
             userChangesToolStripMenuItem.Text = "&User changes";
+            userChangesToolStripMenuItem.Click += userChangesToolStripMenuItem_Click;
             // 
             // skuChangesToolStripMenuItem
             // 

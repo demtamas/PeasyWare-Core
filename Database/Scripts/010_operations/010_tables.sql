@@ -21,6 +21,7 @@ VALUES
 ('outbound','Outbound',50),
 ('logging','Logging',60),
 ('audit','Audit',70),
+('printing','Printing',75),
 ('client','Client',80);
 
 -------------------------------------------
