@@ -5,75 +5,234 @@
 <title>Delivery Note — {{SHIPMENT_REF}}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; padding: 20mm 18mm; }
+  body { font-family: Arial, sans-serif; font-size: 10.5pt; color: #111; padding: 16mm 16mm 12mm; }
 
-  /* Header */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10mm; }
-  .brand  { font-size: 22pt; font-weight: bold; color: #1a1a2e; letter-spacing: -0.5px; }
-  .brand span { color: #e63946; }
-  .doc-title { text-align: right; }
-  .doc-title h1 { font-size: 16pt; font-weight: bold; color: #1a1a2e; }
-  .doc-title .ref { font-size: 13pt; color: #444; margin-top: 2px; }
+  /* ── Top header bar ─────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 6mm;
+    border-bottom: 3px solid #0D1B2A;
+    margin-bottom: 6mm;
+  }
+  .header-logo { display: flex; align-items: center; gap: 10px; }
+  .header-logo svg { height: 44px; width: auto; }
+  .header-company {
+    font-size: 8.5pt;
+    color: #555;
+    line-height: 1.5;
+    padding-top: 2px;
+  }
+  .header-doc { text-align: right; }
+  .header-doc h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #0D1B2A;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .header-doc .ref {
+    font-size: 12pt;
+    color: #42A5F5;
+    font-weight: bold;
+    margin-top: 2px;
+  }
+  .header-doc .status {
+    font-size: 8pt;
+    color: #888;
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-  /* Info blocks */
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6mm; margin-bottom: 8mm; }
-  .info-block { border: 1px solid #ddd; border-radius: 4px; padding: 4mm; }
-  .info-block .label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-  .info-block .value { font-size: 11pt; font-weight: bold; }
-  .info-block .sub   { font-size: 9pt; color: #555; margin-top: 1px; }
+  /* ── Info grid ──────────────────────────────────────────────────── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 5mm;
+    margin-bottom: 7mm;
+  }
+  .info-block {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 3.5mm 4mm;
+    background: #fafafa;
+  }
+  .info-block .label {
+    font-size: 7.5pt;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 2px;
+  }
+  .info-block .value {
+    font-size: 10.5pt;
+    font-weight: bold;
+    color: #0D1B2A;
+    line-height: 1.3;
+  }
+  .info-block .sub {
+    font-size: 8.5pt;
+    color: #666;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
 
-  /* Lines table */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; font-size: 10pt; }
-  thead th { background: #1a1a2e; color: #fff; padding: 3mm 3mm; text-align: left; font-weight: bold; font-size: 9pt; }
+  /* ── Lines table ────────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    margin-bottom: 5mm;
+  }
+  thead tr {
+    background: #0D1B2A;
+    color: #fff;
+  }
+  thead th {
+    padding: 2.5mm 2.5mm;
+    text-align: left;
+    font-weight: bold;
+    font-size: 8pt;
+    letter-spacing: 0.3px;
+  }
   thead th.right { text-align: right; }
-  tbody tr:nth-child(even) { background: #f8f8f8; }
-  tbody td { padding: 2.5mm 3mm; border-bottom: 1px solid #eee; vertical-align: top; }
+
+  tbody tr:nth-child(even) { background: #f5f7fa; }
+  tbody tr.order-subtotal {
+    background: #e8edf5;
+    font-weight: bold;
+    border-top: 1.5px solid #b0bdd0;
+  }
+  tbody tr.order-subtotal td { font-size: 8.5pt; color: #1a2e4a; padding: 2mm 2.5mm; }
+  tbody td {
+    padding: 2mm 2.5mm;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+  }
   tbody td.right { text-align: right; }
-  tbody td.mono  { font-family: 'Courier New', monospace; font-size: 9pt; }
+  tbody td.mono  { font-family: 'Courier New', monospace; font-size: 8.5pt; letter-spacing: -0.3px; }
+  tbody td.muted { color: #888; font-style: italic; }
 
-  /* Totals */
-  .totals { display: flex; justify-content: flex-end; margin-bottom: 8mm; }
-  .totals table { width: auto; min-width: 120mm; }
-  .totals td { padding: 2mm 4mm; border: none; }
-  .totals .total-row td { font-weight: bold; font-size: 12pt; border-top: 2px solid #1a1a2e; }
+  /* ── Totals ─────────────────────────────────────────────────────── */
+  .totals-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 7mm;
+  }
+  .totals-box {
+    border: 2px solid #0D1B2A;
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 130mm;
+  }
+  .totals-box table { margin: 0; font-size: 10pt; }
+  .totals-box thead tr { background: #0D1B2A; }
+  .totals-box thead th {
+    padding: 2mm 4mm;
+    font-size: 8pt;
+    color: #fff;
+    text-align: left;
+  }
+  .totals-box thead th.right { text-align: right; }
+  .totals-box tbody td { padding: 2mm 4mm; border-bottom: 1px solid #ddd; }
+  .totals-box tbody tr:last-child td {
+    font-weight: bold;
+    font-size: 11pt;
+    color: #0D1B2A;
+    border-bottom: none;
+    background: #eef2f8;
+  }
 
-  /* Signature */
-  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 10mm; }
-  .sig-box { border-top: 1.5px solid #333; padding-top: 3mm; }
-  .sig-box .sig-label { font-size: 9pt; color: #555; }
+  /* ── Signatures ─────────────────────────────────────────────────── */
+  .signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    margin-top: 8mm;
+  }
+  .sig-box {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 3mm 4mm;
+  }
+  .sig-box .sig-title {
+    font-size: 8pt;
+    font-weight: bold;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10mm;
+  }
+  .sig-line {
+    border-top: 1px solid #888;
+    margin-top: 2mm;
+    padding-top: 2mm;
+  }
+  .sig-line span { font-size: 7.5pt; color: #888; }
 
-  /* Footer */
-  .footer { margin-top: 12mm; border-top: 1px solid #ddd; padding-top: 3mm; font-size: 8pt; color: #999; text-align: center; }
+  /* ── Footer ──────────────────────────────────────────────────────── */
+  .footer {
+    margin-top: 8mm;
+    padding-top: 3mm;
+    border-top: 1px solid #ddd;
+    font-size: 7.5pt;
+    color: #bbb;
+    text-align: center;
+  }
 
+  /* ── Print ───────────────────────────────────────────────────────── */
   @media print {
-    body { padding: 10mm 12mm; }
-    @page { margin: 0; size: A4; }
-    thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { padding: 10mm 12mm 8mm; }
+    @page { margin: 0; size: A4 portrait; }
+    thead tr,
+    .totals-box thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- ── Header ─────────────────────────────────────────────────────── -->
 <div class="header">
-  <div class="brand">Peasy<span>Ware</span></div>
-  <div class="doc-title">
-    <h1>DELIVERY NOTE</h1>
+  <div class="header-logo">
+    <!-- Inline PeasyWare logo -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200">
+      <rect width="640" height="200" rx="24" fill="#0D1B2A"/>
+      <g transform="translate(20,40) scale(0.6)">
+        <rect x="16" y="48" width="128" height="80" rx="8" fill="white"/>
+        <polygon points="16,48 80,16 144,48 80,80" fill="#E3F2FD"/>
+        <circle cx="80" cy="80" r="10" fill="#FFC107"/>
+        <line x1="80" y1="80" x2="40" y2="60" stroke="#1976D2" stroke-width="6"/>
+        <line x1="80" y1="80" x2="120" y2="60" stroke="#1976D2" stroke-width="6"/>
+        <line x1="80" y1="80" x2="80" y2="110" stroke="#1976D2" stroke-width="6"/>
+      </g>
+      <text x="200" y="120" font-family="Segoe UI, Arial" font-size="72" fill="#42A5F5">Peasy</text>
+      <text x="400" y="120" font-family="Segoe UI, Arial" font-size="72" fill="#ECEFF1">Ware</text>
+    </svg>
+    <div class="header-company">
+      PeasyWare WMS<br>
+      Warehouse Management System
+    </div>
+  </div>
+  <div class="header-doc">
+    <h1>Delivery Note</h1>
     <div class="ref">{{SHIPMENT_REF}}</div>
+    <div class="status">{{DEPARTURE_DATE}} &nbsp;&#8226;&nbsp; {{DEPARTURE_TIME}}</div>
   </div>
 </div>
 
-<!-- Info grid -->
+<!-- ── Info grid ───────────────────────────────────────────────────── -->
 <div class="info-grid">
   <div class="info-block">
-    <div class="label">Customer</div>
+    <div class="label">Deliver to</div>
     <div class="value">{{CUSTOMER_NAME}}</div>
     <div class="sub">{{DELIVERY_ADDRESS}}</div>
   </div>
   <div class="info-block">
     <div class="label">Haulier</div>
     <div class="value">{{HAULIER_NAME}}</div>
-    <div class="sub">Vehicle: {{VEHICLE_REF}}</div>
+    <div class="sub">Vehicle: <strong>{{VEHICLE_REF}}</strong></div>
   </div>
   <div class="info-block">
     <div class="label">Departure</div>
@@ -82,19 +241,19 @@
   </div>
 </div>
 
-<!-- Lines -->
+<!-- ── Lines ──────────────────────────────────────────────────────── -->
 <table>
   <thead>
     <tr>
-      <th style="width:14%">SSCC</th>
-      <th style="width:9%">SKU</th>
-      <th style="width:22%">Description</th>
-      <th style="width:11%">Batch</th>
+      <th style="width:16%">SSCC</th>
+      <th style="width:8%">SKU</th>
+      <th style="width:20%">Description</th>
+      <th style="width:10%">Batch</th>
       <th style="width:8%">BBE</th>
-      <th class="right" style="width:7%">Qty</th>
-      <th style="width:7%">UOM</th>
+      <th class="right" style="width:6%">Qty</th>
+      <th style="width:6%">UOM</th>
       <th class="right" style="width:8%">Weight</th>
-      <th style="width:10%">Order Ref</th>
+      <th style="width:10%">Order</th>
     </tr>
   </thead>
   <tbody>
@@ -102,30 +261,42 @@
   </tbody>
 </table>
 
-<!-- Totals -->
-<div class="totals">
-  <table>
-    <tr><td>Total pallets</td><td class="right"><strong>{{TOTAL_PALLETS}}</strong></td></tr>
-    <tr><td>Total units</td><td class="right">{{TOTAL_UNITS}}</td></tr>
-    <tr class="total-row"><td>Gross weight</td><td class="right">{{TOTAL_WEIGHT}}</td></tr>
-  </table>
+<!-- ── Totals ─────────────────────────────────────────────────────── -->
+<div class="totals-row">
+  <div class="totals-box">
+    <table>
+      <thead>
+        <tr>
+          <th>Summary</th>
+          <th class="right">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Total pallets</td><td class="right">{{TOTAL_PALLETS}}</td></tr>
+        <tr><td>Total units</td><td class="right">{{TOTAL_UNITS}}</td></tr>
+        <tr><td>Gross weight</td><td class="right">{{TOTAL_WEIGHT}}</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
-<!-- Signatures -->
+<!-- ── Signatures ─────────────────────────────────────────────────── -->
 <div class="signatures">
   <div class="sig-box">
-    <div style="height:14mm;"></div>
-    <div class="sig-label">Despatched by (name &amp; signature)</div>
+    <div class="sig-title">Despatched by</div>
+    <div class="sig-line"><span>Name &amp; signature</span></div>
+    <div class="sig-line" style="margin-top:3mm"><span>Date</span></div>
   </div>
   <div class="sig-box">
-    <div style="height:14mm;"></div>
-    <div class="sig-label">Received by (name &amp; signature)</div>
+    <div class="sig-title">Received by</div>
+    <div class="sig-line"><span>Name &amp; signature</span></div>
+    <div class="sig-line" style="margin-top:3mm"><span>Date &amp; time received</span></div>
   </div>
 </div>
 
-<!-- Footer -->
+<!-- ── Footer ─────────────────────────────────────────────────────── -->
 <div class="footer">
-  Generated by PeasyWare WMS &nbsp;|&nbsp; {{GENERATED_AT}} &nbsp;|&nbsp; {{SHIPMENT_REF}}
+  Generated by PeasyWare WMS &nbsp;&#8226;&nbsp; {{GENERATED_AT}} &nbsp;&#8226;&nbsp; {{SHIPMENT_REF}}
 </div>
 
 </body>

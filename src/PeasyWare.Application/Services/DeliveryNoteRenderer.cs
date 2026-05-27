@@ -39,9 +39,39 @@ public static class DeliveryNoteRenderer
     private static string BuildLines(ShipmentManifestDto manifest)
     {
         var sb = new StringBuilder();
+        string? currentOrder  = null;
+        int     groupPallets  = 0;
+        int     groupUnits    = 0;
+        decimal groupWeight   = 0m;
+
+        void FlushSubtotal()
+        {
+            if (currentOrder is null) return;
+            sb.AppendLine($"""
+                <tr class="order-subtotal">
+                  <td colspan="5">Order subtotal &mdash; {Esc(currentOrder)}</td>
+                  <td class="right">{groupUnits}</td>
+                  <td></td>
+                  <td class="right">{groupWeight:N2} kg</td>
+                  <td>{groupPallets} pallet{(groupPallets == 1 ? "" : "s")}</td>
+                </tr>
+                """);
+            groupPallets = 0; groupUnits = 0; groupWeight = 0m;
+        }
 
         foreach (var line in manifest.Lines)
         {
+            var order = line.OrderRef ?? "";
+            if (order != currentOrder)
+            {
+                FlushSubtotal();
+                currentOrder = order;
+            }
+
+            groupPallets++;
+            groupUnits  += line.Quantity;
+            groupWeight += line.TotalWeightKg ?? 0m;
+
             sb.AppendLine($"""
                 <tr>
                   <td class="mono">{Esc(line.Sscc)}</td>
@@ -57,6 +87,7 @@ public static class DeliveryNoteRenderer
                 """);
         }
 
+        FlushSubtotal();  // last group
         return sb.ToString();
     }
 
@@ -72,16 +103,19 @@ public static class DeliveryNoteRenderer
         if (path is not null && System.IO.File.Exists(path))
             return System.IO.File.ReadAllText(path);
 
-        // Resolve relative to the executable location, walking up to find Database/Templates
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 6; i++)
+        // Search from BaseDirectory upward, and also from current directory upward
+        foreach (var startDir in new[] { AppContext.BaseDirectory, System.IO.Directory.GetCurrentDirectory() })
         {
-            var candidate = System.IO.Path.Combine(dir, "Database", "Templates", "delivery_note.html");
-            if (System.IO.File.Exists(candidate))
-                return System.IO.File.ReadAllText(candidate);
-            var parent = System.IO.Directory.GetParent(dir);
-            if (parent is null) break;
-            dir = parent.FullName;
+            var dir = startDir;
+            for (int i = 0; i < 8; i++)
+            {
+                var candidate = System.IO.Path.Combine(dir, "Database", "Templates", "delivery_note.html");
+                if (System.IO.File.Exists(candidate))
+                    return System.IO.File.ReadAllText(candidate);
+                var parent = System.IO.Directory.GetParent(dir);
+                if (parent is null) break;
+                dir = parent.FullName;
+            }
         }
 
         // Minimal inline fallback
