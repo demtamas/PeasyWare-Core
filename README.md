@@ -80,6 +80,7 @@ Pick Task → Operator scans bin + SSCC → PKD state
          │
          ▼
 Load Confirmation → Ship Confirmation → SHP state
+│  Delivery note auto-printed if configured
          │
          ▼
 Unit removed from warehouse, audit trail complete
@@ -89,48 +90,37 @@ Unit removed from warehouse, audit trail complete
 
 ## Quick Start
 
-### 1 — Clone
+### 1 — Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- SQL Server (Express or Developer edition is fine)
+- `sqlcmd` on PATH — install via [SQL Server command-line tools](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility)
+
+### 2 — Clone
 
 ```bash
 git clone https://github.com/demtamas/PeasyWare-Core.git
 cd PeasyWare-Core
 ```
 
-### 2 — Database
+### 3 — Set environment variables
 
-Build the tools project, then reset the database schema from scripts:
+These must be set **before** building or running anything.
 
-```powershell
-dotnet build
-tools\PeasyWare.Tools\bin\Debug\net10.0\pwtools.exe reset-db --confirm
-```
+#### `PEASYWARE_DB` — SQL Server connection string (required)
 
-Scripts are in `Database/Scripts/` (90+ files, executed in order). Installs all schemas, stored procedures, views, reference data, error codes, settings, and roles.
-
-### 3 — Test data (optional)
-
-With the API running, seed test SKUs, inbounds, and outbound orders:
-
-```powershell
-cd Database/Seeds
-.\run_seeds.ps1              # all test data
-.\run_seeds.ps1 -Only 1      # SKUs only
-.\run_seeds.ps1 -Only 2      # Inbounds only
-.\run_seeds.ps1 -Only 1,2    # SKUs + Inbounds
-```
-
-Requires `PEASYWARE_API_KEY` env var set, and the API running on `http://localhost:5000`.
-
-### 4 — Connection string
-
-The app resolves the connection string in this order:
-
-1. **Environment variable** `PEASYWARE_DB` ← required in production, preferred everywhere
-2. **DEBUG builds only** — hardcoded fallback to `localhost` if env var not set
-
-**Windows (PowerShell):**
+**Windows (PowerShell — session):**
 ```powershell
 $env:PEASYWARE_DB = "Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;"
+```
+
+**Windows (permanent — survives reboots):**
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+    "PEASYWARE_DB",
+    "Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=yourpassword;TrustServerCertificate=True;",
+    "Machine"
+)
 ```
 
 **macOS / Linux:**
@@ -140,11 +130,55 @@ export PEASYWARE_DB="Server=localhost;Database=Pw_Core_DEV;User Id=sa;Password=y
 
 > `TrustServerCertificate=True` is required for local SQL Server instances with self-signed certificates (default on most dev setups). `pwtools reset-db` reads this from the connection string and passes `-C` to sqlcmd automatically.
 
-### 5 — Build and run
+> For Windows Authentication, replace `User Id=sa;Password=...` with `Trusted_Connection=True`.
+
+#### `PEASYWARE_API_KEY` — API key (required for seeding only)
+
+The REST API requires a shared secret passed as `X-Api-Key`. Choose any string — it just needs to match on both the API server and the seed script caller.
+
+```powershell
+$env:PEASYWARE_API_KEY = "peasyware-dev-key"
+```
+
+Set this on any machine that will run the API **or** the seed scripts. Both sides must have the same value.
+
+### 4 — Build
 
 ```powershell
 dotnet build
+```
 
+### 5 — Database
+
+Reset (or create fresh) the database schema:
+
+```powershell
+tools\PeasyWare.Tools\bin\Debug\net10.0\pwtools.exe reset-db --confirm
+```
+
+This runs all 90+ scripts in `Database/Scripts/` in order against the database defined in `PEASYWARE_DB`. On a fresh install it creates the database from scratch. On an existing install it backs up and drops first.
+
+### 6 — Test data (optional)
+
+Seed SKUs, inbounds, outbound orders, and shipments via the REST API:
+
+```powershell
+# Terminal 1 — start the API
+dotnet run --project src/PeasyWare.API
+
+# Terminal 2 — run seeds
+cd Database/Seeds
+.\run_seeds.ps1              # all test data
+.\run_seeds.ps1 -Only 1      # SKUs only
+.\run_seeds.ps1 -Only 2      # Inbounds only
+.\run_seeds.ps1 -Only 1,2    # SKUs + Inbounds
+```
+
+> `PEASYWARE_API_KEY` must be set and the API must be running before seeds will work.
+
+### 7 — Run
+
+```powershell
 # RF-style terminal (CLI) — Windows, macOS, Linux
 dotnet run --project src/PeasyWare.CLI
 
@@ -154,7 +188,7 @@ dotnet run --project src/PeasyWare.Desktop
 
 Initial credentials: `admin` / `admin0` — password change required on first login (min 8 chars, uppercase + lowercase + number).
 
-### 6 — Tests
+### 8 — Tests
 
 ```bash
 dotnet test
@@ -165,78 +199,89 @@ dotnet test
 ## Features
 
 ### Inbound
-- Delivery advice (ASN) with pre-advised units — SSCC mode
-- Manual receive — two-label scan (product + pallet)
-- GS1-128 barcode parser — parenthesis, raw FNC1, tilde formats
+- Create delivery advice (ASN) from Desktop — header, lines, expected SSCCs
+- Cancel inbound — blocked if any receipts exist
+- SSCC mode receive with GS1-128 barcode parser (parenthesis, raw FNC1, tilde formats)
+- Manual mode receive — two-label scan (product + pallet)
 - Claim token pattern — prevents concurrent SSCC receives
 - Cross-receive lock — receiving session bound to its own inbound
 - Receipt reversal with full audit chain
 - `is_batch_required` and `standard_hu_quantity` enforced per SKU
-- Desktop inbound view — status, progress, line drill-down, SSCC-level detail
+- Desktop view — status, progress, line drill-down, SSCC-level detail with received by / at
 
 ### Inventory
-- Inventory units with state machine (`RCD → PTW → MOV/PKD → SHP/REV`)
+- State machine (`RCD → PTW → MOV/PKD → SHP/REV`)
 - Bin placements — rack (capacity 1) and bulk (capacity-based)
 - SSCC enquiry — UiMode-tiered display (Minimal / Standard / Trace)
 - Bin enquiry — single unit detail or multi-unit summary with drill-down
-- Stock owner per SKU — single-owner or multi-owner (3PL) mode via `inventory.enable_multi_owner` setting
+- Stock owner per SKU — single-owner or multi-owner (3PL) via `inventory.enable_multi_owner`
 - Manual bin-to-bin move out of staging automatically transitions `RCD → PTW`
-- Desktop inventory view — owner column, status change, search across all fields
+- Desktop view — owner, state, status, allocation reference, search
 
 ### Warehouse Tasks
 - Putaway — zone load balancing, bin reservation, TTL expiry
-- Bin-to-bin movement — operator or system initiated; inactive bin returns specific error
+- Bin-to-bin movement — operator or system initiated
 - Pick tasks — allocation-driven, operator-specified staging bay
-- Supervisor Desktop view — cancel orphaned tasks, filter by type (PUTAWAY / PICK / MOVE), creator and completer columns
+- Supervisor Desktop view — cancel orphaned tasks, filter by type, creator and completer columns
 
 ### Outbound
-- Orders with lines (requested batch / BBE per line)
+- Create orders from Desktop — customer, haulier, required date, lines (SKU / qty / batch / BBE)
+- Cancel orders — NEW status only
 - Allocation engine — FEFO / FIFO / LIFO / NONE (settings-driven)
-- Partial allocation — operator prompted when stock is insufficient; commits what's available
+- Partial allocation with operator prompt
 - Re-allocation and top-up allocation during active picking
 - Pick flow — bin scan validated before SSCC prompt
-- Load and ship confirmation — units transition to SHP, shipment closed
-- Delivery address per order — supports multi-depot customers
-- Desktop order management — allocate, partial allocate, cancel, deallocate, order detail
-- Desktop shipments view — drill-down to orders, drill-down to order detail
+- Load and ship confirmation
+- Delivery addresses per order — supports multi-depot customers
+- Create shipments from Desktop — haulier, vehicle, planned departure, add orders
+- Cancel shipments — OPEN / LOADING only, blocked if orders in progress
+- Delivery note — generated on ship, opens in browser or prints silently to named printer
+
+### Parties
+- Suppliers, customers, hauliers, owners, warehouse — multi-role per party
+- Create and edit from Desktop Parties view
+- Filterable by role — All / Suppliers / Customers / Hauliers / Owners
+- Owner party assignment per SKU for 3PL mode
 
 ### Materials (SKU Management)
-- Create, edit, copy SKUs from Desktop
-- Owner assignment per SKU — dropdown populated from parties with OWNER role
-- Preferred storage type and section
-- Batch requirement and full-HU enforcement flags
-- Full audit trail — before/after change log including owner changes
+- Create, edit, copy from Desktop
+- Owner assignment, storage type, section, batch / full-HU flags
+- Full audit trail — before/after change log
 
-### Desktop Application
-- Inbound view — all deliveries with progress; drill-down to lines and SSCCs
-- Inventory view — active stock with owner, state, status, allocation reference
-- Orders view — filter by Outstanding / Departed / All; delivery address columns
-- Shipments view — filter by Active / Shipped / All; order drill-down
-- Warehouse Tasks view — type filter, creator / completer, cancel tasks
-- Materials (SKU) management — create, edit, copy, audit log
-- User and session management
-- Audit log — SKU change history with before/after comparison
+### Logs and Audit
+- Event log view — full `audit.trace_logs` with level filter, date range, text search
+- JSON payload preview panel — click any row to see full structured payload
+- Correlation ID filter — click to show all events on the same operation
+- Login attempts view — pre-filtered to auth events
+- User changes view — unified timeline from trigger (`user_changes`) and trace log sources
+- Movement log — full pallet lifecycle (INBOUND → PUTAWAY → PICK → SHIP) with reference resolution
+- SKU audit — before/after change log per SKU
+
+### Printing
+- `printing.auto_print_delivery_note` — silent print on ship if enabled
+- `printing.delivery_note_printer` — named printer
+- `printing.delivery_note_copies` — 1–5 copies
+- HTML delivery note template in `Database/Templates/delivery_note.html` — customisable without recompiling
+- Template auto-located by walking up from binary; inline fallback if not found
 
 ### Infrastructure
 - Role-based UiMode (Minimal / Standard / Trace) — system ceiling enforced
 - Session management — TTL, heartbeat, force login, concurrent session guard
 - Structured audit log with JSON payload (`audit.trace_logs`)
 - Error message resolver — all codes in DB, operator-facing message + tech note
-- `inventory.enable_multi_owner` setting — off by default; when enabled, owner required on all SKUs
-- `outbound.allocation_strategy` setting — FEFO / FIFO / LIFO / NONE
-- `inventory.default_owner_party_code` — fallback owner when multi-owner is disabled
+- Settings registry — all runtime config in `operations.settings`, editable from Desktop
 
 ---
 
 ## 3PL / Multi-Owner Mode
 
-PeasyWare supports multi-owner warehousing (3PL). When `inventory.enable_multi_owner = true`:
+When `inventory.enable_multi_owner = true`:
 
 - Every SKU must be assigned an owner party (from `core.parties` with role `OWNER`)
 - Owner flows through to inventory view, reports, and audit trail
-- When disabled (default), all stock is implicitly owned by the configured default party
+- When disabled (default), all stock is implicitly owned by `inventory.default_owner_party_code`
 
-Toggle via the Settings view or directly in `operations.settings`.
+Toggle via Settings view or directly in `operations.settings`.
 
 ---
 
@@ -245,22 +290,10 @@ Toggle via the Settings view or directly in `operations.settings`.
 **v0.9 — Core warehouse lifecycle complete**
 
 Full warehouse loop operational across both CLI and Desktop:
-Receive → Putaway → Move → Allocate (full/partial) → Pick → Load → Ship
-
-**Recent additions:**
-- Multi-owner / 3PL support at SKU level
-- Inbound Desktop view with line and SSCC drill-down
-- Delivery addresses on outbound orders (multi-depot)
-- Partial allocation with operator prompt
-- Cross-receive lock — inbound receiving bound to specific inbound
-- Manual putaway via bin-to-bin move (RCD→PTW on staging exit)
-- Shipment drill-down to orders and order detail
+Receive → Putaway → Move → Allocate (full/partial) → Pick → Load → Ship → Delivery note
 
 **Next milestone: v1.0**
 - Role-based access controls on Desktop views
-- Create inbound / outbound / shipment forms in Desktop
-- Party management (suppliers, customers, hauliers)
-- Movement and event log views
 - Production hardening and edge case test coverage
 
 ---
