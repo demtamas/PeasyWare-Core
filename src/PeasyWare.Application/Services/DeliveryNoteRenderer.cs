@@ -98,6 +98,8 @@ public static class DeliveryNoteRenderer
         </head><body>
         <h1>DELIVERY NOTE — {{SHIPMENT_REF}}</h1>
         <p><strong>Customer:</strong> {{CUSTOMER_NAME}}&nbsp;&nbsp;
+        <strong>Deliver to:</strong> {{DELIVERY_ADDRESS}}&nbsp;&nbsp;
+        <strong>Haulier:</strong> {{HAULIER_NAME}}&nbsp;&nbsp;
         <strong>Vehicle:</strong> {{VEHICLE_REF}}&nbsp;&nbsp;
         <strong>Departed:</strong> {{DEPARTURE_DATE}} {{DEPARTURE_TIME}}</p>
         <table><thead><tr><th>SSCC</th><th>SKU</th><th>Description</th>
