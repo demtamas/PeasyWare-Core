@@ -141,12 +141,21 @@ public sealed class ShipmentDetailForm : Form
         };
         btnOrderDetail.Click += (_, _) => OpenOrderDetail();
 
+        var btnAddOrder = new Button
+        {
+            Text     = "Add order",
+            Width    = 90,
+            Height   = 28,
+            Location = new Point(126, 7)
+        };
+        btnAddOrder.Click += (_, _) => AddOrder();
+
         var btnPrintManifest = new Button
         {
             Text     = "Print manifest",
             Width    = 110,
             Height   = 28,
-            Location = new Point(126, 7)
+            Location = new Point(224, 7)
         };
         btnPrintManifest.Click += (_, _) => PrintManifest();
 
@@ -160,7 +169,7 @@ public sealed class ShipmentDetailForm : Form
         btnClose.Location = new Point(pnlFooter.Width - 96, 7);
         btnClose.Anchor   = AnchorStyles.Right | AnchorStyles.Top;
 
-        pnlFooter.Controls.AddRange([btnOrderDetail, btnPrintManifest, btnClose]);
+        pnlFooter.Controls.AddRange([btnOrderDetail, btnAddOrder, btnPrintManifest, btnClose]);
 
         Controls.Add(_dgvOrders);
         Controls.Add(pnlFooter);
@@ -175,6 +184,17 @@ public sealed class ShipmentDetailForm : Form
         var orders = _queryRepo.GetOrdersOnShipment(_shipmentId).ToList();
         _dgvOrders.DataSource = null;
         _dgvOrders.DataSource = orders;
+    }
+
+    private void AddOrder()
+    {
+        using var form = new AddOrderToShipmentForm(
+            _shipmentRef,
+            _queryRepo,
+            _commandRepo);
+
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+        LoadOrders();
     }
 
     private void PrintManifest()

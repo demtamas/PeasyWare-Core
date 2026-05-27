@@ -357,8 +357,9 @@ public sealed class SqlOutboundCommandRepository
 
         command.Parameters.Add(new SqlParameter("@shipment_ref", SqlDbType.NVarChar, 50)  { Value = shipmentRef });
         command.Parameters.Add(new SqlParameter("@reason",       SqlDbType.NVarChar, 200) { Value = (object?)reason ?? DBNull.Value });
-        command.Parameters.AddWithValue("@user_id",    _session.UserId);
-        command.Parameters.AddWithValue("@session_id", _session.SessionId);
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return BuildResult("Outbound.CancelShipment", "ERRSHIP99", new { ShipmentRef = shipmentRef });

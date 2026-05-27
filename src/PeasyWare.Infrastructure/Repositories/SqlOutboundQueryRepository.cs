@@ -390,7 +390,7 @@ public sealed class SqlOutboundQueryRepository : IOutboundQueryRepository
             LEFT JOIN outbound.outbound_lines l
                 ON l.outbound_order_id = o.outbound_order_id
                AND l.line_status_code <> 'CNL'
-            WHERE o.order_status_code = 'PICKED'
+            WHERE o.order_status_code IN ('NEW','ALLOCATED','PICKING','PICKED')
               AND NOT EXISTS (
                   SELECT 1
                   FROM outbound.shipment_orders so

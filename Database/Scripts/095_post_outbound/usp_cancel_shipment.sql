@@ -6,10 +6,11 @@ GO
 
 CREATE OR ALTER PROCEDURE outbound.usp_cancel_shipment
 (
-    @shipment_ref   NVARCHAR(50),
-    @reason         NVARCHAR(200)    = NULL,
-    @user_id        INT              = NULL,
-    @session_id     UNIQUEIDENTIFIER = NULL
+    @shipment_ref    NVARCHAR(50),
+    @reason          NVARCHAR(200)    = NULL,
+    @user_id         INT              = NULL,
+    @session_id      UNIQUEIDENTIFIER = NULL,
+    @correlation_id  UNIQUEIDENTIFIER = NULL
 )
 AS
 BEGIN
@@ -68,22 +69,24 @@ BEGIN
 
         -- Log
         INSERT INTO audit.trace_logs
-            (occurred_at, user_id, session_id, level, action, payload_json)
+            (occurred_at, correlation_id, user_id, session_id, level, action, payload_json)
         VALUES
         (
             SYSUTCDATETIME(),
+            @correlation_id,
             @user_id,
             @session_id,
             'INFO',
             'Outbound.CancelShipment',
             (SELECT
-                @user_id        AS UserId,
-                @session_id     AS SessionId,
-                'SUCSHIP04'     AS ResultCode,
-                CAST(1 AS BIT)  AS Success,
-                @shipment_id    AS ShipmentId,
-                @shipment_ref   AS ShipmentRef,
-                @reason         AS Reason
+                @user_id          AS UserId,
+                @session_id       AS SessionId,
+                @correlation_id   AS CorrelationId,
+                'SUCSHIP04'       AS ResultCode,
+                CAST(1 AS BIT)    AS Success,
+                @shipment_id      AS ShipmentId,
+                @shipment_ref     AS ShipmentRef,
+                @reason           AS Reason
             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
         );
 
