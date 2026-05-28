@@ -79,27 +79,6 @@ BEGIN
         WHERE inbound_id      = @inbound_id
           AND line_state_code NOT IN ('RCV', 'CNL');
 
-        -- Log to audit
-        INSERT INTO audit.trace_logs
-            (occurred_at, user_id, session_id, level, action, payload_json)
-        VALUES
-        (
-            SYSUTCDATETIME(),
-            @user_id,
-            @session_id,
-            'INFO',
-            'Inbound.Cancel',
-            (SELECT
-                @user_id        AS UserId,
-                @session_id     AS SessionId,
-                'SUCINB03'      AS ResultCode,
-                CAST(1 AS BIT)  AS Success,
-                @inbound_id     AS InboundId,
-                @inbound_ref    AS InboundRef,
-                @reason         AS Reason
-            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-        );
-
         COMMIT;
         SELECT CAST(1 AS BIT) AS success, N'SUCINB03' AS result_code;
 
