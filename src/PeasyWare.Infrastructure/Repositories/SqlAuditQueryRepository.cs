@@ -81,4 +81,66 @@ public sealed class SqlAuditQueryRepository : IAuditQueryRepository
     private static decimal? Dec(SqlDataReader r, string col) => r.IsDBNull(r.GetOrdinal(col)) ? null : r.GetDecimal(r.GetOrdinal(col));
     private static int?     Int(SqlDataReader r, string col) => r.IsDBNull(r.GetOrdinal(col)) ? null : r.GetInt32(r.GetOrdinal(col));
     private static bool?    Bit(SqlDataReader r, string col) => r.IsDBNull(r.GetOrdinal(col)) ? null : r.GetBoolean(r.GetOrdinal(col));
+
+    public IReadOnlyList<LocationChangeLogDto> GetLocationChanges(
+        string?   binCode = null,
+        DateOnly? from    = null,
+        DateOnly? to      = null,
+        int       top     = 500)
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        var where = new List<string>();
+        if (binCode != null) where.Add("bin_code LIKE @bin_code");
+        if (from    != null) where.Add("occurred_at >= @from_date");
+        if (to      != null) where.Add("occurred_at <  @to_date");
+
+        command.CommandText = $"""
+            SELECT TOP (@top)
+                trace_id, occurred_at, username, action_type, bin_code, reason,
+                bin_code_before, type_before, section_before, zone_before, capacity_before, active_before, locked_before, notes_before,
+                bin_code_after,  type_after,  section_after,  zone_after,  capacity_after,  notes_after
+            FROM audit.v_location_changes
+            {(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
+            ORDER BY occurred_at DESC
+            """;
+
+        command.Parameters.Add(new SqlParameter("@top", SqlDbType.Int) { Value = top });
+        if (binCode != null) command.Parameters.Add(new SqlParameter("@bin_code",  SqlDbType.NVarChar, 100) { Value = $"%{binCode}%" });
+        if (from    != null) command.Parameters.Add(new SqlParameter("@from_date", SqlDbType.Date)          { Value = from.Value.ToDateTime(TimeOnly.MinValue) });
+        if (to      != null) command.Parameters.Add(new SqlParameter("@to_date",   SqlDbType.Date)          { Value = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue) });
+
+        using var reader = command.ExecuteReader();
+        var results = new List<LocationChangeLogDto>();
+
+        while (reader.Read())
+        {
+            results.Add(new LocationChangeLogDto
+            {
+                TraceId        = reader.GetInt64(reader.GetOrdinal("trace_id")),
+                OccurredAt     = reader.GetDateTime(reader.GetOrdinal("occurred_at")),
+                Username       = Str(reader, "username"),
+                ActionType     = reader.GetString(reader.GetOrdinal("action_type")),
+                BinCode        = Str(reader, "bin_code"),
+                Reason         = Str(reader, "reason"),
+                BinCodeBefore  = Str(reader, "bin_code_before"),
+                TypeBefore     = Str(reader, "type_before"),
+                SectionBefore  = Str(reader, "section_before"),
+                ZoneBefore     = Str(reader, "zone_before"),
+                CapacityBefore = Int(reader, "capacity_before"),
+                ActiveBefore   = Bit(reader, "active_before"),
+                LockedBefore   = Bit(reader, "locked_before"),
+                NotesBefore    = Str(reader, "notes_before"),
+                BinCodeAfter   = Str(reader, "bin_code_after"),
+                TypeAfter      = Str(reader, "type_after"),
+                SectionAfter   = Str(reader, "section_after"),
+                ZoneAfter      = Str(reader, "zone_after"),
+                CapacityAfter  = Int(reader, "capacity_after"),
+                NotesAfter     = Str(reader, "notes_after")
+            });
+        }
+
+        return results;
+    }
 }

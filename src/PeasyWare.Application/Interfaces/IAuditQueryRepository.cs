@@ -9,4 +9,10 @@ public interface IAuditQueryRepository
         DateOnly? from   = null,
         DateOnly? to     = null,
         int top          = 200);
+
+    IReadOnlyList<LocationChangeLogDto> GetLocationChanges(
+        string?   binCode = null,
+        DateOnly? from    = null,
+        DateOnly? to      = null,
+        int       top     = 500);
 }

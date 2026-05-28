@@ -159,3 +159,89 @@ WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'E
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRPARTY99', N'PARTY', N'ERROR', N'Unexpected error processing party.', N'core.usp_create_party/usp_update_party: unhandled exception'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRPARTY99');
+
+-- ── BIN / LOCATION ────────────────────────────────────────────────────────
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN01', N'BIN', N'ERROR', N'Location not found.', N'usp_lock/unlock_bin: bin_code not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN02', N'BIN', N'ERROR', N'Location is already locked.', N'usp_lock_bin: is_locked = 1'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN03', N'BIN', N'ERROR', N'Location is not locked.', N'usp_unlock_bin: is_locked = 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN04', N'BIN', N'ERROR', N'A location with that code already exists.', N'usp_create_bin: duplicate bin_code'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN04');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN05', N'BIN', N'ERROR', N'Storage type not found.', N'usp_create_bin: storage_type_code not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN05');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN99', N'BIN', N'ERROR', N'An unexpected error occurred.', N'usp_*_bin: unhandled exception'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN99');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN01', N'BIN', N'SUCCESS', N'Location locked.', N'usp_lock_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN02', N'BIN', N'SUCCESS', N'Location unlocked.', N'usp_unlock_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN03', N'BIN', N'SUCCESS', N'Location created.', N'usp_create_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN04', N'BIN', N'SUCCESS', N'Locations created.', N'usp_create_bins_bulk: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN04');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN05', N'BIN', N'SUCCESS', N'Location updated.', N'usp_update_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN05');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN06', N'BIN', N'ERROR', N'Cannot rename a location that contains stock. Move or remove stock first.', N'usp_update_bin: rename blocked, unit_count > 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN06');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN07', N'BIN', N'ERROR', N'Cannot change storage type on a location that contains stock. Move or remove stock first.', N'usp_update_bin: type change blocked, unit_count > 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN07');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN08', N'BIN', N'ERROR', N'Location is already inactive.', N'usp_deactivate_bin: is_active = 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN08');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN09', N'BIN', N'ERROR', N'Cannot deactivate a location that contains stock. Move the stock first.', N'usp_deactivate_bin: stock present'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN09');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN10', N'BIN', N'ERROR', N'Cannot deactivate a location with open warehouse tasks. Complete or cancel the tasks first.', N'usp_deactivate_bin: open tasks present'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN10');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN11', N'BIN', N'ERROR', N'Location is already active.', N'usp_reactivate_bin: is_active = 1'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN11');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN06', N'BIN', N'SUCCESS', N'Location deactivated.', N'usp_deactivate_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN06');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN07', N'BIN', N'SUCCESS', N'Location reactivated.', N'usp_reactivate_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN07');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN06', N'BIN', N'ERROR', N'Cannot rename a location that contains stock. Move or remove stock first.', N'usp_update_bin: rename blocked, unit_count > 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN06');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN07', N'BIN', N'ERROR', N'Cannot change storage type on a location that contains stock. Move or remove stock first.', N'usp_update_bin: type change blocked, unit_count > 0'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN07');

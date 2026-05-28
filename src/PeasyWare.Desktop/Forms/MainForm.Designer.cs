@@ -72,6 +72,7 @@
             allEventsToolStripMenuItem = new ToolStripMenuItem();
             loginAttemptsToolStripMenuItem = new ToolStripMenuItem();
             userChangesToolStripMenuItem = new ToolStripMenuItem();
+            locationChangesToolStripMenuItem = new ToolStripMenuItem();
             skuChangesToolStripMenuItem = new ToolStripMenuItem();
             warehouseToolStripMenuItem = new ToolStripMenuItem();
             warehouseTasksToolStripMenuItem = new ToolStripMenuItem();
@@ -274,7 +275,7 @@
             // 
             // adminToolStripMenuItem
             // 
-            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem, locationsToolStripMenuItem });
+            adminToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { usersToolStripMenuItem, sessionsToolStripMenuItem, sessionEventsToolStripMenuItem, rolesAndPermissionsToolStripMenuItem });
             adminToolStripMenuItem.Name = "adminToolStripMenuItem";
             adminToolStripMenuItem.Size = new Size(55, 20);
             adminToolStripMenuItem.Text = "&Admin";
@@ -352,7 +353,7 @@
             // 
             // logsToolStripMenuItem
             // 
-            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { allEventsToolStripMenuItem, loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem, skuChangesToolStripMenuItem });
+            logsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { allEventsToolStripMenuItem, loginAttemptsToolStripMenuItem, userChangesToolStripMenuItem, locationChangesToolStripMenuItem, skuChangesToolStripMenuItem });
             logsToolStripMenuItem.Name = "logsToolStripMenuItem";
             logsToolStripMenuItem.Size = new Size(116, 22);
             logsToolStripMenuItem.Text = "&Logs";
@@ -378,6 +379,13 @@
             userChangesToolStripMenuItem.Text = "&User changes";
             userChangesToolStripMenuItem.Click += userChangesToolStripMenuItem_Click;
             // 
+            // locationChangesToolStripMenuItem
+            // 
+            locationChangesToolStripMenuItem.Name = "locationChangesToolStripMenuItem";
+            locationChangesToolStripMenuItem.Size = new Size(156, 22);
+            locationChangesToolStripMenuItem.Text = "&Location changes";
+            locationChangesToolStripMenuItem.Click += locationChangesToolStripMenuItem_Click;
+            // 
             // skuChangesToolStripMenuItem
             // 
             skuChangesToolStripMenuItem.Name = "skuChangesToolStripMenuItem";
@@ -387,7 +395,7 @@
             // 
             // warehouseToolStripMenuItem
             // 
-            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem });
+            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem, locationsToolStripMenuItem });
             warehouseToolStripMenuItem.Name = "warehouseToolStripMenuItem";
             warehouseToolStripMenuItem.Size = new Size(80, 20);
             warehouseToolStripMenuItem.Text = "&Warehouse";
@@ -395,9 +403,16 @@
             // warehouseTasksToolStripMenuItem
             // 
             warehouseTasksToolStripMenuItem.Name = "warehouseTasksToolStripMenuItem";
-            warehouseTasksToolStripMenuItem.Size = new Size(110, 22);
+            warehouseTasksToolStripMenuItem.Size = new Size(140, 22);
             warehouseTasksToolStripMenuItem.Text = "&Tasks";
             warehouseTasksToolStripMenuItem.Click += warehouseTasksToolStripMenuItem_Click;
+            // 
+            // locationsToolStripMenuItem (moved to Warehouse)
+            // 
+            locationsToolStripMenuItem.Name = "locationsToolStripMenuItem";
+            locationsToolStripMenuItem.Size = new Size(140, 22);
+            locationsToolStripMenuItem.Text = "&Locations";
+            locationsToolStripMenuItem.Click += locationsToolStripMenuItem_Click;
             // 
             // helpToolStripMenuItem
             // 
@@ -552,6 +567,7 @@
         private ToolStripMenuItem allEventsToolStripMenuItem;
         private ToolStripMenuItem loginAttemptsToolStripMenuItem;
         private ToolStripMenuItem userChangesToolStripMenuItem;
+        private ToolStripMenuItem locationChangesToolStripMenuItem;
         private ToolStripMenuItem skuChangesToolStripMenuItem;
         private ToolStripMenuItem operationalSettingsToolStripMenuItem;
         private ToolStripMenuItem clientSettingsToolStripMenuItem;

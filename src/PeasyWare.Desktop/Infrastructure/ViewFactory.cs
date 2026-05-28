@@ -82,6 +82,12 @@ public sealed class ViewFactory
         return new SkuAuditView(repo);
     }
 
+    public UserControl CreateLocationAuditView(SessionContext session)
+    {
+        var repo = _runtime.Repositories.CreateAuditQuery(session);
+        return new LocationAuditView(repo);
+    }
+
     public UserControl CreateOutstandingOrdersView(SessionContext session)
     {
         var queryRepo   = _runtime.Repositories.CreateOutboundQuery(session);
@@ -126,6 +132,14 @@ public sealed class ViewFactory
     {
         var queryRepo = _runtime.Repositories.CreateEventLogQuery(session);
         return new PeasyWare.Desktop.Views.Logs.UserActivityView(queryRepo);
+    }
+
+    public UserControl CreateLocationsView(SessionContext session)
+    {
+        var queryRepo     = _runtime.Repositories.CreateLocationQuery(session);
+        var commandRepo   = _runtime.Repositories.CreateLocationCommand(session);
+        var inventoryRepo = _runtime.Repositories.CreateInventoryQuery(session);
+        return new PeasyWare.Desktop.Views.Locations.LocationsView(queryRepo, commandRepo, inventoryRepo);
     }
 
     public UserControl CreateShipmentsView(SessionContext session)

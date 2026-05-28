@@ -478,6 +478,9 @@ public partial class MainForm : Form
     private void userChangesToolStripMenuItem_Click(object sender, EventArgs e)
         => ShowView(_views.CreateUserActivityView(_session));
 
+    private void locationChangesToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateLocationAuditView(_session));
+
     private void inboundToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateInboundView(_session));
@@ -507,6 +510,9 @@ public partial class MainForm : Form
     {
         ShowView(_views.CreateTasksView(_session));
     }
+
+    private void locationsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateLocationsView(_session));
 
     private void outstandiToolStripMenuItem_Click(object sender, EventArgs e)
     {

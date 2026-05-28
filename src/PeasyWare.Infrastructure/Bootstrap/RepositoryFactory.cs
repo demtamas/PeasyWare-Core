@@ -213,6 +213,22 @@ public sealed class RepositoryFactory
         return new SqlShipmentManifestRepository(_factory, session);
     }
 
+    // --------------------------------------------------
+    // LOCATIONS
+    // --------------------------------------------------
+
+    public ILocationQueryRepository CreateLocationQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlLocationQueryRepository(_factory, session);
+    }
+
+    public ILocationCommandRepository CreateLocationCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlLocationCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
     /// <summary>
     /// Replaces the system session used by sessionless overloads.
     /// Called by AppStartup.InitializeForApi() after the api user
