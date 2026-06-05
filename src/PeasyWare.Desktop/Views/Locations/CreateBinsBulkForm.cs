@@ -80,8 +80,8 @@ public sealed class CreateBinsBulkForm : Form
         AddRow(table, 1,  "Storage Type *", _cmbType);
         AddRow(table, 2,  "Zone",           _cmbZone);
         AddRow(table, 3,  "Rows",           pnlRows);
-        AddRow(table, 4,  "Columns (A–Z)",  pnlCols);
-        AddRow(table, 5,  "Depth",          pnlDepth);
+        AddRow(table, 4,  "Level (A=Floor)", pnlCols);
+        AddRow(table, 5,  "Bay",             pnlDepth);
         AddRow(table, 6,  "Capacity",       _nudCapacity);
 
         var row7Lbl = new Label { Text = "Preview", Dock = DockStyle.Fill, TextAlign = System.Drawing.ContentAlignment.MiddleRight, Font = new Font(System.Drawing.SystemFonts.DefaultFont.FontFamily, 8.5f) };
@@ -125,8 +125,8 @@ public sealed class CreateBinsBulkForm : Form
         var depths = Math.Max(0, (int)_nudDepthTo.Value - (int)_nudDepthFrom.Value + 1);
         var total  = rows * cols * depths;
 
-        var first = $"{prefix}{_nudRowFrom.Value:00}{colFrom}{_nudDepthFrom.Value}";
-        var last  = $"{prefix}{_nudRowTo.Value:00}{colTo}{_nudDepthTo.Value}";
+        var first = $"{prefix}{_nudRowFrom.Value:00}{_nudDepthFrom.Value:00}{colFrom}";
+        var last  = $"{prefix}{_nudRowTo.Value:00}{_nudDepthTo.Value:00}{colTo}";
 
         _lblPreview.Text = total > 0
             ? $"{first} → {last}  ({total} locations)"

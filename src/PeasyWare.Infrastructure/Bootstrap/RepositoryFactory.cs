@@ -223,6 +223,18 @@ public sealed class RepositoryFactory
         return new SqlLocationQueryRepository(_factory, session);
     }
 
+    public IZoneRepository CreateZoneRepository(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlZoneRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
+    public ISectionRepository CreateSectionRepository(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlSectionRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
     public ILocationCommandRepository CreateLocationCommand(SessionContext session)
     {
         BindSession(session);

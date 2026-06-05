@@ -27,12 +27,14 @@ public sealed class SqlLocationQueryRepository : ILocationQueryRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
 
-        var where = new List<string> { "is_active = 1" };
+        var where = new List<string>();
 
-        if (withStockOnly)        where.Add("unit_count > 0");
+        if (withStockOnly)           where.Add("unit_count > 0");
         if (storageTypeCode != null) where.Add("storage_type_code = @type_code");
         if (zoneCode        != null) where.Add("zone_code = @zone_code");
         if (search          != null) where.Add("(bin_code LIKE @search OR sku_code LIKE @search OR sscc LIKE @search)");
+
+        var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
         command.CommandText = $"""
             SELECT
@@ -43,7 +45,7 @@ public sealed class SqlLocationQueryRepository : ILocationQueryRepository
                 sscc, sku_code, sku_description, batch_number, best_before_date,
                 stock_state, stock_status
             FROM locations.v_locations
-            WHERE {string.Join(" AND ", where)}
+            {whereClause}
             ORDER BY bin_code
             """;
 
@@ -106,6 +108,17 @@ public sealed class SqlLocationQueryRepository : ILocationQueryRepository
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
         command.CommandText  = "SELECT DISTINCT zone_code FROM locations.zones WHERE is_active = 1 ORDER BY zone_code";
+        using var reader     = command.ExecuteReader();
+        var results          = new List<string>();
+        while (reader.Read()) results.Add(reader.GetString(0));
+        return results;
+    }
+
+    public IReadOnlyList<string> GetSectionCodes()
+    {
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "SELECT DISTINCT section_code FROM locations.storage_sections WHERE is_active = 1 ORDER BY section_code";
         using var reader     = command.ExecuteReader();
         var results          = new List<string>();
         while (reader.Read()) results.Add(reader.GetString(0));

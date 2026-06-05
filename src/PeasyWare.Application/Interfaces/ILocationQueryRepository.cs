@@ -12,4 +12,5 @@ public interface ILocationQueryRepository
 
     IReadOnlyList<string> GetStorageTypeCodes();
     IReadOnlyList<string> GetZoneCodes();
+    IReadOnlyList<string> GetSectionCodes();
 }

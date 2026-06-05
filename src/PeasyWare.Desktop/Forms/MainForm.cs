@@ -514,6 +514,12 @@ public partial class MainForm : Form
     private void locationsToolStripMenuItem_Click(object sender, EventArgs e)
         => ShowView(_views.CreateLocationsView(_session));
 
+    private void zonesToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateZonesView(_session));
+
+    private void sectionsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateSectionsView(_session));
+
     private void outstandiToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateOutstandingOrdersView(_session));

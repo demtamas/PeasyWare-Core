@@ -142,6 +142,22 @@ public sealed class ViewFactory
         return new PeasyWare.Desktop.Views.Locations.LocationsView(queryRepo, commandRepo, inventoryRepo);
     }
 
+    public UserControl CreateZonesView(SessionContext session)
+    {
+        var repo         = _runtime.Repositories.CreateZoneRepository(session);
+        var locQuery     = _runtime.Repositories.CreateLocationQuery(session);
+        var locCommand   = _runtime.Repositories.CreateLocationCommand(session);
+        return new PeasyWare.Desktop.Views.Locations.ZonesView(repo, locQuery, locCommand);
+    }
+
+    public UserControl CreateSectionsView(SessionContext session)
+    {
+        var repo         = _runtime.Repositories.CreateSectionRepository(session);
+        var locQuery     = _runtime.Repositories.CreateLocationQuery(session);
+        var locCommand   = _runtime.Repositories.CreateLocationCommand(session);
+        return new PeasyWare.Desktop.Views.Locations.SectionsView(repo, locQuery, locCommand);
+    }
+
     public UserControl CreateShipmentsView(SessionContext session)
     {
         var queryRepo    = _runtime.Repositories.CreateOutboundQuery(session);

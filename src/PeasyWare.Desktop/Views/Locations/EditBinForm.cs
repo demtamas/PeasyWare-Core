@@ -94,11 +94,16 @@ public sealed class EditBinForm : Form
                 { _cmbZone.SelectedIndex = i; break; }
 
         // Section
+        _cmbSection.Items.Clear();
         _cmbSection.Items.Add("(no change)");
         _cmbSection.Items.Add("(none)");
-        foreach (var s in _queryRepo.GetStorageTypeCodes()) // reuse until section query added
+        foreach (var s in _queryRepo.GetSectionCodes())
             _cmbSection.Items.Add(s);
         _cmbSection.SelectedIndex = 0;
+        if (currentSection != null)
+            for (int i = 2; i < _cmbSection.Items.Count; i++)
+                if (_cmbSection.Items[i]?.ToString() == currentSection)
+                { _cmbSection.SelectedIndex = i; break; }
 
         // Restrict rename and type change when stock present
         if (_hasStock)

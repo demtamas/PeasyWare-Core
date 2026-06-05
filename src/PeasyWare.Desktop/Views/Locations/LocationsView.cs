@@ -20,6 +20,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
     private ToolStripButton?      _btnNewBin;
     private ToolStripButton?      _btnBulkCreate;
     private ToolStripButton?      _btnEdit;
+    private ToolStripButton?      _btnActivate;
     private ToolStripButton?      _btnLock;
     private ToolStripButton?      _btnUnlock;
     private ToolStripButton?      _btnDeactivate;
@@ -74,6 +75,9 @@ public sealed class LocationsView : BaseView, IToolbarAware
         _btnEdit = new ToolStripButton("Edit") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnEdit.Click += Wrap(EditSelected);
 
+        _btnActivate = new ToolStripButton("Activate locations") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
+        _btnActivate.Click += Wrap(ActivateSelected);
+
         _btnLock = new ToolStripButton("Lock") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnLock.Click += Wrap(LockSelected);
 
@@ -99,8 +103,8 @@ public sealed class LocationsView : BaseView, IToolbarAware
         _typeFilterHost = new ToolStripControlHost(_cmbTypeFilter) { AutoSize = false, Width = 95 };
 
         _cmbStockFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
-        _cmbStockFilter.Items.AddRange(["With stock", "All locations"]);
-        _cmbStockFilter.SelectedIndex = 0;
+        _cmbStockFilter.Items.AddRange(["With stock", "Inactive", "All locations"]);
+        _cmbStockFilter.SelectedIndex = 1;  // Default: Inactive — shows newly created bins
         _cmbStockFilter.SelectedIndexChanged += (_, _) => Execute(LoadLocations);
         _stockFilterHost = new ToolStripControlHost(_cmbStockFilter) { AutoSize = false, Width = 115 };
 
@@ -109,6 +113,8 @@ public sealed class LocationsView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnNewBin);
         toolStrip.Items.Add(_btnBulkCreate);
         toolStrip.Items.Add(_btnEdit);
+        toolStrip.Items.Add(new ToolStripSeparator());
+        toolStrip.Items.Add(_btnActivate);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnLock);
         toolStrip.Items.Add(_btnUnlock);
@@ -142,7 +148,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
     {
         dgv.AutoGenerateColumns   = false;
         dgv.SelectionMode         = DataGridViewSelectionMode.FullRowSelect;
-        dgv.MultiSelect           = false;
+        dgv.MultiSelect           = true;
         dgv.ReadOnly              = true;
         dgv.AllowUserToAddRows    = false;
         dgv.AllowUserToDeleteRows = false;
@@ -211,13 +217,24 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
     private void LoadLocations()
     {
-        var withStock = _cmbStockFilter?.SelectedIndex == 0;
-        var typeCode  = _cmbTypeFilter?.SelectedIndex > 0 ? _cmbTypeFilter.SelectedItem?.ToString() : null;
+        // 0=With stock, 1=Inactive, 2=All locations
+        var filterIndex  = _cmbStockFilter?.SelectedIndex ?? 2;
+        var withStock    = filterIndex == 0;
+        var inactiveOnly = filterIndex == 1;
 
-        _locations = _queryRepo.GetLocations(
-            withStockOnly:   withStock,
+        var typeCode = _cmbTypeFilter?.SelectedIndex > 0 ? _cmbTypeFilter.SelectedItem?.ToString() : null;
+
+        var all = _queryRepo.GetLocations(
+            withStockOnly:   false,
             storageTypeCode: typeCode
         ).ToList();
+
+        _locations = filterIndex switch
+        {
+            0 => all.Where(l =>  l.IsActive && l.UnitCount > 0).ToList(),
+            1 => all.Where(l => !l.IsActive).ToList(),
+            _ => all
+        };
 
         ApplyFilter();
     }
@@ -243,6 +260,41 @@ public sealed class LocationsView : BaseView, IToolbarAware
     // ==========================================================
     // Actions
     // ==========================================================
+
+    private void ActivateSelected()
+    {
+        var inactive = _dgvLocations.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Select(r => r.DataBoundItem as LocationDto)
+            .Where(l => l is not null && !l.IsActive)
+            .Select(l => l!.BinCode)
+            .ToList();
+
+        if (inactive.Count == 0) return;
+
+        var confirm = MessageBox.Show(this,
+            $"Activate {inactive.Count} location{(inactive.Count == 1 ? "" : "s")}?\n\nThey will become available for putaway and allocation.",
+            "Confirm Activation",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button1);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var result = _commandRepo.ActivateBins(inactive);
+
+        if (!result.Success)
+            MessageBox.Show(this, result.FriendlyMessage, "Activation Failed",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        else
+            MessageBox.Show(this,
+                $"{result.FriendlyMessage}",
+                "Done",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+        Execute(LoadLocations);
+    }
 
     private void EditSelected()
     {
@@ -347,14 +399,21 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
     private void UpdateToolbarState()
     {
-        var loc = Selected();
+        var loc      = Selected();
+        var anyRows  = _dgvLocations.SelectedRows.Count > 0;
+        var hasInactive = _dgvLocations.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Any(r => r.DataBoundItem is LocationDto l && !l.IsActive);
+
         if (_btnEdit       is not null) _btnEdit.Enabled       = loc is not null;
+        if (_btnActivate   is not null) _btnActivate.Enabled   = hasInactive;
         if (_btnLock       is not null) _btnLock.Enabled       = loc is not null &&  loc.IsActive && !loc.IsLocked;
         if (_btnUnlock     is not null) _btnUnlock.Enabled     = loc is not null &&  loc.IsActive &&  loc.IsLocked;
         if (_btnDeactivate is not null) _btnDeactivate.Enabled = loc is not null &&  loc.IsActive;
         if (_btnReactivate is not null) _btnReactivate.Enabled = loc is not null && !loc.IsActive;
     }
 
+    // Single selected row (for edit/lock/unlock/deactivate/reactivate)
     private LocationDto? Selected() =>
         _dgvLocations.SelectedRows.Count == 1 &&
         _dgvLocations.SelectedRows[0].DataBoundItem is LocationDto loc

@@ -239,6 +239,78 @@ SELECT N'SUCBIN07', N'BIN', N'SUCCESS', N'Location reactivated.', N'usp_reactiva
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN07');
 
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN08', N'BIN', N'SUCCESS', N'Locations activated.', N'usp_activate_bins: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN08');
+
+-- ── ZONES ─────────────────────────────────────────────────────
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRZON01', N'ZONE', N'ERROR', N'A zone with that code already exists.', N'usp_create_zone: duplicate zone_code'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRZON01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRZON02', N'ZONE', N'ERROR', N'Zone not found.', N'usp_update/deactivate/reactivate_zone: zone_code not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRZON02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRZON99', N'ZONE', N'ERROR', N'An unexpected error occurred.', N'usp_*_zone: unhandled exception'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRZON99');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON01', N'ZONE', N'SUCCESS', N'Zone created.', N'usp_create_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON02', N'ZONE', N'SUCCESS', N'Zone updated.', N'usp_update_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON03', N'ZONE', N'SUCCESS', N'Zone deactivated.', N'usp_deactivate_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON04', N'ZONE', N'SUCCESS', N'Zone reactivated.', N'usp_reactivate_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON04');
+
+-- ── SECTIONS ──────────────────────────────────────────────
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSEC01', N'SEC', N'ERROR', N'A section with that code already exists.', N'usp_create_section: duplicate section_code'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSEC01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSEC02', N'SEC', N'ERROR', N'Section not found.', N'usp_update/deactivate/reactivate_section: section_code not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSEC02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSEC99', N'SEC', N'ERROR', N'An unexpected error occurred.', N'usp_*_section: unhandled exception'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSEC99');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC01', N'SEC', N'SUCCESS', N'Section created.', N'usp_create_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC01');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC02', N'SEC', N'SUCCESS', N'Section updated.', N'usp_update_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC02');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC03', N'SEC', N'SUCCESS', N'Section deactivated.', N'usp_deactivate_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC04', N'SEC', N'SUCCESS', N'Section reactivated.', N'usp_reactivate_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC04');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC05', N'SEC', N'SUCCESS', N'Bins assigned to section.', N'usp_assign_bins_to_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC05');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON05', N'ZONE', N'SUCCESS', N'Bins assigned to zone.', N'usp_assign_bins_to_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON05');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRBIN06', N'BIN', N'ERROR', N'Cannot rename a location that contains stock. Move or remove stock first.', N'usp_update_bin: rename blocked, unit_count > 0'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN06');
 

@@ -56,9 +56,9 @@ BEGIN
         DECLARE @new_bin_id INT;
 
         INSERT INTO locations.bins
-            (bin_code, storage_type_id, zone_id, storage_section_id, capacity, notes, created_by)
+            (bin_code, storage_type_id, zone_id, storage_section_id, capacity, notes, created_by, is_active)
         VALUES
-            (@bin_code, @storage_type_id, @zone_id, @section_id, @capacity, @notes, @user_id);
+            (@bin_code, @storage_type_id, @zone_id, @section_id, @capacity, @notes, @user_id, 0);
 
         SET @new_bin_id = SCOPE_IDENTITY();
 
@@ -142,9 +142,9 @@ BEGIN
                 WHILE @depth <= @depth_to
                 BEGIN
                     SET @bin_code = @prefix
-                        + RIGHT('0' + CAST(@row AS NVARCHAR(2)), 2)
-                        + CHAR(@col_ord)
-                        + CAST(@depth AS NVARCHAR(2));
+                        + RIGHT('0' + CAST(@row   AS NVARCHAR(2)), 2)
+                        + RIGHT('0' + CAST(@depth AS NVARCHAR(2)), 2)
+                        + CHAR(@col_ord);
 
                     IF NOT EXISTS (
                         SELECT 1 FROM locations.bins
@@ -152,9 +152,9 @@ BEGIN
                     )
                     BEGIN
                         INSERT INTO locations.bins
-                            (bin_code, storage_type_id, zone_id, storage_section_id, capacity, created_by)
+                            (bin_code, storage_type_id, zone_id, storage_section_id, capacity, created_by, is_active)
                         VALUES
-                            (@bin_code, @storage_type_id, @zone_id, @section_id, @capacity, @user_id);
+                            (@bin_code, @storage_type_id, @zone_id, @section_id, @capacity, @user_id, 0);
                         SET @created = @created + 1;
                     END
                     ELSE

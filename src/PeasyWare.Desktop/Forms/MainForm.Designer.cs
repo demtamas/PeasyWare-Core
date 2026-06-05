@@ -62,6 +62,8 @@
             sessionEventsToolStripMenuItem = new ToolStripMenuItem();
             rolesAndPermissionsToolStripMenuItem = new ToolStripMenuItem();
             locationsToolStripMenuItem = new ToolStripMenuItem();
+            zonesToolStripMenuItem = new ToolStripMenuItem();
+            sectionsToolStripMenuItem = new ToolStripMenuItem();
             suppliersToolStripMenuItem = new ToolStripMenuItem();
             customersToolStripMenuItem = new ToolStripMenuItem();
             systemToolStripMenuItem = new ToolStripMenuItem();
@@ -395,7 +397,7 @@
             // 
             // warehouseToolStripMenuItem
             // 
-            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem, locationsToolStripMenuItem });
+            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem, locationsToolStripMenuItem, zonesToolStripMenuItem, sectionsToolStripMenuItem });
             warehouseToolStripMenuItem.Name = "warehouseToolStripMenuItem";
             warehouseToolStripMenuItem.Size = new Size(80, 20);
             warehouseToolStripMenuItem.Text = "&Warehouse";
@@ -413,6 +415,20 @@
             locationsToolStripMenuItem.Size = new Size(140, 22);
             locationsToolStripMenuItem.Text = "&Locations";
             locationsToolStripMenuItem.Click += locationsToolStripMenuItem_Click;
+            // 
+            // zonesToolStripMenuItem
+            // 
+            zonesToolStripMenuItem.Name = "zonesToolStripMenuItem";
+            zonesToolStripMenuItem.Size = new Size(140, 22);
+            zonesToolStripMenuItem.Text = "&Zones";
+            zonesToolStripMenuItem.Click += zonesToolStripMenuItem_Click;
+            // 
+            // sectionsToolStripMenuItem
+            // 
+            sectionsToolStripMenuItem.Name = "sectionsToolStripMenuItem";
+            sectionsToolStripMenuItem.Size = new Size(140, 22);
+            sectionsToolStripMenuItem.Text = "&Sections";
+            sectionsToolStripMenuItem.Click += sectionsToolStripMenuItem_Click;
             // 
             // helpToolStripMenuItem
             // 
@@ -551,6 +567,8 @@
         private ToolStripMenuItem sessionsToolStripMenuItem;
         private ToolStripMenuItem rolesAndPermissionsToolStripMenuItem;
         private ToolStripMenuItem locationsToolStripMenuItem;
+        private ToolStripMenuItem zonesToolStripMenuItem;
+        private ToolStripMenuItem sectionsToolStripMenuItem;
         private ToolStripMenuItem materialsToolStripMenuItem;
         private ToolStripMenuItem partiesToolStripMenuItem;
         private ToolStripMenuItem allPartiesToolStripMenuItem;

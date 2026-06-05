@@ -40,4 +40,7 @@ public interface ILocationCommandRepository
 
     OperationResult DeactivateBin(string binCode, string? reason = null);
     OperationResult ReactivateBin(string binCode);
+    OperationResult ActivateBins(IEnumerable<string> binCodes);
+    OperationResult AssignBinsToSection(string sectionCode, IEnumerable<string> binCodes);
+    OperationResult AssignBinsToZone(string zoneCode, IEnumerable<string> binCodes);
 }

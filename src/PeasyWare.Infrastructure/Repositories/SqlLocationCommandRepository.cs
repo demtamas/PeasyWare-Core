@@ -232,4 +232,68 @@ public sealed class SqlLocationCommandRepository : RepositoryBase, ILocationComm
         if (!reader.Read()) return BuildResult("Location.Reactivate", "ERRBIN99", new { BinCode = binCode });
         return BuildResult("Location.Reactivate", reader.GetString(reader.GetOrdinal("result_code")), new { BinCode = binCode });
     }
+
+    public OperationResult ActivateBins(IEnumerable<string> binCodes)
+    {
+        EnsureSession();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(binCodes);
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_activate_bins";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@bin_codes_json", SqlDbType.NVarChar, -1) { Value = json });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Location.ActivateBins", "ERRBIN99", new { Count = 0 });
+
+        var code      = reader.GetString(reader.GetOrdinal("result_code"));
+        var activated = reader.GetInt32(reader.GetOrdinal("activated_count"));
+        var skipped   = reader.GetInt32(reader.GetOrdinal("skipped_count"));
+        return BuildResult("Location.ActivateBins", code, new { ActivatedCount = activated, SkippedCount = skipped });
+    }
+
+    public OperationResult AssignBinsToSection(string sectionCode, IEnumerable<string> binCodes)
+    {
+        EnsureSession();
+        var json = System.Text.Json.JsonSerializer.Serialize(binCodes);
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_assign_bins_to_section";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@section_code",    SqlDbType.NVarChar, 50)  { Value = sectionCode });
+        command.Parameters.Add(new SqlParameter("@bin_codes_json",  SqlDbType.NVarChar, -1)  { Value = json });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Location.AssignSection", "ERRSEC99", new { SectionCode = sectionCode });
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var updated = reader.GetInt32(reader.GetOrdinal("updated_count"));
+        return BuildResult("Location.AssignSection", code, new { SectionCode = sectionCode, UpdatedCount = updated });
+    }
+
+    public OperationResult AssignBinsToZone(string zoneCode, IEnumerable<string> binCodes)
+    {
+        EnsureSession();
+        var json = System.Text.Json.JsonSerializer.Serialize(binCodes);
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_assign_bins_to_zone";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@zone_code",       SqlDbType.NVarChar, 50)  { Value = zoneCode });
+        command.Parameters.Add(new SqlParameter("@bin_codes_json",  SqlDbType.NVarChar, -1)  { Value = json });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Location.AssignZone", "ERRZON99", new { ZoneCode = zoneCode });
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var updated = reader.GetInt32(reader.GetOrdinal("updated_count"));
+        return BuildResult("Location.AssignZone", code, new { ZoneCode = zoneCode, UpdatedCount = updated });
+    }
 }
