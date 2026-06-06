@@ -25,6 +25,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
     private ToolStripButton?      _btnUnlock;
     private ToolStripButton?      _btnDeactivate;
     private ToolStripButton?      _btnReactivate;
+    private ToolStripButton?      _btnDelete;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _typeFilterHost;
     private ToolStripControlHost? _stockFilterHost;
@@ -34,8 +35,11 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
     // Detail panel — location property card
     private readonly DataGridView _dgvLocations = new();
+    private static readonly Font _boldFont = new(SystemFonts.DefaultFont.FontFamily, SystemFonts.DefaultFont.Size, FontStyle.Bold);
 
     private List<LocationDto> _locations = [];
+    private bool _suppressReload = false;  // prevent double-load during toolbar init
+    private bool _loading        = false;  // prevent concurrent loads
 
     public LocationsView(
         ILocationQueryRepository   queryRepo,
@@ -90,6 +94,9 @@ public sealed class LocationsView : BaseView, IToolbarAware
         _btnReactivate = new ToolStripButton("Reactivate") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnReactivate.Click += Wrap(ReactivateSelected);
 
+        _btnDelete = new ToolStripButton("Delete") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false, ForeColor = System.Drawing.Color.DarkRed };
+        _btnDelete.Click += Wrap(DeleteSelected);
+
         _txtSearch = new TextBox { PlaceholderText = "Search bin / SKU / SSCC...", Width = 200 };
         _txtSearch.TextChanged += (_, _) => ApplyFilter();
         _searchHost = new ToolStripControlHost(_txtSearch) { AutoSize = false, Width = 218 };
@@ -98,14 +105,18 @@ public sealed class LocationsView : BaseView, IToolbarAware
         _cmbTypeFilter.Items.Add("All types");
         foreach (var t in _queryRepo.GetStorageTypeCodes())
             _cmbTypeFilter.Items.Add(t);
+        _suppressReload = true;
         _cmbTypeFilter.SelectedIndex = 0;
-        _cmbTypeFilter.SelectedIndexChanged += (_, _) => Execute(LoadLocations);
+        _suppressReload = false;
+        _cmbTypeFilter.SelectedIndexChanged += (_, _) => { if (!_suppressReload) Execute(LoadLocations); };
         _typeFilterHost = new ToolStripControlHost(_cmbTypeFilter) { AutoSize = false, Width = 95 };
 
         _cmbStockFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
         _cmbStockFilter.Items.AddRange(["With stock", "Inactive", "All locations"]);
-        _cmbStockFilter.SelectedIndex = 1;  // Default: Inactive — shows newly created bins
-        _cmbStockFilter.SelectedIndexChanged += (_, _) => Execute(LoadLocations);
+        _suppressReload = true;
+        _cmbStockFilter.SelectedIndex = 1;
+        _suppressReload = false;
+        _cmbStockFilter.SelectedIndexChanged += (_, _) => { if (!_suppressReload) Execute(LoadLocations); };
         _stockFilterHost = new ToolStripControlHost(_cmbStockFilter) { AutoSize = false, Width = 115 };
 
         toolStrip.Items.Add(_btnRefresh);
@@ -121,6 +132,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnDeactivate);
         toolStrip.Items.Add(_btnReactivate);
+        toolStrip.Items.Add(_btnDelete);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_typeFilterHost);
@@ -157,8 +169,11 @@ public sealed class LocationsView : BaseView, IToolbarAware
         dgv.AutoSizeColumnsMode   = DataGridViewAutoSizeColumnsMode.Fill;
         dgv.BackgroundColor       = SystemColors.Window;
         dgv.EnableHeadersVisualStyles = false;
-        dgv.ColumnHeadersDefaultCellStyle.BackColor = SystemColors.Control;
-        dgv.ColumnHeadersDefaultCellStyle.Font      = new Font(dgv.Font, FontStyle.Bold);
+        dgv.ColumnHeadersDefaultCellStyle.BackColor          = SystemColors.Control;
+        dgv.ColumnHeadersDefaultCellStyle.ForeColor          = SystemColors.ControlText;
+        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = SystemColors.Control;
+        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+        dgv.ColumnHeadersDefaultCellStyle.Font               = new Font(dgv.Font, FontStyle.Bold);
         dgv.DefaultCellStyle.SelectionBackColor     = Color.LightSteelBlue;
         dgv.DefaultCellStyle.SelectionForeColor     = Color.Black;
 
@@ -199,7 +214,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
             if (loc.IsLocked)
             {
                 dgv.Rows[e.RowIndex].Cells[0].Style.ForeColor = Color.DarkOrange;
-                dgv.Rows[e.RowIndex].Cells[0].Style.Font      = new Font(dgv.Font, FontStyle.Bold);
+                dgv.Rows[e.RowIndex].Cells[0].Style.Font      = _boldFont;
             }
         };
     }
@@ -217,26 +232,38 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
     private void LoadLocations()
     {
-        // 0=With stock, 1=Inactive, 2=All locations
-        var filterIndex  = _cmbStockFilter?.SelectedIndex ?? 2;
-        var withStock    = filterIndex == 0;
-        var inactiveOnly = filterIndex == 1;
+        if (_loading) return;
+        _loading = true;
 
-        var typeCode = _cmbTypeFilter?.SelectedIndex > 0 ? _cmbTypeFilter.SelectedItem?.ToString() : null;
+        var filterIndex = _cmbStockFilter?.SelectedIndex ?? 2;
+        var typeCode    = _cmbTypeFilter?.SelectedIndex > 0
+            ? _cmbTypeFilter.SelectedItem?.ToString() : null;
 
-        var all = _queryRepo.GetLocations(
-            withStockOnly:   false,
-            storageTypeCode: typeCode
-        ).ToList();
+        // Clear grid immediately so the user sees a response
+        _dgvLocations.DataSource = null;
 
-        _locations = filterIndex switch
-        {
-            0 => all.Where(l =>  l.IsActive && l.UnitCount > 0).ToList(),
-            1 => all.Where(l => !l.IsActive).ToList(),
-            _ => all
-        };
+        System.Threading.Tasks.Task
+            .Run(() => _queryRepo.GetLocations(withStockOnly: false, storageTypeCode: typeCode).ToList())
+            .ContinueWith(t =>
+            {
+                try
+                {
+                    if (t.IsFaulted) return;
 
-        ApplyFilter();
+                    var all = t.Result;
+                    _locations = filterIndex switch
+                    {
+                        0 => all.Where(l =>  l.IsActive && l.UnitCount > 0).ToList(),
+                        1 => all.Where(l => !l.IsActive).ToList(),
+                        _ => all
+                    };
+                    ApplyFilter();
+                }
+                finally
+                {
+                    _loading = false;
+                }
+            }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     private void ApplyFilter()
@@ -370,11 +397,18 @@ public sealed class LocationsView : BaseView, IToolbarAware
         using var input = new LockReasonForm($"Deactivate {loc.BinCode}");
         if (input.ShowDialog(this) != DialogResult.OK) return;
 
-        var result = _commandRepo.DeactivateBin(loc.BinCode, input.Reason);
-        if (!result.Success)
-            MessageBox.Show(this, result.FriendlyMessage, "Cannot Deactivate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
-        Execute(LoadLocations);
+        var binCode = loc.BinCode;
+        var reason  = input.Reason;
+        ExecuteAsync(
+            () => _commandRepo.DeactivateBin(binCode, reason),
+            result =>
+            {
+                if (!result.Success)
+                    MessageBox.Show(this, result.FriendlyMessage, "Cannot Deactivate",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _loading = false;
+                Execute(LoadLocations);
+            });
     }
 
     private void ReactivateSelected()
@@ -390,11 +424,43 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
         if (confirm != DialogResult.Yes) return;
 
-        var result = _commandRepo.ReactivateBin(loc.BinCode);
-        if (!result.Success)
-            MessageBox.Show(this, result.FriendlyMessage, "Cannot Reactivate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        var binCode = loc.BinCode;
+        ExecuteAsync(
+            () => _commandRepo.ReactivateBin(binCode),
+            result =>
+            {
+                if (!result.Success)
+                    MessageBox.Show(this, result.FriendlyMessage, "Cannot Reactivate",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _loading = false;
+                Execute(LoadLocations);
+            });
+    }
 
-        Execute(LoadLocations);
+    private void DeleteSelected()
+    {
+        if (Selected() is not LocationDto loc) return;
+
+        var confirm = MessageBox.Show(this,
+            $"Permanently delete location {loc.BinCode}?\n\nThis cannot be undone. The location must have no operational history.",
+            "Confirm Delete",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var binCode = loc.BinCode;
+        ExecuteAsync(
+            () => _commandRepo.DeleteBin(binCode),
+            result =>
+            {
+                if (!result.Success)
+                    MessageBox.Show(this, result.FriendlyMessage, "Cannot Delete",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _loading = false;
+                Execute(LoadLocations);
+            });
     }
 
     private void UpdateToolbarState()
@@ -411,6 +477,7 @@ public sealed class LocationsView : BaseView, IToolbarAware
         if (_btnUnlock     is not null) _btnUnlock.Enabled     = loc is not null &&  loc.IsActive &&  loc.IsLocked;
         if (_btnDeactivate is not null) _btnDeactivate.Enabled = loc is not null &&  loc.IsActive;
         if (_btnReactivate is not null) _btnReactivate.Enabled = loc is not null && !loc.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = loc is not null && !loc.IsActive;
     }
 
     // Single selected row (for edit/lock/unlock/deactivate/reactivate)

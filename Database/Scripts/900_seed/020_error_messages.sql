@@ -242,6 +242,34 @@ INSERT INTO operations.error_messages (error_code, module_code, severity, messag
 SELECT N'SUCBIN08', N'BIN', N'SUCCESS', N'Locations activated.', N'usp_activate_bins: success'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN08');
 
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCBIN09', N'BIN', N'SUCCESS', N'Location deleted.', N'usp_delete_bin: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCBIN09');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN12', N'BIN', N'ERROR', N'Location must be deactivated before it can be deleted.', N'usp_delete_bin: is_active = 1'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN12');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRBIN13', N'BIN', N'ERROR', N'Cannot delete — this location has operational history (movements, placements or tasks). Deactivate instead.', N'usp_delete_bin: referenced in movements/placements/tasks'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN13');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRZON03', N'ZONE', N'ERROR', N'Cannot delete — bins are assigned to this zone. Reassign them first.', N'usp_delete_zone: bins exist with zone_id'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRZON03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCZON06', N'ZONE', N'SUCCESS', N'Zone deleted.', N'usp_delete_zone: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON06');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRSEC03', N'SEC', N'ERROR', N'Cannot delete — bins are assigned to this section. Reassign them first.', N'usp_delete_section: bins exist with storage_section_id'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRSEC03');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCSEC06', N'SEC', N'SUCCESS', N'Section deleted.', N'usp_delete_section: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCSEC06');
+
 -- ── ZONES ─────────────────────────────────────────────────────
 
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)

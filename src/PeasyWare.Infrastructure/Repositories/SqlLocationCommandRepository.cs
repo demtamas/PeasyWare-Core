@@ -200,6 +200,22 @@ public sealed class SqlLocationCommandRepository : RepositoryBase, ILocationComm
         return BuildResult("Location.Update", code, new { BinCode = binCode, CapacityWarning = capWarn, Before = before, After = after });
     }
 
+    public OperationResult DeleteBin(string binCode)
+    {
+        EnsureSession();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_delete_bin";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@bin_code", SqlDbType.NVarChar, 100) { Value = binCode });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Location.Delete", "ERRBIN99", new { BinCode = binCode });
+        return BuildResult("Location.Delete", reader.GetString(reader.GetOrdinal("result_code")), new { BinCode = binCode });
+    }
+
     public OperationResult DeactivateBin(string binCode, string? reason = null)
     {
         EnsureSession();

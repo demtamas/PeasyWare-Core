@@ -21,6 +21,7 @@ public sealed class ZonesView : BaseView, IToolbarAware
     private ToolStripButton? _btnDeactivate;
     private ToolStripButton? _btnReactivate;
     private ToolStripButton? _btnShowInactive;
+    private ToolStripButton? _btnDelete;
 
     private bool _showInactive = false;
 
@@ -70,6 +71,9 @@ public sealed class ZonesView : BaseView, IToolbarAware
         _btnShowInactive = new ToolStripButton("Show inactive") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnShowInactive.Click += Wrap(ToggleInactive);
 
+        _btnDelete = new ToolStripButton("Delete") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false, ForeColor = System.Drawing.Color.DarkRed };
+        _btnDelete.Click += Wrap(DeleteSelected);
+
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnNew);
@@ -80,6 +84,7 @@ public sealed class ZonesView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnReactivate);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnShowInactive);
+        toolStrip.Items.Add(_btnDelete);
     }
 
     private static void ConfigureGrid(DataGridView dgv)
@@ -144,6 +149,7 @@ public sealed class ZonesView : BaseView, IToolbarAware
         if (_btnAssign     is not null) _btnAssign.Enabled     = z is not null;
         if (_btnDeactivate is not null) _btnDeactivate.Enabled = z is not null &&  z.IsActive;
         if (_btnReactivate is not null) _btnReactivate.Enabled = z is not null && !z.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = z is not null;
     }
 
     private void AssignToLocations()
@@ -161,6 +167,20 @@ public sealed class ZonesView : BaseView, IToolbarAware
             });
 
         form.ShowDialog(this);
+        Execute(LoadZones);
+    }
+
+    private void DeleteSelected()
+    {
+        if (Selected() is not ZoneDto z) return;
+        if (z.TotalBins > 0)
+        { MessageBox.Show(this, $"{z.TotalBins} bin(s) are assigned to this zone. Reassign them first.", "Cannot Delete", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        var confirm = MessageBox.Show(this, $"Permanently delete zone {z.ZoneCode}?", "Confirm Delete",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (confirm != DialogResult.Yes) return;
+        var result = _repo.DeleteZone(z.ZoneCode);
+        if (!result.Success)
+            MessageBox.Show(this, result.FriendlyMessage, "Cannot Delete", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         Execute(LoadZones);
     }
 

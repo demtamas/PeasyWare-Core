@@ -129,4 +129,20 @@ public sealed class SqlZoneRepository : RepositoryBase, IZoneRepository
         if (!reader.Read()) return BuildResult("Zone.Reactivate", "ERRZON99", new { ZoneCode = zoneCode });
         return BuildResult("Zone.Reactivate", reader.GetString(1), new { ZoneCode = zoneCode });
     }
+
+    public OperationResult DeleteZone(string zoneCode)
+    {
+        EnsureSession();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_delete_zone";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@zone_code", SqlDbType.NVarChar, 50) { Value = zoneCode });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Zone.Delete", "ERRZON99", new { ZoneCode = zoneCode });
+        return BuildResult("Zone.Delete", reader.GetString(1), new { ZoneCode = zoneCode });
+    }
 }

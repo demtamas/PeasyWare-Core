@@ -28,6 +28,40 @@ public partial class BaseView : UserControl
         Main.ExecuteWithSession(action);
     }
 
+    /// <summary>
+    /// Runs <paramref name="dbWork"/> on a thread-pool thread, then calls
+    /// <paramref name="uiCallback"/> on the UI thread with the result.
+    /// The wait cursor is shown for the duration.
+    /// </summary>
+    protected void ExecuteAsync<T>(
+        Func<T>    dbWork,
+        Action<T>  uiCallback)
+    {
+        if (Main is null) return;
+        if (Main.GetIsSessionExpired()) return;
+
+        Main.Cursor = System.Windows.Forms.Cursors.WaitCursor;
+
+        System.Threading.Tasks.Task.Run(dbWork)
+            .ContinueWith(t =>
+            {
+                Main.Cursor = System.Windows.Forms.Cursors.Default;
+
+                if (t.IsFaulted)
+                {
+                    System.Windows.Forms.MessageBox.Show(
+                        t.Exception?.InnerException?.Message ?? "Unexpected error.",
+                        "Error",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Error);
+                    return;
+                }
+
+                uiCallback(t.Result);
+
+            }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
     protected EventHandler Wrap(Action action)
     {
         return (_, _) => Execute(action);

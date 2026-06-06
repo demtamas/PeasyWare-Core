@@ -129,4 +129,20 @@ public sealed class SqlSectionRepository : RepositoryBase, ISectionRepository
         if (!reader.Read()) return BuildResult("Section.Reactivate", "ERRSEC99", new { SectionCode = sectionCode });
         return BuildResult("Section.Reactivate", reader.GetString(1), new { SectionCode = sectionCode });
     }
+
+    public OperationResult DeleteSection(string sectionCode)
+    {
+        EnsureSession();
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+        command.CommandText  = "locations.usp_delete_section";
+        command.CommandType  = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@section_code", SqlDbType.NVarChar, 50) { Value = sectionCode });
+        command.Parameters.AddWithValue("@user_id",        _session.UserId);
+        command.Parameters.AddWithValue("@session_id",     _session.SessionId);
+        command.Parameters.AddWithValue("@correlation_id", _session.CorrelationId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return BuildResult("Section.Delete", "ERRSEC99", new { SectionCode = sectionCode });
+        return BuildResult("Section.Delete", reader.GetString(1), new { SectionCode = sectionCode });
+    }
 }

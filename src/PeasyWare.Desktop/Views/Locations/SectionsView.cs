@@ -21,6 +21,7 @@ public sealed class SectionsView : BaseView, IToolbarAware
     private ToolStripButton? _btnDeactivate;
     private ToolStripButton? _btnReactivate;
     private ToolStripButton? _btnShowInactive;
+    private ToolStripButton? _btnDelete;
 
     private bool _showInactive = false;
 
@@ -70,6 +71,9 @@ public sealed class SectionsView : BaseView, IToolbarAware
         _btnShowInactive = new ToolStripButton("Show inactive") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnShowInactive.Click += Wrap(ToggleInactive);
 
+        _btnDelete = new ToolStripButton("Delete") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false, ForeColor = System.Drawing.Color.DarkRed };
+        _btnDelete.Click += Wrap(DeleteSelected);
+
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnNew);
@@ -80,6 +84,7 @@ public sealed class SectionsView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnReactivate);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnShowInactive);
+        toolStrip.Items.Add(_btnDelete);
     }
 
     private static void ConfigureGrid(DataGridView dgv)
@@ -144,6 +149,7 @@ public sealed class SectionsView : BaseView, IToolbarAware
         if (_btnAssign     is not null) _btnAssign.Enabled     = s is not null;
         if (_btnDeactivate is not null) _btnDeactivate.Enabled = s is not null &&  s.IsActive;
         if (_btnReactivate is not null) _btnReactivate.Enabled = s is not null && !s.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = s is not null;
     }
 
     private void AssignToLocations()
@@ -161,6 +167,20 @@ public sealed class SectionsView : BaseView, IToolbarAware
             });
 
         form.ShowDialog(this);
+        Execute(LoadSections);
+    }
+
+    private void DeleteSelected()
+    {
+        if (Selected() is not SectionDto s) return;
+        if (s.TotalBins > 0)
+        { MessageBox.Show(this, $"{s.TotalBins} bin(s) are assigned to this section. Reassign them first.", "Cannot Delete", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        var confirm = MessageBox.Show(this, $"Permanently delete section {s.SectionCode}?", "Confirm Delete",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (confirm != DialogResult.Yes) return;
+        var result = _repo.DeleteSection(s.SectionCode);
+        if (!result.Success)
+            MessageBox.Show(this, result.FriendlyMessage, "Cannot Delete", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         Execute(LoadSections);
     }
 

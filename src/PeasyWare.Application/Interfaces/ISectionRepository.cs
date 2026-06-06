@@ -12,4 +12,5 @@ public interface ISectionRepository
     OperationResult UpdateSection(string sectionCode, string? sectionName = null, string? description = null, bool clearDesc = false);
     OperationResult DeactivateSection(string sectionCode);
     OperationResult ReactivateSection(string sectionCode);
+    OperationResult DeleteSection(string sectionCode);
 }

@@ -47,7 +47,7 @@ public partial class MainForm : Form
         _runtime = runtime;
         _views = views;
 
-        Text = $"PeasyWare – {session.DisplayName} | Session {session.SessionId.ToString()[..8]}";
+        Text = $"PeasyWare – {session.DisplayName ?? session.Username} | Session {session.SessionId.ToString()[..8]}";
 
         HookGlobalInteraction(this);
         InitializeHeartbeat();
@@ -86,7 +86,7 @@ public partial class MainForm : Form
 
     private void InitializeHeartbeat()
     {
-        _heartbeatTimer.Interval = 60000;
+        _heartbeatTimer.Interval = 30000; // 30s — fast enough to catch expiry, not so frequent it blocks
 
         _heartbeatTimer.Tick += (_, _) =>
         {
@@ -182,35 +182,13 @@ public partial class MainForm : Form
 
     private bool EnsureSessionAlive()
     {
-        Console.WriteLine($"TRACE.UI.Session: {_session.SessionId} / {_session.UserId}");
-
-        if (_sessionExpired)
+        // Fast path — just check local flag.
+        // The heartbeat timer (60s) handles the actual DB touch.
+        // Hitting the DB on every button click blocks the UI thread.
+        if (_sessionExpired || isSessionExpired)
             return false;
 
-        try
-        {
-            var repo = _runtime.Repositories.CreateSessionCommand(_session);
-
-            var result = repo.TouchSession(
-                _session.SessionId,
-                "PeasyWare.Desktop",
-                Environment.MachineName,
-                IpResolver.GetLocalIPv4());
-
-            if (!result.IsAlive)
-            {
-                HandleSessionExpired(
-                    result.FriendlyMessage ?? "Session expired.");
-                return false;
-            }
-
-            return true;
-        }
-        catch (SessionExpiredException ex)
-        {
-            HandleSessionExpired(ex.Message);
-            return false;
-        }
+        return true;
     }
 
     // --------------------------------------------------
@@ -449,6 +427,7 @@ public partial class MainForm : Form
             if (!EnsureSessionAlive())
                 return;
 
+            Cursor = Cursors.WaitCursor;
             action();
         }
         catch (SessionExpiredException ex)
@@ -463,6 +442,10 @@ public partial class MainForm : Form
                 "Unexpected error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
         }
     }
 
