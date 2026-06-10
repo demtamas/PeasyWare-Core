@@ -4,24 +4,8 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
--- Add updated_at / updated_by to zones
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('locations.zones') AND name = 'updated_at')
-BEGIN
-    ALTER TABLE locations.zones
-        ADD updated_at DATETIME2(3) NULL,
-            updated_by INT          NULL;
-    PRINT 'locations.zones: updated_at/updated_by added.';
-END
-
--- Add updated_at / updated_by to storage_sections
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('locations.storage_sections') AND name = 'updated_at')
-BEGIN
-    ALTER TABLE locations.storage_sections
-        ADD updated_at DATETIME2(3) NULL,
-            updated_by INT          NULL;
-    PRINT 'locations.storage_sections: updated_at/updated_by added.';
-END
-GO
+-- updated_at/updated_by are now part of 010_tables.sql for both zones and storage_sections.
+-- This file creates the summary views that depend on those columns.
 
 -- ============================================================
 -- v_zones — zones with bin count

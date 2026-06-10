@@ -35,27 +35,14 @@ CREATE TABLE locations.storage_types
 CREATE TABLE locations.storage_sections
 (
     storage_section_id INT IDENTITY(1,1) PRIMARY KEY,
-
-    --storage_type_id    INT NOT NULL,
-
-    -- Section identifier (FLOOR, MID, TOP, LEFT, RIGHT, etc.)
-    section_code       NVARCHAR(50) NOT NULL,
-
+    section_code       NVARCHAR(50)  NOT NULL,
     section_name       NVARCHAR(100) NOT NULL,
-
     description        NVARCHAR(255) NULL,
-
-    is_active          BIT NOT NULL DEFAULT (1),
-
+    is_active          BIT          NOT NULL DEFAULT (1),
     created_at         DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by         INT NULL,
-
-    --CONSTRAINT fk_storage_sections_type
-    --    FOREIGN KEY (storage_type_id)
-    --    REFERENCES locations.storage_types(storage_type_id),
-
-    --CONSTRAINT uq_storage_sections_type_code
-    --    UNIQUE (storage_type_id, section_code)
+    updated_at         DATETIME2(3) NULL,
+    updated_by         INT NULL
 );
 
 
@@ -68,19 +55,15 @@ CREATE TABLE locations.storage_sections
 CREATE TABLE locations.zones
 (
     zone_id        INT IDENTITY(1,1) PRIMARY KEY,
-
-    zone_code      NVARCHAR(50) NOT NULL,
+    zone_code      NVARCHAR(50)  NOT NULL,
     zone_name      NVARCHAR(100) NOT NULL,
-
     description    NVARCHAR(255) NULL,
-
-    is_active      BIT NOT NULL DEFAULT (1),
-
+    is_active      BIT          NOT NULL DEFAULT (1),
     created_at     DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by     INT NULL,
-
-    CONSTRAINT uq_zones_code
-        UNIQUE (zone_code)
+    updated_at     DATETIME2(3) NULL,
+    updated_by     INT NULL,
+    CONSTRAINT uq_zones_code UNIQUE (zone_code)
 );
 
 /* ============================================================
@@ -92,40 +75,28 @@ CREATE TABLE locations.zones
 CREATE TABLE locations.bins
 (
     bin_id              INT IDENTITY(1,1) PRIMARY KEY,
-
-    -- Human-readable warehouse identifier (A1-01-01, BAY03, etc.)
     bin_code            NVARCHAR(100) NOT NULL,
-
-    storage_type_id     INT NOT NULL,
-    storage_section_id  INT NULL,
-    zone_id             INT NULL,
-
-    -- Capacity expressed in logical units (pallets for now)
-    capacity            INT NOT NULL DEFAULT (1),
-
-    is_active           BIT NOT NULL DEFAULT (1),
-
+    storage_type_id     INT          NOT NULL,
+    storage_section_id  INT          NULL,
+    zone_id             INT          NULL,
+    capacity            INT          NOT NULL DEFAULT (1),
+    is_active           BIT          NOT NULL DEFAULT (1),
+    is_locked           BIT          NOT NULL DEFAULT (0),
+    locked_by           INT          NULL,
+    locked_at           DATETIME2(3) NULL,
+    locked_reason       NVARCHAR(255) NULL,
     notes               NVARCHAR(255) NULL,
-
     created_at          DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by          INT NULL,
     updated_at          DATETIME2(3) NULL,
     updated_by          INT NULL,
-
-    CONSTRAINT uq_bins_code
-        UNIQUE (bin_code),
-
+    CONSTRAINT uq_bins_code        UNIQUE (bin_code),
     CONSTRAINT fk_bins_storage_type
-        FOREIGN KEY (storage_type_id)
-        REFERENCES locations.storage_types(storage_type_id),
-
+        FOREIGN KEY (storage_type_id)  REFERENCES locations.storage_types(storage_type_id),
     CONSTRAINT fk_bins_storage_section
-        FOREIGN KEY (storage_section_id)
-        REFERENCES locations.storage_sections(storage_section_id),
-
+        FOREIGN KEY (storage_section_id) REFERENCES locations.storage_sections(storage_section_id),
     CONSTRAINT fk_bins_zone
-        FOREIGN KEY (zone_id)
-        REFERENCES locations.zones(zone_id)
+        FOREIGN KEY (zone_id) REFERENCES locations.zones(zone_id)
 );
 
 CREATE INDEX IX_bins_storage_lookup

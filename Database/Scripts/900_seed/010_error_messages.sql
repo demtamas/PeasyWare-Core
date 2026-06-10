@@ -4,98 +4,106 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
+-- ============================================================
+-- Error messages: Inbound · SKU · Inventory · Party
+-- ============================================================
+
 INSERT INTO operations.error_messages
     (error_code, module_code, severity, message_template, tech_messege)
 SELECT v.error_code, v.module_code, v.severity, v.message_template, v.tech_messege
 FROM (VALUES
 
-    -- Order
-    (N'ERRORD01', N'ORD', N'ERROR',
-        N'Order not found.',
-        N'Order: outbound_order_id not found'),
+    -- ── Inbound ────────────────────────────────────────────────────────────
+    (N'ERRINB02',  N'INB', N'ERROR',
+        N'An inbound delivery with this reference already exists.',
+        N'inbound.usp_create_inbound: duplicate inbound_ref'),
 
-    (N'ERRORD02', N'ORD', N'ERROR',
-        N'Order is not in a valid state for this operation.',
-        N'Order: invalid status transition'),
+    (N'ERRINB03',  N'INB', N'ERROR',
+        N'Inbound delivery not found.',
+        N'inbound.usp_cancel_inbound: inbound_ref not found'),
 
-    (N'ERRORD03', N'ORD', N'ERROR',
-        N'Order reference already exists.',
-        N'Order.Create: duplicate order_ref'),
+    (N'ERRINB04',  N'INB', N'ERROR',
+        N'This inbound is already closed or cancelled.',
+        N'inbound.usp_cancel_inbound: status is CLS or CNL'),
 
-    (N'ERRORD04', N'ORD', N'ERROR',
-        N'Order has no lines and cannot be processed.',
-        N'Order: no active lines'),
+    (N'ERRINB05',  N'INB', N'ERROR',
+        N'Cannot cancel — receiving is in progress on this delivery.',
+        N'inbound.usp_cancel_inbound: status is RCV'),
 
-    (N'SUCORD01', N'ORD', N'INFO',
-        N'Order created successfully.',
-        N'Order.Create: success'),
+    (N'ERRINB06',  N'INB', N'ERROR',
+        N'Cannot cancel — units have already been received against this delivery. Reverse all receipts first.',
+        N'inbound.usp_cancel_inbound: receipts exist on activated inbound'),
 
-    (N'SUCORD02', N'ORD', N'INFO',
-        N'Order allocated successfully.',
-        N'Order.Allocate: success'),
+    (N'SUCINB02',  N'INB', N'SUCCESS',
+        N'Inbound delivery created successfully.',
+        N'inbound.usp_create_inbound: success'),
 
-    (N'SUCORD03', N'ORD', N'INFO',
-        N'Order shipped successfully.',
-        N'Order.Ship: success'),
+    (N'SUCINB03',  N'INB', N'SUCCESS',
+        N'Inbound delivery cancelled.',
+        N'inbound.usp_cancel_inbound: success'),
 
-    -- Allocation
-    (N'ERRALLOC01', N'ALLOC', N'ERROR',
-        N'Insufficient stock available to fulfil this order line.',
-        N'Allocate: not enough PUTAWAY+AVAILABLE units for SKU'),
+    (N'SUCINBL02', N'INB', N'SUCCESS',
+        N'Inbound line created successfully.',
+        N'inbound.usp_create_inbound_line: success'),
 
-    (N'ERRALLOC02', N'ALLOC', N'ERROR',
-        N'Requested batch or best-before date not available.',
-        N'Allocate: no units matching requested_batch / requested_bbe'),
+    (N'SUCINBU01', N'INB', N'SUCCESS',
+        N'Expected unit created successfully.',
+        N'inbound.usp_create_expected_unit: success'),
 
-    (N'ERRALLOC03', N'ALLOC', N'ERROR',
-        N'Unit is already allocated to another order.',
-        N'Allocate: inventory_unit already has active allocation'),
+    (N'ERRINBU01', N'INB', N'ERROR',
+        N'This SSCC is already registered on this inbound delivery.',
+        N'inbound.usp_create_expected_unit: duplicate sscc on inbound'),
 
-    (N'SUCALLOC01', N'ALLOC', N'INFO',
-        N'Stock allocated successfully.',
-        N'Allocate: allocation rows created'),
+    -- ── SKU ────────────────────────────────────────────────────────────────
+    (N'ERRSKU01',  N'SKU', N'ERROR',
+        N'SKU not found.',
+        N'inventory.usp_create_sku: sku_code not found'),
 
-    -- Pick
-    (N'ERRPICK01', N'PICK', N'ERROR',
-        N'Allocation not found or already picked.',
-        N'Pick: allocation_id not found or status terminal'),
+    (N'ERRSKU02',  N'SKU', N'ERROR',
+        N'A SKU with this code already exists.',
+        N'inventory.usp_create_sku: duplicate sku_code'),
 
-    (N'ERRPICK02', N'PICK', N'ERROR',
-        N'Wrong pallet scanned. Expected a different SSCC.',
-        N'Pick.Confirm: scanned SSCC does not match allocated unit'),
+    (N'ERRSKU03',  N'SKU', N'ERROR',
+        N'Owner party not found or inactive.',
+        N'inventory.usp_create_sku: @owner_party_code not found in core.parties'),
 
-    (N'ERRPICK03', N'PICK', N'ERROR',
-        N'Unit is not in the expected location.',
-        N'Pick.Confirm: unit placement bin does not match task source bin'),
+    (N'ERRSKU04',  N'SKU', N'ERROR',
+        N'Owner is required when multi-owner mode is enabled.',
+        N'inventory.usp_create_sku: @owner_party_code is null but inventory.enable_multi_owner = true'),
 
-    (N'SUCPICK01', N'PICK', N'INFO',
-        N'Pick confirmed successfully.',
-        N'Pick.Confirm: unit transitioned to PKD'),
+    (N'SUCSKU01',  N'SKU', N'SUCCESS',
+        N'SKU created successfully.',
+        N'inventory.usp_create_sku: success'),
 
-    -- Shipment
-    (N'ERRSHIP01', N'SHIP', N'ERROR',
-        N'Shipment not found.',
-        N'Shipment: shipment_id not found'),
+    (N'SUCSKU02',  N'SKU', N'SUCCESS',
+        N'SKU updated successfully.',
+        N'inventory.usp_update_sku: success'),
 
-    (N'ERRSHIP02', N'SHIP', N'ERROR',
-        N'Shipment is not in a valid state for this operation.',
-        N'Shipment: invalid status transition'),
+    -- ── Inventory ──────────────────────────────────────────────────────────
+    (N'SUCINV01',  N'INVENTORY', N'INFO',
+        N'Stock status updated successfully.',
+        N'inventory.usp_update_stock_status: OK'),
 
-    (N'ERRSHIP03', N'SHIP', N'ERROR',
-        N'Shipment reference already exists.',
-        N'Shipment.Create: duplicate shipment_ref'),
+    (N'ERRINV02',  N'INVENTORY', N'ERROR',
+        N'Invalid stock status code.',
+        N'inventory.usp_update_stock_status: status not found'),
 
-    (N'ERRSHIP04', N'SHIP', N'ERROR',
-        N'Not all orders on this shipment are fully picked.',
-        N'Shipment.Ship: one or more orders not in PICKED or LOADED status'),
+    (N'ERRINV99',  N'INVENTORY', N'ERROR',
+        N'Unexpected error updating stock status.',
+        N'inventory.usp_update_stock_status: CATCH block'),
 
-    (N'SUCSHIP01', N'SHIP', N'INFO',
-        N'Shipment created successfully.',
-        N'Shipment.Create: success'),
+    -- ── Party ──────────────────────────────────────────────────────────────
+    (N'ERRPARTY01', N'PARTY', N'ERROR',
+        N'A party with this code already exists.',
+        N'core.usp_create_party: duplicate party_code'),
 
-    (N'SUCSHIP02', N'SHIP', N'INFO',
-        N'Shipment departed. All units shipped.',
-        N'Shipment.Ship: all units transitioned to SHP')
+    (N'ERRPARTY02', N'PARTY', N'ERROR',
+        N'Party not found.',
+        N'core.usp_update_party: party_id not found'),
+
+    (N'ERRPARTY99', N'PARTY', N'ERROR',
+        N'Unexpected error processing party.',
+        N'core.usp_create_party/usp_update_party: unhandled exception')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (
@@ -103,39 +111,5 @@ WHERE NOT EXISTS (
     WHERE e.error_code = v.error_code
 );
 GO
-
-PRINT 'Outbound error codes inserted.';
-GO
-GO
-
-
-/********************************************************************************************
-    OUTBOUND STORED PROCEDURES
-    All 7 outbound SPs. CREATE OR ALTER — safe to re-run after DB reset.
-********************************************************************************************/
-
-/********************************************************************************************
-    WIP PATCH — Pick flow improvements
-    Date: 2026-04-18
-
-    1. usp_pick_create: add @destination_bin_code parameter
-       Operator can specify which staging bay to pick into.
-       If NULL, falls back to first active staging bin (existing behaviour).
-********************************************************************************************/
-GO
-
--- Allocation warning: ran successfully but no new stock found
-INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
-SELECT N'WARNORD01', N'OUTBOUND', N'WARN',
-    N'No eligible stock found to allocate. Check stock availability and status.',
-    N'usp_allocate_order: newly_allocated_qty = 0'
-WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'WARNORD01');
-GO
-
--- Outbound: delivery address validation
-INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
-SELECT N'ERRORD06', N'OUTBOUND', N'ERROR',
-    N'Delivery address not found or does not belong to the specified customer.',
-    N'usp_create_order: delivery_address_id invalid or not owned by customer_party_id'
-WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRORD06');
+PRINT 'Inbound / SKU / Inventory / Party error codes seeded.';
 GO
