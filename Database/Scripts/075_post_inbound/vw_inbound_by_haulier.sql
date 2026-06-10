@@ -1,2 +1,0 @@
-USE PW_Core_DEV;
-GO
