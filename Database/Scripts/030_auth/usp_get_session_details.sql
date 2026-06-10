@@ -13,7 +13,7 @@ BEGIN
     SET NOCOUNT ON;
 
     SELECT *
-    FROM auth.vw_session_forensic
+    FROM auth.v_session_forensic
     WHERE session_id = @session_id;
 END;
 GO

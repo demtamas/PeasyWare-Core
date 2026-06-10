@@ -36,7 +36,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
 
         command.CommandText = """
             SELECT inbound_id, inbound_ref, expected_arrival_at, line_count
-            FROM inbound.vw_inbounds_activatable
+            FROM inbound.v_inbounds_activatable
             ORDER BY expected_arrival_at, inbound_ref
         """;
 
@@ -71,7 +71,7 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
         command.CommandText = """
             SELECT inbound_line_id, line_no, sku_code, sku_description,
                    expected_qty, received_qty, outstanding_qty
-            FROM inbound.vw_inbound_lines_receivable
+            FROM inbound.v_inbound_lines_receivable
             WHERE inbound_ref = @ref
             ORDER BY line_no
         """;
