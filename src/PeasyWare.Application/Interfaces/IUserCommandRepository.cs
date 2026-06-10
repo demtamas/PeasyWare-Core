@@ -19,6 +19,8 @@ public interface IUserCommandRepository
     string email,
     string password);
     OperationResult ResetPasswordAsAdmin(int targetUserId, string newPassword);
+    OperationResult UpdateUser(int userId, string? displayName = null, string? email = null, string? roleName = null);
+    OperationResult LogoutAllSessions(string? reason = null);
 
 
 }

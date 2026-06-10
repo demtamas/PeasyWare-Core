@@ -4,6 +4,7 @@ using PeasyWare.Application.Security;
 using PeasyWare.Desktop.Infrastructure;
 using PeasyWare.Infrastructure.Bootstrap;
 using System;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace PeasyWare.Desktop.Forms;
@@ -447,6 +448,73 @@ public partial class MainForm : Form
         {
             Cursor = Cursors.Default;
         }
+    }
+
+    // ==========================================================
+    // Help menu
+    // ==========================================================
+
+    private void aboutPeasyWareToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        using var dlg = new PeasyWare.Desktop.Forms.Help.AboutForm();
+        dlg.ShowDialog(this);
+    }
+
+    private void versionInfoToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        var cs     = _runtime.ConnectionFactory.ConnectionString;
+        var server = ParseCsKey(cs, "Server", "Data Source") ?? "(unknown)";
+        var db     = ParseCsKey(cs, "Database", "Initial Catalog") ?? "(unknown)";
+
+        using var dlg = new PeasyWare.Desktop.Forms.Help.VersionInfoForm(
+            _session, server, db);
+        dlg.ShowDialog(this);
+    }
+
+    private void databaseVersionToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        var cs      = _runtime.ConnectionFactory.ConnectionString;
+        var server  = ParseCsKey(cs, "Server", "Data Source") ?? "(unknown)";
+        var db      = ParseCsKey(cs, "Database", "Initial Catalog") ?? "(unknown)";
+
+        var settings    = _runtime.SettingsQueryRepository.GetSettings();
+        var verSetting  = settings.FirstOrDefault(s => s.SettingName == "core.version");
+        var schemaVer   = verSetting?.SettingValue ?? "(unknown)";
+        var schemaUpdated = verSetting?.UpdatedAt;
+
+        using var dlg = new PeasyWare.Desktop.Forms.Help.DatabaseVersionForm(
+            schemaVer, server, db, schemaUpdated);
+        dlg.ShowDialog(this);
+    }
+
+    private void supportToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        var asm       = System.Reflection.Assembly.GetEntryAssembly();
+        var ver       = asm?.GetName().Version;
+        var appVer    = ver is not null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0";
+
+        var settings  = _runtime.SettingsQueryRepository.GetSettings();
+        var schemaVer = settings.FirstOrDefault(s => s.SettingName == "core.version")?.SettingValue ?? "(unknown)";
+
+        using var dlg = new PeasyWare.Desktop.Forms.Help.SupportForm(
+            _session.SessionId.ToString(), appVer, schemaVer);
+        dlg.ShowDialog(this);
+    }
+
+    /// <summary>Simple key-value parser for SQL Server connection strings.</summary>
+    private static string? ParseCsKey(string cs, params string[] keys)
+    {
+        foreach (var pair in cs.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var idx = pair.IndexOf('=');
+            if (idx < 0) continue;
+            var key = pair[..idx].Trim();
+            var val = pair[(idx + 1)..].Trim();
+            foreach (var k in keys)
+                if (key.Equals(k, StringComparison.OrdinalIgnoreCase))
+                    return val;
+        }
+        return null;
     }
 
     private void movementsToolStripMenuItem_Click(object sender, EventArgs e)

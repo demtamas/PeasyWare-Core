@@ -339,6 +339,22 @@ SELECT N'SUCZON05', N'ZONE', N'SUCCESS', N'Bins assigned to zone.', N'usp_assign
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCZON05');
 
 INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCAUTH08', N'AUTH', N'SUCCESS', N'User updated.', N'usp_update_user: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCAUTH08');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'SUCAUTH09', N'AUTH', N'SUCCESS', N'Sessions terminated.', N'usp_logout_all_sessions: success'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'SUCAUTH09');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRAUTHUSR05', N'AUTH', N'ERROR', N'User not found.', N'usp_update_user: user_id not found'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRAUTHUSR05');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
+SELECT N'ERRAUTHUSR06', N'AUTH', N'ERROR', N'Role not found.', N'usp_update_user: role_name not found in auth.roles'
+WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRAUTHUSR06');
+
+INSERT INTO operations.error_messages (error_code, module_code, severity, message_template, tech_messege)
 SELECT N'ERRBIN06', N'BIN', N'ERROR', N'Cannot rename a location that contains stock. Move or remove stock first.', N'usp_update_bin: rename blocked, unit_count > 0'
 WHERE NOT EXISTS (SELECT 1 FROM operations.error_messages WHERE error_code = N'ERRBIN06');
 

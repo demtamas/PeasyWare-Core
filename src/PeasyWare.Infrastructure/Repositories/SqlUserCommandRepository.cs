@@ -212,6 +212,87 @@ public sealed class SqlUserCommandRepository
     }
 
     // --------------------------------------------------
+    // Logout all sessions (maintenance)
+    // --------------------------------------------------
+
+    public OperationResult LogoutAllSessions(string? reason = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "auth.usp_logout_all_sessions";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@exclude_session_id", SqlDbType.UniqueIdentifier).Value = _session.SessionId;
+        command.Parameters.Add("@reason",            SqlDbType.NVarChar, 255).Value    = (object?)reason ?? DBNull.Value;
+        command.Parameters.Add("@admin_user_id",     SqlDbType.Int).Value              = _session.UserId;
+        command.Parameters.Add("@correlation_id",    SqlDbType.UniqueIdentifier).Value = _session.CorrelationId;
+
+        var pCode = command.Parameters.Add("@result_code",      SqlDbType.NVarChar, 20);
+        pCode.Direction = ParameterDirection.Output;
+
+        var pMsg = command.Parameters.Add("@friendly_msg",      SqlDbType.NVarChar, 400);
+        pMsg.Direction = ParameterDirection.Output;
+
+        var pSuccess = command.Parameters.Add("@success",        SqlDbType.Bit);
+        pSuccess.Direction = ParameterDirection.Output;
+
+        var pCount = command.Parameters.Add("@terminated_count", SqlDbType.Int);
+        pCount.Direction = ParameterDirection.Output;
+
+        command.ExecuteNonQuery();
+
+        return BuildResult(
+            action:        "session.logout_all",
+            resultCodeObj: pCode.Value,
+            messageObj:    pMsg.Value,
+            operation: new
+            {
+                PerformedBy      = _session.UserId,
+                TerminatedCount  = pCount.Value,
+                Reason           = reason
+            });
+    }
+
+    // --------------------------------------------------
+    // Update user profile
+    // --------------------------------------------------
+
+    public OperationResult UpdateUser(
+        int userId,
+        string? displayName = null,
+        string? email       = null,
+        string? roleName    = null)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "auth.usp_update_user";
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@user_id",        SqlDbType.Int)            { Value = userId });
+        command.Parameters.Add(new SqlParameter("@display_name",   SqlDbType.NVarChar, 100) { Value = (object?)displayName ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@email",          SqlDbType.NVarChar, 200) { Value = (object?)email       ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@role_name",      SqlDbType.NVarChar, 50)  { Value = (object?)roleName    ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@admin_user_id",  SqlDbType.Int)            { Value = _session.UserId });
+        command.Parameters.Add(new SqlParameter("@session_id",     SqlDbType.UniqueIdentifier) { Value = _session.SessionId });
+        command.Parameters.Add(new SqlParameter("@correlation_id", SqlDbType.UniqueIdentifier) { Value = _session.CorrelationId });
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+            return BuildResult("user.update", "ERRAUTH99", DBNull.Value,
+                new { UserId = userId });
+
+        var code = reader.GetString(reader.GetOrdinal("result_code"));
+        return BuildResult("user.update", code, DBNull.Value,
+            new { AdminUserId = _session.UserId, TargetUserId = userId,
+                  DisplayName = displayName, Email = email, RoleName = roleName });
+    }
+
+    // --------------------------------------------------
     // Shared result builder (GOLD STANDARD)
     // --------------------------------------------------
 

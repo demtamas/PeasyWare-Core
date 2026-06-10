@@ -442,24 +442,28 @@
             aboutPeasyWareToolStripMenuItem.Name = "aboutPeasyWareToolStripMenuItem";
             aboutPeasyWareToolStripMenuItem.Size = new Size(167, 22);
             aboutPeasyWareToolStripMenuItem.Text = "&About PeasyWare";
+            aboutPeasyWareToolStripMenuItem.Click += aboutPeasyWareToolStripMenuItem_Click;
             // 
             // versionInfoToolStripMenuItem
-            // 
+            //
             versionInfoToolStripMenuItem.Name = "versionInfoToolStripMenuItem";
             versionInfoToolStripMenuItem.Size = new Size(167, 22);
             versionInfoToolStripMenuItem.Text = "&Version info";
+            versionInfoToolStripMenuItem.Click += versionInfoToolStripMenuItem_Click;
             // 
             // databaseVersionToolStripMenuItem
-            // 
+            //
             databaseVersionToolStripMenuItem.Name = "databaseVersionToolStripMenuItem";
             databaseVersionToolStripMenuItem.Size = new Size(167, 22);
             databaseVersionToolStripMenuItem.Text = "&Database version";
+            databaseVersionToolStripMenuItem.Click += databaseVersionToolStripMenuItem_Click;
             // 
             // supportToolStripMenuItem
             // 
             supportToolStripMenuItem.Name = "supportToolStripMenuItem";
             supportToolStripMenuItem.Size = new Size(167, 22);
             supportToolStripMenuItem.Text = "Su&pport";
+            supportToolStripMenuItem.Click += supportToolStripMenuItem_Click;
             // 
             // pnlToolStrip
             // 

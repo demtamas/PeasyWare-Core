@@ -53,7 +53,8 @@ public partial class UsersView : BaseView, IToolbarAware
         EnableDoubleBuffering(dgvUsers);
 
         dgvUsers.SelectionChanged += (_, _) => UpdateToolbarState();
-        dgvUsers.CellFormatting += DgvUsers_CellFormatting;
+        dgvUsers.CellFormatting  += DgvUsers_CellFormatting;
+        dgvUsers.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Wrap(ShowUserDetails).Invoke(this, EventArgs.Empty); };
 
         Load += (_, _) => LoadUsers();
     }
@@ -99,11 +100,11 @@ public partial class UsersView : BaseView, IToolbarAware
 
         _btnLogoutAll = new ToolStripButton("Logout All")
         {
-            Image = Icons.Terminate, // reuse terminate icon
-            Enabled = false,
+            Image        = Icons.Terminate,
+            Enabled      = true,   // global action — always available
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
         };
-        _btnLogoutAll.Click += Wrap(LogoutSelectedUserEverywhere);
+        _btnLogoutAll.Click += Wrap(LogoutAllUsers);
 
         _btnUnlock = new ToolStripButton("Unlock / Reset")
         {
@@ -192,11 +193,11 @@ public partial class UsersView : BaseView, IToolbarAware
             return;
         }
 
-        _btnEnable.Enabled = !user.IsActive;
-        _btnDisable.Enabled = user.IsActive;
-        _btnLogoutAll.Enabled = user.IsOnline;
-        _btnUnlock.Enabled = true;
-        _btnDetails.Enabled = true;
+        _btnEnable.Enabled    = !user.IsActive;
+        _btnDisable.Enabled   = user.IsActive;
+        _btnLogoutAll.Enabled = true;   // global — not selection-dependent
+        _btnUnlock.Enabled    = true;
+        _btnDetails.Enabled   = true;
     }
 
     // ==========================================================
@@ -286,6 +287,65 @@ public partial class UsersView : BaseView, IToolbarAware
         LoadUsers();
     }
 
+    private void LogoutAllUsers()
+    {
+        // Prompt for reason
+        var reason = PromptReason(
+            "Logout All Sessions",
+            "Reason (optional):",
+            "Scheduled maintenance");
+        if (reason is null) return;  // user cancelled
+
+        if (MessageBox.Show(
+            this,
+            "Log out ALL active sessions?\n\n" +
+            "Your own session will be preserved.\n" +
+            "All other users will be disconnected immediately.",
+            "Confirm Logout All",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        var result = _commandRepo.LogoutAllSessions(
+            string.IsNullOrWhiteSpace(reason) ? null : reason.Trim());
+
+        MessageBox.Show(
+            this,
+            result.FriendlyMessage ?? (result.Success ? "Done." : "Operation failed."),
+            result.Success ? "Logout All" : "Error",
+            MessageBoxButtons.OK,
+            result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+        LoadUsers();
+    }
+
+    /// <summary>Simple single-line text prompt. Returns null if the user cancels.</summary>
+    private string? PromptReason(string title, string label, string defaultValue = "")
+    {
+        using var dlg = new Form
+        {
+            Text            = title,
+            Size            = new Size(380, 140),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox     = false,
+            MinimizeBox     = false,
+            StartPosition   = FormStartPosition.CenterParent
+        };
+        var lbl  = new Label { Text = label, Left = 12, Top = 14, Width = 340, AutoSize = false };
+        var txt  = new TextBox { Left = 12, Top = 32, Width = 340, Text = defaultValue };
+        var btnOk  = new Button { Text = "OK",     Left = 196, Top = 62, Width = 76, Height = 26,
+                                  DialogResult = DialogResult.OK };
+        var btnCan = new Button { Text = "Cancel", Left = 280, Top = 62, Width = 76, Height = 26,
+                                  DialogResult = DialogResult.Cancel };
+        dlg.Controls.AddRange(new Control[] { lbl, txt, btnOk, btnCan });
+        dlg.AcceptButton = btnOk;
+        dlg.CancelButton = btnCan;
+        txt.SelectAll();
+
+        return dlg.ShowDialog(this) == DialogResult.OK ? txt.Text : null;
+    }
+
     private void LogoutSelectedUserEverywhere()
     {
         var user = GetSelectedUser();
@@ -314,18 +374,11 @@ public partial class UsersView : BaseView, IToolbarAware
         var user = GetSelectedUser();
         if (user is null) return;
 
-        MessageBox.Show(
-            this,
-            $"User: {user.Username}\n" +
-            $"Display: {user.DisplayName}\n" +
-            $"Email: {user.Email}\n" +
-            $"Role: {user.RoleName}\n" +
-            $"Active: {user.IsActive}\n" +
-            $"Online: {user.IsOnline}\n" +
-            $"Failed Attempts: {user.FailedAttempts}",
-            "User details",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        using var dlg = new UserDetailForm(user, _commandRepo, _repo);
+        dlg.ShowDialog(this);
+
+        if (dlg.UserWasChanged)
+            LoadUsers();
     }
 
     // ==========================================================
