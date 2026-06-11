@@ -273,8 +273,10 @@ public class DeliveryNoteRendererTests
     {
         var manifest = SimpleManifest(lines: new List<ShipmentManifestLineDto>());
         var html = DeliveryNoteRenderer.Render(manifest);
-        // <thead><tr> will always exist — check no data cells were rendered
-        Assert.DoesNotContain("<td", html);
+        // Data rows always contain an SSCC cell with class="mono".
+        // Totals/summary cells may still be present in the template — we
+        // only verify that no line data was emitted.
+        Assert.DoesNotContain("class=\"mono\"", html);
     }
 
     // ==========================================================

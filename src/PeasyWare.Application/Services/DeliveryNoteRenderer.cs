@@ -100,10 +100,14 @@ public static class DeliveryNoteRenderer
 
     private static string LoadTemplate(string? path)
     {
-        if (path is not null && System.IO.File.Exists(path))
-            return System.IO.File.ReadAllText(path);
+        // Explicit path given but file not found → use MinimalTemplate immediately.
+        // The directory search only applies when no explicit path was provided.
+        if (path is not null)
+            return System.IO.File.Exists(path)
+                ? System.IO.File.ReadAllText(path)
+                : MinimalTemplate();
 
-        // Search from BaseDirectory upward, and also from current directory upward
+        // No explicit path — search from BaseDirectory / current dir upward
         foreach (var startDir in new[] { AppContext.BaseDirectory, System.IO.Directory.GetCurrentDirectory() })
         {
             var dir = startDir;
@@ -118,7 +122,6 @@ public static class DeliveryNoteRenderer
             }
         }
 
-        // Minimal inline fallback
         return MinimalTemplate();
     }
 

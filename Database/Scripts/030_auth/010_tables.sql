@@ -394,7 +394,11 @@ BEGIN
 
         (N'ERRINBL10', N'INB', N'ERROR',
             N'Batch number on label does not match the expected value. Please contact your supervisor.',
-            N'Inbound.Line (SSCC mode): scanned batch_number != expected_unit.batch_number');
+            N'Inbound.Line (SSCC mode): scanned batch_number != expected_unit.batch_number'),
+
+        (N'ERRINBL11', N'INB', N'ERROR',
+            N'Batch number is required for this material. Please scan the batch label or enter the batch number.',
+            N'usp_receive_inbound_line: is_batch_required = 1 and @batch_number is null/empty');
 
 END;
 GO

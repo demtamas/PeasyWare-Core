@@ -184,8 +184,27 @@ BEGIN
             RETURN;
         END
 
-        /* --------------------------------------------------------
-           4c) Duplicate SSCC guard — explicit check before INSERT
+        /* ── Batch required guard ─────────────────────────────────────────────
+           If the SKU has is_batch_required = 1 and no batch number was
+           provided (either from the expected unit or the operator), block
+           the receipt so the unit is never created without a batch.
+        ──────────────────────────────────────────────────────────────────── */
+        DECLARE @is_batch_required BIT;
+
+        SELECT @is_batch_required = is_batch_required
+        FROM inventory.skus
+        WHERE sku_id = @sku_id;
+
+        IF @is_batch_required = 1
+           AND NULLIF(LTRIM(RTRIM(ISNULL(@batch_number, N''))), N'') IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRINBL11' AS result_code,
+                   NULL AS inbound_line_id, NULL AS inbound_id, CAST(0 AS BIT) AS is_closed;
+            ROLLBACK;
+            RETURN;
+        END
+
+        /* ── Duplicate SSCC guard — explicit check before INSERT
            so the unique index violation becomes ERRSSCC02 not ERRINBL99
         -------------------------------------------------------- */
         IF @external_ref IS NOT NULL
