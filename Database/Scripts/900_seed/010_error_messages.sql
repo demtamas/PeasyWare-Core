@@ -50,6 +50,10 @@ FROM (VALUES
         N'Expected unit created successfully.',
         N'inbound.usp_create_expected_unit: success'),
 
+    (N'ERRINBU02', N'INB', N'ERROR',
+        N'Batch number is required for this SKU. Include batch_number in the pre-advice.',
+        N'usp_create_expected_unit: is_batch_required = 1 and @batch_number is null'),
+
     (N'ERRINBU01', N'INB', N'ERROR',
         N'This SSCC is already registered on this inbound delivery.',
         N'inbound.usp_create_expected_unit: duplicate sscc on inbound'),

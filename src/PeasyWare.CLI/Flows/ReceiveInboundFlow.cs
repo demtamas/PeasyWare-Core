@@ -230,6 +230,30 @@ namespace PeasyWare.Application.Flows
                         ? scan.BestBefore.Value.ToDateTime(TimeOnly.MinValue)
                         : null);
 
+                // ── Batch required but not on label: prompt operator ─────────────
+                if (!result.Success && result.ResultCode == "ERRINBL11")
+                {
+                    Console.WriteLine(result.FriendlyMessage);
+                    Console.Write("Enter batch number (0=cancel): ");
+                    var manualBatch = Console.ReadLine()?.Trim();
+
+                    if (string.IsNullOrWhiteSpace(manualBatch) || manualBatch == "0")
+                    {
+                        Console.WriteLine("Receipt cancelled.");
+                        continue;
+                    }
+
+                    result = service.ConfirmSscc(
+                        validation.InboundExpectedUnitId,
+                        scanInput,
+                        bin,
+                        validation.ClaimToken.Value,
+                        batchNumber:    manualBatch,
+                        bestBeforeDate: scan.BestBefore.HasValue
+                            ? scan.BestBefore.Value.ToDateTime(TimeOnly.MinValue)
+                            : null);
+                }
+
                 if (!result.Success)
                 {
                     Console.WriteLine(result.FriendlyMessage);

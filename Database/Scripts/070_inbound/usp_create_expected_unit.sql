@@ -39,6 +39,23 @@ BEGIN
             RETURN;
         END
 
+        -- Batch required guard: if SKU requires batch, reject pre-advice without one
+        DECLARE @is_batch_required BIT;
+
+        SELECT @is_batch_required = s.is_batch_required
+        FROM inbound.inbound_lines l
+        JOIN inventory.skus s ON s.sku_id = l.sku_id
+        WHERE l.inbound_line_id = @inbound_line_id;
+
+        IF @is_batch_required = 1
+           AND NULLIF(LTRIM(RTRIM(ISNULL(@batch_number, N''))), N'') IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRINBU02' AS result_code,
+                   NULL AS inbound_expected_unit_id;
+            ROLLBACK;
+            RETURN;
+        END
+
         -- Duplicate SSCC check within this inbound
         IF EXISTS (
             SELECT 1

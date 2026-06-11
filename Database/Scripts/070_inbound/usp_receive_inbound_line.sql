@@ -79,8 +79,9 @@ BEGIN
                 @resolved_line_id     = eu.inbound_line_id,
                 @expected_unit_qty    = eu.expected_quantity,
                 @external_ref         = eu.expected_external_ref,
-                @batch_number         = eu.batch_number,
-                @best_before_date     = eu.best_before_date,
+                -- Prefer expected unit batch/bbe; fall back to what operator provided
+                @batch_number         = COALESCE(eu.batch_number,    @batch_number),
+                @best_before_date     = COALESCE(eu.best_before_date, @best_before_date),
                 @existing_received_id = eu.received_inventory_unit_id,
                 @claim_expires_at     = eu.claim_expires_at,
                 @db_claim_token       = eu.claim_token,
