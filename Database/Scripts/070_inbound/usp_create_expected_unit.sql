@@ -6,13 +6,14 @@ GO
 
 CREATE OR ALTER PROCEDURE inbound.usp_create_expected_unit
 (
-    @inbound_ref     NVARCHAR(50),
-    @sscc            NVARCHAR(18),
-    @quantity        INT,
-    @batch_number    NVARCHAR(100)    = NULL,
-    @best_before_date DATE            = NULL,
-    @user_id         INT              = NULL,
-    @session_id      UNIQUEIDENTIFIER = NULL
+    @inbound_ref      NVARCHAR(50),
+    @sscc             NVARCHAR(18),
+    @quantity         INT,
+    @batch_number     NVARCHAR(100)    = NULL,
+    @best_before_date DATE             = NULL,
+    @sku_code         NVARCHAR(50)     = NULL,   -- optional: target a specific line by SKU
+    @user_id          INT              = NULL,
+    @session_id       UNIQUEIDENTIFIER = NULL
 )
 AS
 BEGIN
@@ -22,14 +23,26 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
-        -- Resolve to the most recent line on this inbound
-        DECLARE @inbound_line_id INT = (
-            SELECT TOP 1 l.inbound_line_id
-            FROM inbound.inbound_lines l
-            JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
-            WHERE d.inbound_ref = @inbound_ref
-            ORDER BY l.line_no DESC
-        );
+        -- Resolve line: prefer @sku_code match, fall back to most recent line
+        DECLARE @inbound_line_id INT =
+            CASE
+                WHEN @sku_code IS NOT NULL THEN (
+                    SELECT TOP 1 l.inbound_line_id
+                    FROM inbound.inbound_lines l
+                    JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
+                    JOIN inventory.skus sk ON sk.sku_id = l.sku_id
+                    WHERE d.inbound_ref = @inbound_ref
+                      AND sk.sku_code  = @sku_code
+                    ORDER BY l.line_no DESC
+                )
+                ELSE (
+                    SELECT TOP 1 l.inbound_line_id
+                    FROM inbound.inbound_lines l
+                    JOIN inbound.inbound_deliveries d ON d.inbound_id = l.inbound_id
+                    WHERE d.inbound_ref = @inbound_ref
+                    ORDER BY l.line_no DESC
+                )
+            END;
 
         IF @inbound_line_id IS NULL
         BEGIN

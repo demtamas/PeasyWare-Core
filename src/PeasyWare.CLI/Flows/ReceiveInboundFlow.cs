@@ -234,14 +234,25 @@ namespace PeasyWare.Application.Flows
                 if (!result.Success && result.ResultCode == "ERRINBL11")
                 {
                     Console.WriteLine(result.FriendlyMessage);
-                    Console.Write("Enter batch number (0=cancel): ");
-                    var manualBatch = Console.ReadLine()?.Trim();
+                    Console.Write("Enter batch number or scan label (0=cancel): ");
+                    var batchInput = Console.ReadLine()?.Trim();
 
-                    if (string.IsNullOrWhiteSpace(manualBatch) || manualBatch == "0")
+                    if (string.IsNullOrWhiteSpace(batchInput) || batchInput == "0")
                     {
                         Console.WriteLine("Receipt cancelled.");
                         continue;
                     }
+
+                    // Parse as GS1 barcode first — operator may scan a label
+                    // containing AI 10 (batch). Fall back to raw input if no
+                    // batch AI found (operator typed it manually).
+                    var batchScan   = GtinParser.Parse(batchInput);
+                    var manualBatch = batchScan.IsValid && batchScan.Batch is not null
+                        ? batchScan.Batch
+                        : batchInput;
+
+                    if (_session.UiMode == UiMode.Trace && batchScan.IsValid)
+                        Console.WriteLine($"[TRACE] Batch extracted from scan: {manualBatch}");
 
                     result = service.ConfirmSscc(
                         validation.InboundExpectedUnitId,
