@@ -24,6 +24,8 @@ static int PrintHelp()
     Console.WriteLine("Commands:");
     Console.WriteLine("  build-allinone          Concatenate all scripts into DEV_AllInOneInOneGo.sql");
     Console.WriteLine("  reset-db --confirm      Drop and recreate DB from Scripts/ in order");
+    Console.WriteLine("      --no-seed            Skip Database/Scripts/900_seed (schema + SPs only)");
+    Console.WriteLine("      --no-demo            Keep settings/roles/admin user/locations, skip demo parties");
     Console.WriteLine("  seed [file]             Run seed scripts from Scripts/seed/");
     Console.WriteLine("  stats                   Print DB health dashboard");
     Console.WriteLine("  test [--filter <name>]  Run test suite via dotnet test");

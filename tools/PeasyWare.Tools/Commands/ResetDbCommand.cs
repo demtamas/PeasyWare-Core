@@ -12,12 +12,16 @@ namespace PeasyWare.Tools.Commands;
 /// Usage:
 ///   pwtools reset-db --confirm
 ///   pwtools reset-db --confirm --env PROD
+///   pwtools reset-db --confirm --no-seed   (schema + structural SPs only, skips Database/Scripts/900_seed)
+///   pwtools reset-db --confirm --no-demo   (keep settings/roles/admin user/locations, skip demo parties)
 /// </summary>
 internal static class ResetDbCommand
 {
     public static int Run(string[] args)
     {
         var confirm = args.Contains("--confirm");
+        var noSeed  = args.Contains("--no-seed");
+        var noDemo  = args.Contains("--no-demo");
         var env     = args.Contains("--env") ? args[Array.IndexOf(args, "--env") + 1] : "DEV";
 
         if (!confirm)
@@ -74,6 +78,20 @@ internal static class ResetDbCommand
 
         var scripts = CollectScripts(scriptsRoot);
 
+        if (noSeed)
+        {
+            scripts = scripts
+                .Where(s => !Path.GetDirectoryName(s)!.EndsWith("900_seed", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        else if (noDemo)
+        {
+            scripts = scripts
+                .Where(s => !Path.GetFileName(s).Contains("_demo_", StringComparison.OrdinalIgnoreCase)
+                         && !Path.GetFileName(s).StartsWith("081_demo", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         // If Scripts/ only has a README or is otherwise empty,
         // fall back to the AllInOne
         var realScripts = scripts.Where(s =>
@@ -97,6 +115,10 @@ internal static class ResetDbCommand
         Console.WriteLine($"Environment:  {env}");
         Console.WriteLine($"Scripts root: {scriptsRoot}");
         Console.WriteLine($"Scripts:      {realScripts.Count}");
+        if (noSeed)
+            Console.WriteLine("Seed data:    SKIPPED (--no-seed)");
+        else if (noDemo)
+            Console.WriteLine("Demo parties: SKIPPED (--no-demo)");
         Console.WriteLine();
 
         var builder = new SqlConnectionStringBuilder(cs);

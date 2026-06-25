@@ -6,9 +6,24 @@ SET NOCOUNT ON;
 GO
 
 -- ============================================================
--- DEV seed data: SKUs + Inbound deliveries + Expected units
+-- DEMO DATA — sample SKUs + inbound deliveries (INB-2026-001/002).
+-- Not required for the app to function. Skip with: reset-db --no-demo
+--
+-- Depends on demo parties (081_demo_parties.sql) — PW_BREWERY01,
+-- PW_HAULIER01, PW_HAULIER02 must exist. If they don't, this script
+-- exits early with a clear message rather than cascading into
+-- silent ERRPARTY01/ERRINB01 failures.
+--
 -- Idempotent — safe to re-run after any reset.
 -- ============================================================
+
+IF NOT EXISTS (SELECT 1 FROM core.parties WHERE party_code = 'PW_BREWERY01')
+BEGIN
+    PRINT 'SKIPPED: demo dev data requires demo parties (PW_BREWERY01 not found).';
+    PRINT 'Run without --no-demo, or seed 081_demo_parties.sql first.';
+    RETURN;
+END
+GO
 
 DECLARE @AdminId INT = (SELECT id FROM auth.users WHERE username = 'admin');
 
@@ -158,9 +173,14 @@ BEGIN
 
     -- Activate
     SET @InbId1 = (SELECT inbound_id FROM inbound.inbound_deliveries WHERE inbound_ref = 'INB-2026-001');
-    EXEC inbound.usp_activate_inbound @inbound_id=@InbId1, @user_id=@AdminId;
 
-    PRINT 'INB-2026-001 created and activated (9 SSCCs).';
+    IF @InbId1 IS NOT NULL
+    BEGIN
+        EXEC inbound.usp_activate_inbound @inbound_id=@InbId1, @user_id=@AdminId;
+        PRINT 'INB-2026-001 created and activated (9 SSCCs).';
+    END
+    ELSE
+        PRINT 'WARNING: INB-2026-001 header creation failed — check supplier/haulier party codes.';
 END
 ELSE PRINT 'INB-2026-001 already exists.';
 GO
@@ -199,14 +219,19 @@ BEGIN
 
     -- Activate
     SET @InbId2 = (SELECT inbound_id FROM inbound.inbound_deliveries WHERE inbound_ref = 'INB-2026-002');
-    EXEC inbound.usp_activate_inbound @inbound_id=@InbId2, @user_id=@AdminId;
 
-    PRINT 'INB-2026-002 created and activated (6 SSCCs, batch B-MW-260101).';
+    IF @InbId2 IS NOT NULL
+    BEGIN
+        EXEC inbound.usp_activate_inbound @inbound_id=@InbId2, @user_id=@AdminId;
+        PRINT 'INB-2026-002 created and activated (6 SSCCs, batch B-MW-260101).';
+    END
+    ELSE
+        PRINT 'WARNING: INB-2026-002 header creation failed — check supplier/haulier party codes.';
 END
 ELSE PRINT 'INB-2026-002 already exists.';
 GO
 
 SET NOCOUNT OFF;
 GO
-PRINT 'Dev data seed complete.';
+PRINT 'Demo dev data seed complete.';
 GO

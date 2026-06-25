@@ -21,6 +21,8 @@ CREATE TABLE locations.storage_types
 
     created_at        DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by        INT NULL,
+    updated_at        DATETIME2(3) NULL,
+    updated_by        INT NULL,
 
     CONSTRAINT uq_storage_types_code
         UNIQUE (storage_type_code)

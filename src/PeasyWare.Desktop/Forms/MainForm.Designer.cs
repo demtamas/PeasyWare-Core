@@ -78,6 +78,7 @@
             skuChangesToolStripMenuItem = new ToolStripMenuItem();
             warehouseToolStripMenuItem = new ToolStripMenuItem();
             warehouseTasksToolStripMenuItem = new ToolStripMenuItem();
+            storageTypesToolStripMenuItem = new ToolStripMenuItem();
             helpToolStripMenuItem = new ToolStripMenuItem();
             aboutPeasyWareToolStripMenuItem = new ToolStripMenuItem();
             versionInfoToolStripMenuItem = new ToolStripMenuItem();
@@ -397,7 +398,7 @@
             // 
             // warehouseToolStripMenuItem
             // 
-            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem, locationsToolStripMenuItem, zonesToolStripMenuItem, sectionsToolStripMenuItem });
+            warehouseToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { warehouseTasksToolStripMenuItem, storageTypesToolStripMenuItem, locationsToolStripMenuItem, zonesToolStripMenuItem, sectionsToolStripMenuItem });
             warehouseToolStripMenuItem.Name = "warehouseToolStripMenuItem";
             warehouseToolStripMenuItem.Size = new Size(80, 20);
             warehouseToolStripMenuItem.Text = "&Warehouse";
@@ -408,6 +409,13 @@
             warehouseTasksToolStripMenuItem.Size = new Size(140, 22);
             warehouseTasksToolStripMenuItem.Text = "&Tasks";
             warehouseTasksToolStripMenuItem.Click += warehouseTasksToolStripMenuItem_Click;
+            // 
+            // storageTypesToolStripMenuItem
+            // 
+            storageTypesToolStripMenuItem.Name = "storageTypesToolStripMenuItem";
+            storageTypesToolStripMenuItem.Size = new Size(140, 22);
+            storageTypesToolStripMenuItem.Text = "&Storage types";
+            storageTypesToolStripMenuItem.Click += storageTypesToolStripMenuItem_Click;
             // 
             // locationsToolStripMenuItem (moved to Warehouse)
             // 
@@ -605,5 +613,6 @@
         private ToolStripMenuItem allToolStripMenuItem1;
         private ToolStripMenuItem warehouseToolStripMenuItem;
         private ToolStripMenuItem warehouseTasksToolStripMenuItem;
+        private ToolStripMenuItem storageTypesToolStripMenuItem;
     }
 }

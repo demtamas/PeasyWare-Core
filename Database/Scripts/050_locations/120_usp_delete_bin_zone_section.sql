@@ -194,3 +194,60 @@ BEGIN
     END CATCH
 END;
 GO
+
+-- ============================================================
+-- Delete storage type
+-- Rules: no bins currently use this type, no SKU lists it as preferred
+-- ============================================================
+
+CREATE OR ALTER PROCEDURE locations.usp_delete_storage_type
+(
+    @storage_type_code NVARCHAR(50),
+    @user_id             INT              = NULL,
+    @session_id          UNIQUEIDENTIFIER = NULL,
+    @correlation_id      UNIQUEIDENTIFIER = NULL
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    BEGIN TRY
+        BEGIN TRAN;
+
+        DECLARE @type_id INT;
+
+        SELECT @type_id = storage_type_id
+        FROM locations.storage_types WITH (UPDLOCK, HOLDLOCK)
+        WHERE storage_type_code = @storage_type_code COLLATE Latin1_General_CS_AS;
+
+        IF @type_id IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRTYP02' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        IF EXISTS (SELECT 1 FROM locations.bins WHERE storage_type_id = @type_id)
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRTYP03' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        IF EXISTS (SELECT 1 FROM inventory.skus WHERE preferred_storage_type_id = @type_id)
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRTYP04' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        DELETE FROM locations.storage_types WHERE storage_type_id = @type_id;
+
+        COMMIT;
+        SELECT CAST(1 AS BIT) AS success, N'SUCTYP05' AS result_code;
+
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        SELECT CAST(0 AS BIT) AS success, N'ERRTYP99' AS result_code;
+    END CATCH
+END;
+GO

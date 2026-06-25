@@ -235,6 +235,12 @@ public sealed class RepositoryFactory
         return new SqlSectionRepository(_factory, session, _resolver, _logger, _sessionGuard);
     }
 
+    public IStorageTypeRepository CreateStorageTypeRepository(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlStorageTypeRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
     public ILocationCommandRepository CreateLocationCommand(SessionContext session)
     {
         BindSession(session);

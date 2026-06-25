@@ -571,6 +571,9 @@ public partial class MainForm : Form
     private void sectionsToolStripMenuItem_Click(object sender, EventArgs e)
         => ShowView(_views.CreateSectionsView(_session));
 
+    private void storageTypesToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateStorageTypesView(_session));
+
     private void outstandiToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateOutstandingOrdersView(_session));

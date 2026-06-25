@@ -128,6 +128,33 @@ FROM (VALUES
     (N'SUCSEC05', N'SEC', N'SUCCESS', N'Bins assigned to section.',    N'usp_assign_bins_to_section: success'),
     (N'SUCSEC06', N'SEC', N'SUCCESS', N'Section deleted.',             N'usp_delete_section: success'),
 
+    -- ── Storage type ──────────────────────────────────────────────────────────────────────
+    (N'ERRTYP01', N'TYPE', N'ERROR',
+        N'A storage type with that code already exists.',
+        N'usp_create_storage_type: duplicate storage_type_code'),
+
+    (N'ERRTYP02', N'TYPE', N'ERROR',
+        N'Storage type not found.',
+        N'usp_update/deactivate/reactivate/delete_storage_type: storage_type_code not found'),
+
+    (N'ERRTYP03', N'TYPE', N'ERROR',
+        N'Cannot delete — bins use this storage type. Reassign or delete them first.',
+        N'usp_delete_storage_type: bins exist with storage_type_id'),
+
+    (N'ERRTYP04', N'TYPE', N'ERROR',
+        N'Cannot delete — one or more SKUs list this as their preferred storage type.',
+        N'usp_delete_storage_type: skus exist with preferred_storage_type_id'),
+
+    (N'ERRTYP99', N'TYPE', N'ERROR',
+        N'An unexpected error occurred.',
+        N'usp_*_storage_type: unhandled exception'),
+
+    (N'SUCTYP01', N'TYPE', N'SUCCESS', N'Storage type created.',     N'usp_create_storage_type: success'),
+    (N'SUCTYP02', N'TYPE', N'SUCCESS', N'Storage type updated.',     N'usp_update_storage_type: success'),
+    (N'SUCTYP03', N'TYPE', N'SUCCESS', N'Storage type deactivated.', N'usp_deactivate_storage_type: success'),
+    (N'SUCTYP04', N'TYPE', N'SUCCESS', N'Storage type reactivated.', N'usp_reactivate_storage_type: success'),
+    (N'SUCTYP05', N'TYPE', N'SUCCESS', N'Storage type deleted.',     N'usp_delete_storage_type: success'),
+
     -- ── Auth — user management ─────────────────────────────────────────────
     (N'SUCAUTH08',    N'AUTH', N'SUCCESS',
         N'User updated.',
