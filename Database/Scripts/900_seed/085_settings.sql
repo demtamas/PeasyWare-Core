@@ -116,6 +116,28 @@ IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'logging.i
     INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
     VALUES ('logging.include_sensitive', 'Log sensitive fields', 'logging', 50, 'false', 'bool', '{"type":"bool"}', 'Include sensitive field values in log output — DEV environments only');
 
+-- ── Client ────────────────────────────────────────────────────────────────
+
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'client.session_timeout_minutes')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('client.session_timeout_minutes', 'Client session timeout (minutes)', 'client', 10, '30', 'int', '{"type":"range","min":5,"max":240}', 'Minutes of inactivity before the desktop client auto-locks');
+
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'client.auto_lock_enabled')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('client.auto_lock_enabled', 'Auto-lock enabled', 'client', 20, 'true', 'bool', '{"type":"bool"}', 'Automatically lock the desktop client after inactivity period');
+
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'client.ui_mode')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('client.ui_mode', 'UI mode', 'client', 30, 'Standard', 'string', '{"type":"enum","values":["Minimal","Standard","Trace"]}', 'Controls diagnostic verbosity on operator screens');
+
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'client.scan_beep_enabled')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('client.scan_beep_enabled', 'Scan beep enabled', 'client', 40, 'true', 'bool', '{"type":"bool"}', 'Play an audio beep on successful barcode scan in the CLI');
+
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'client.confirm_on_exit')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('client.confirm_on_exit', 'Confirm on exit', 'client', 50, 'true', 'bool', '{"type":"bool"}', 'Prompt the operator to confirm before closing the desktop client');
+
 GO
 
 SET NOCOUNT OFF;

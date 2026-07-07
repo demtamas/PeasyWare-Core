@@ -261,6 +261,9 @@ public partial class MainForm : Form
         ShowView(_views.CreateSettingsView(_session));
     }
 
+    private void clientSettingsToolStripMenuItem_Click(object sender, EventArgs e)
+        => ShowView(_views.CreateClientsView(_session));
+
     private void inventoryActiveToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateInventoryView(_session));

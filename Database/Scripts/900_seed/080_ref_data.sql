@@ -80,3 +80,22 @@ END
 
 PRINT 'Core reference data complete.';
 GO
+
+-- ── Client application registrations ───────────────────────────────
+-- Required for login to work correctly. session_timeout_minutes
+-- overrides the global auth.session_timeout_minutes setting.
+
+IF NOT EXISTS (SELECT 1 FROM auth.clients WHERE client_name = 'PeasyWare.Desktop')
+    INSERT INTO auth.clients (client_name, session_timeout_minutes, max_concurrent_sessions, description)
+    VALUES ('PeasyWare.Desktop', 480, NULL, 'PeasyWare WMS desktop application');
+
+IF NOT EXISTS (SELECT 1 FROM auth.clients WHERE client_name = 'PeasyWare.CLI')
+    INSERT INTO auth.clients (client_name, session_timeout_minutes, max_concurrent_sessions, description)
+    VALUES ('PeasyWare.CLI', 60, NULL, 'PeasyWare WMS terminal / CLI application');
+
+IF NOT EXISTS (SELECT 1 FROM auth.clients WHERE client_name = 'PeasyWare.API')
+    INSERT INTO auth.clients (client_name, session_timeout_minutes, max_concurrent_sessions, description)
+    VALUES ('PeasyWare.API', NULL, NULL, 'PeasyWare API — uses global timeout');
+
+PRINT 'Client app registrations done.';
+GO

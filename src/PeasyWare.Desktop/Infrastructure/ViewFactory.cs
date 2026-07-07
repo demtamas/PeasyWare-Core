@@ -164,6 +164,12 @@ public sealed class ViewFactory
         return new PeasyWare.Desktop.Views.Locations.StorageTypesView(repo);
     }
 
+    public UserControl CreateClientsView(SessionContext session)
+    {
+        var repo = _runtime.Repositories.CreateClientRepository(session);
+        return new PeasyWare.Desktop.Views.Settings.ClientsView(repo);
+    }
+
     public UserControl CreateShipmentsView(SessionContext session)
     {
         var queryRepo    = _runtime.Repositories.CreateOutboundQuery(session);

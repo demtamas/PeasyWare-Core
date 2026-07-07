@@ -170,7 +170,16 @@ FROM (VALUES
 
     (N'ERRAUTHUSR06', N'AUTH', N'ERROR',
         N'Role not found.',
-        N'usp_update_user: role_name not found in auth.roles')
+        N'usp_update_user: role_name not found in auth.roles'),
+
+    -- ── Client application ────────────────────────────────────────────────────────────────────
+    (N'ERRCLI01',  N'CLI', N'ERROR',   N'A client with that name already exists.', N'usp_create_client: duplicate client_name'),
+    (N'ERRCLI02',  N'CLI', N'ERROR',   N'Client not found.',                        N'usp_update/deactivate/reactivate_client: not found'),
+    (N'ERRCLI99',  N'CLI', N'ERROR',   N'An unexpected error occurred.',            N'usp_*_client: unhandled exception'),
+    (N'SUCCLI01',  N'CLI', N'SUCCESS', N'Client application created.',              N'usp_create_client: success'),
+    (N'SUCCLI02',  N'CLI', N'SUCCESS', N'Client application updated.',              N'usp_update_client: success'),
+    (N'SUCCLI03',  N'CLI', N'SUCCESS', N'Client application deactivated.',          N'usp_deactivate_client: success'),
+    (N'SUCCLI04',  N'CLI', N'SUCCESS', N'Client application reactivated.',          N'usp_reactivate_client: success')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (

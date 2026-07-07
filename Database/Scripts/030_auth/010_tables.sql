@@ -625,3 +625,27 @@ GO
 -- 1.4 Get Roles
 ---------------------------------------------------------------
 GO
+
+---------------------------------------------------------------
+-- 1.5 Client applications (session config per client app)
+-- session_timeout_minutes overrides the global auth.session_timeout_minutes
+-- setting on a per-client basis. NULL = use global setting.
+---------------------------------------------------------------
+IF OBJECT_ID('auth.clients', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.clients
+    (
+        client_name             NVARCHAR(100)   NOT NULL
+            CONSTRAINT PK_auth_clients PRIMARY KEY,
+        session_timeout_minutes INT             NULL,
+        max_concurrent_sessions INT             NULL,
+        is_active               BIT             NOT NULL
+            CONSTRAINT DF_auth_clients_is_active DEFAULT (1),
+        description             NVARCHAR(255)   NULL,
+        created_at              DATETIME2(3)    NOT NULL
+            CONSTRAINT DF_auth_clients_created_at DEFAULT SYSUTCDATETIME(),
+        created_by              INT             NULL
+            DEFAULT (CONVERT(INT, SESSION_CONTEXT(N'user_id')))
+    );
+END;
+GO

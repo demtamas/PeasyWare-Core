@@ -353,6 +353,7 @@
             clientSettingsToolStripMenuItem.Name = "clientSettingsToolStripMenuItem";
             clientSettingsToolStripMenuItem.Size = new Size(180, 22);
             clientSettingsToolStripMenuItem.Text = "Client settin&gs";
+            clientSettingsToolStripMenuItem.Click += clientSettingsToolStripMenuItem_Click;
             // 
             // logsToolStripMenuItem
             // 
