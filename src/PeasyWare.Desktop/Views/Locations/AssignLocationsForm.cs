@@ -1,5 +1,6 @@
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Application.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -18,7 +19,7 @@ public sealed class AssignLocationsForm : Form
     private readonly Func<IEnumerable<string>, string?>   _assignAction; // returns error message or null
 
     private readonly DataGridView _dgv        = new();
-    private readonly TextBox      _txtSearch  = new() { PlaceholderText = "Search bin code…  (e.g. type A for floor level)" };
+    private readonly TextBox      _txtSearch  = new() { PlaceholderText = "Search bin code…  (* wildcard, e.g. *A or R01*)" };
     private readonly Button       _btnAssign  = new() { Text = "Assign", Width = 90, Height = 28, Enabled = false };
     private readonly Button       _btnCancel  = new() { Text = "Close",  Width = 80, Height = 28 };
     private readonly CheckBox     _chkAll     = new() { Text = "Show all locations", AutoSize = true };
@@ -169,7 +170,7 @@ public sealed class AssignLocationsForm : Form
 
         var filtered = _allBins
             .Where(l => showAll || !l.IsActive)
-            .Where(l => string.IsNullOrEmpty(q) || l.BinCode.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .Where(l => string.IsNullOrEmpty(q) || WildcardMatcher.Matches(l.BinCode, q))
             .ToList();
 
         _dgv.DataSource = null;

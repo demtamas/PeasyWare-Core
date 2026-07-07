@@ -27,9 +27,9 @@ BEGIN TRY
 
     DECLARE @SkuId INT;
     INSERT INTO inventory.skus
-        (sku_code, sku_description, uom_code, preferred_storage_type_id, is_active)
+        (sku_code, sku_description, ean, uom_code, preferred_storage_type_id, is_active)
     VALUES
-        ('TEST-BATCH-SKU', 'Test Batch SKU', 'Case',
+        ('TEST-BATCH-SKU', 'Test Batch SKU', '09999900000501', 'Case',
          (SELECT storage_type_id FROM locations.storage_types WHERE storage_type_code = 'RACK'), 1);
     SET @SkuId = SCOPE_IDENTITY();
 
@@ -60,7 +60,10 @@ BEGIN TRY
     SET @UnitB = SCOPE_IDENTITY();
     INSERT INTO inventory.inventory_placements (inventory_unit_id, bin_id) VALUES (@UnitB, @BinB);
 
-    DECLARE @CustomerId INT = (SELECT party_id FROM core.parties WHERE party_code = 'PW_CUSTOMER01');
+    DECLARE @CustomerId INT;
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, is_active, created_at)
+    VALUES ('_TEST-CUST-BATCH', 'Test Customer BATCH', 'Test Customer', 'GB', 1, SYSUTCDATETIME());
+    SET @CustomerId = SCOPE_IDENTITY();
     DECLARE @OrderId INT;
 
     INSERT INTO outbound.outbound_orders (order_ref, customer_party_id, order_status_code, required_date)

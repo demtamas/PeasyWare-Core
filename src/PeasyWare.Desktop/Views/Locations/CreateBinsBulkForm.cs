@@ -17,8 +17,8 @@ public sealed class CreateBinsBulkForm : Form
     private readonly NumericUpDown _nudRowTo    = new() { Minimum = 1,  Maximum = 99, Value = 10 };
     private readonly TextBox       _txtColFrom  = new() { Text = "A",   MaxLength = 1, Width = 40 };
     private readonly TextBox       _txtColTo    = new() { Text = "D",   MaxLength = 1, Width = 40 };
-    private readonly NumericUpDown _nudDepthFrom = new() { Minimum = 1, Maximum = 9,  Value = 1 };
-    private readonly NumericUpDown _nudDepthTo   = new() { Minimum = 1, Maximum = 9,  Value = 1 };
+    private readonly NumericUpDown _nudDepthFrom = new() { Minimum = 1, Maximum = 99, Value = 1 };
+    private readonly NumericUpDown _nudDepthTo   = new() { Minimum = 1, Maximum = 99, Value = 1 };
     private readonly NumericUpDown _nudCapacity  = new() { Minimum = 1, Maximum = 999, Value = 1 };
     private readonly Label         _lblPreview   = new() { AutoSize = true, ForeColor = Color.DimGray };
 

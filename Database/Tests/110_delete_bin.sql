@@ -50,8 +50,8 @@ BEGIN TRY
     -- ── 3. Inactive bin with inventory placement — must be blocked
     DECLARE @SkuId INT;
     INSERT INTO inventory.skus
-        (sku_code, sku_description, uom_code, preferred_storage_type_id, is_active)
-    VALUES ('TEST-DEL-SKU', 'Delete Test SKU', 'Case', @RackTypeId, 1);
+        (sku_code, sku_description, ean, uom_code, preferred_storage_type_id, is_active)
+    VALUES ('TEST-DEL-SKU', 'Delete Test SKU', '09999900001101', 'Case', @RackTypeId, 1);
     SET @SkuId = SCOPE_IDENTITY();
 
     DECLARE @BinHistId INT;

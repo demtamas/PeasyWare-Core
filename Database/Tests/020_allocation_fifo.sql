@@ -30,9 +30,9 @@ BEGIN TRY
     DECLARE @SkuId INT;
 
     INSERT INTO inventory.skus
-        (sku_code, sku_description, uom_code, preferred_storage_type_id, is_active)
+        (sku_code, sku_description, ean, uom_code, preferred_storage_type_id, is_active)
     VALUES
-        ('TEST-FIFO-SKU', 'Test FIFO SKU', 'Case',
+        ('TEST-FIFO-SKU', 'Test FIFO SKU', '09999900000201', 'Case',
          (SELECT storage_type_id FROM locations.storage_types WHERE storage_type_code = 'RACK'),
          1);
 
@@ -75,8 +75,10 @@ BEGIN TRY
     VALUES (@UnitB, @BinB);
 
     -- ── 4. Customer and outbound order ─────────────────────────────
-    DECLARE @CustomerId INT =
-        (SELECT party_id FROM core.parties WHERE party_code = 'PW_CUSTOMER01');
+    DECLARE @CustomerId INT;
+    INSERT INTO core.parties (party_code, legal_name, display_name, country_code, is_active, created_at)
+    VALUES ('_TEST-CUST-FIFO', 'Test Customer FIFO', 'Test Customer', 'GB', 1, SYSUTCDATETIME());
+    SET @CustomerId = SCOPE_IDENTITY();
 
     DECLARE @OrderId INT;
     INSERT INTO outbound.outbound_orders
