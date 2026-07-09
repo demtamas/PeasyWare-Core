@@ -6,15 +6,12 @@ GO
 
 -- ============================================================
 -- Core reference data required for ALL environments.
--- Roles + admin user. Idempotent — safe to re-run.
--- Always included in reset-db.
+-- Roles + admin user + client app registrations.
+-- Idempotent — safe to re-run. Always included in reset-db.
 --
--- NOTE: storage_types / storage_sections / zones / bins are NOT here —
--- they're all fully editable via the Warehouse menu, and a real
--- PeasyWare install starts with none of them defined. The operator
--- builds their own warehouse structure from scratch via the Storage
--- Types / Zones / Sections / Locations views. A demo version of all
--- four lives in 082_demo_locations.sql.
+-- NOT here (all in demo files, skipped by --no-demo):
+--   storage_types, storage_sections, zones, bins  → 082_demo_locations.sql
+--   parties, addresses, customers, suppliers      → 081_demo_parties.sql
 -- ============================================================
 
 DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system');

@@ -34,7 +34,7 @@ BEGIN
 
         IF @supplier_id IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRPARTY01' AS result_code, NULL AS inbound_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRPARTY02' AS result_code, NULL AS inbound_id;
             ROLLBACK;
             RETURN;
         END
