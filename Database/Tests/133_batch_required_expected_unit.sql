@@ -11,16 +11,17 @@ GO
 SET NOCOUNT ON;
 
 -- Pre-clean any leftovers from previous failed runs
-DISABLE TRIGGER core.tr_parties_audit ON core.parties;
 DELETE FROM inbound.inbound_expected_units WHERE inbound_line_id IN (SELECT inbound_line_id FROM inbound.inbound_lines WHERE inbound_id IN (SELECT inbound_id FROM inbound.inbound_deliveries WHERE inbound_ref = 'TEU-INB'));
 DELETE FROM inbound.inbound_lines          WHERE inbound_id IN (SELECT inbound_id FROM inbound.inbound_deliveries WHERE inbound_ref = 'TEU-INB');
 DELETE FROM inbound.inbound_deliveries     WHERE inbound_ref = 'TEU-INB';
 DELETE FROM inventory.skus                 WHERE sku_code    = 'TEU-SKU';
+-- Remove audit rows from this test's party (current and prior runs —
+-- trigger-generated DELETE_PARTY rows carry the code in details)
 DECLARE @preCleanId2 INT = (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
 IF @preCleanId2 IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @preCleanId2;
+DELETE FROM audit.party_changes WHERE details LIKE '%[_]TEU-SUPP%' ESCAPE '[';
 DELETE FROM core.party_addresses WHERE party_id IN (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
 DELETE FROM core.parties         WHERE party_code = '_TEU-SUPP';
-ENABLE TRIGGER core.tr_parties_audit ON core.parties;
 GO
 
 BEGIN TRY
@@ -108,10 +109,9 @@ BEGIN CATCH
     DELETE FROM inventory.skus                 WHERE sku_code     = 'TEU-SKU';
     DECLARE @suppId3 INT = (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
     IF @suppId3 IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @suppId3;
-    DISABLE TRIGGER core.tr_parties_audit ON core.parties;
     DELETE FROM core.party_addresses           WHERE party_id     = (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
     DELETE FROM core.parties                   WHERE party_code   = '_TEU-SUPP';
-    ENABLE TRIGGER core.tr_parties_audit ON core.parties;
+    DELETE FROM audit.party_changes WHERE details LIKE '%[_]TEU-SUPP%' ESCAPE '[';
     RAISERROR(@msg, 16, 1);
     RETURN;
 END CATCH
@@ -123,8 +123,7 @@ DELETE FROM inbound.inbound_deliveries     WHERE inbound_ref  = 'TEU-INB';
 DELETE FROM inventory.skus                 WHERE sku_code     = 'TEU-SKU';
 DECLARE @suppId4 INT = (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
 IF @suppId4 IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @suppId4;
-DISABLE TRIGGER core.tr_parties_audit ON core.parties;
 DELETE FROM core.party_addresses           WHERE party_id     = (SELECT party_id FROM core.parties WHERE party_code = '_TEU-SUPP');
 DELETE FROM core.parties                   WHERE party_code   = '_TEU-SUPP';
-ENABLE TRIGGER core.tr_parties_audit ON core.parties;
+DELETE FROM audit.party_changes WHERE details LIKE '%[_]TEU-SUPP%' ESCAPE '[';
 GO

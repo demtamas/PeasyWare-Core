@@ -16,9 +16,10 @@ GO
 
 SET NOCOUNT ON;
 
--- Pre-clean any leftovers from previous failed runs
-DISABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-DISABLE TRIGGER core.tr_parties_audit ON core.parties;
+-- Pre-clean any leftovers from previous failed runs.
+-- Stale inbound may be ACT (guard trigger blocks expected-unit deletes),
+-- so reset it to EXP first — no trigger disabling needed.
+UPDATE inbound.inbound_deliveries SET inbound_status_code = 'EXP' WHERE inbound_ref = 'TBATCH-INB';
 DECLARE @uid_final INT = (SELECT inventory_unit_id FROM inventory.inventory_units WHERE external_ref = 'TBATCH-SSCC-01');
 IF @uid_final IS NOT NULL
 BEGIN
@@ -35,10 +36,10 @@ DELETE FROM inventory.skus                 WHERE sku_code    = 'TBATCH-SKU';
 DELETE FROM locations.bins                 WHERE bin_code    = 'TBATCH-BAY';
 DECLARE @preCleanId INT = (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
 IF @preCleanId IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @preCleanId;
+-- Also remove audit rows left by the DELETE_PARTY trigger at the end of previous runs
+DELETE FROM audit.party_changes WHERE details LIKE '%[_]TBATCH-SUPP%' ESCAPE '[';
 DELETE FROM core.party_addresses WHERE party_id IN (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
 DELETE FROM core.parties         WHERE party_code = '_TBATCH-SUPP';
-ENABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-ENABLE TRIGGER core.tr_parties_audit ON core.parties;
 GO
 
 BEGIN TRY
@@ -150,12 +151,8 @@ BEGIN CATCH
     DELETE FROM locations.bins                 WHERE bin_code    = 'TBATCH-BAY';
     DECLARE @suppId1 INT = (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
     IF @suppId1 IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @suppId1;
-    DISABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-    DISABLE TRIGGER core.tr_parties_audit ON core.parties;
     DELETE FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
     DELETE FROM core.parties         WHERE party_code = '_TBATCH-SUPP';
-    ENABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-    ENABLE TRIGGER core.tr_parties_audit ON core.parties;
     RAISERROR(@msg, 16, 1);
     RETURN;
 END CATCH
@@ -176,10 +173,6 @@ DELETE FROM inventory.skus                 WHERE sku_code    = 'TBATCH-SKU';
 DELETE FROM locations.bins                 WHERE bin_code    = 'TBATCH-BAY';
 DECLARE @suppId2 INT = (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
 IF @suppId2 IS NOT NULL DELETE FROM audit.party_changes WHERE party_id = @suppId2;
-DISABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-DISABLE TRIGGER core.tr_parties_audit ON core.parties;
 DELETE FROM core.party_addresses WHERE party_id = (SELECT party_id FROM core.parties WHERE party_code = '_TBATCH-SUPP');
 DELETE FROM core.parties         WHERE party_code = '_TBATCH-SUPP';
-ENABLE TRIGGER inbound.trg_inbound_expected_units_guard ON inbound.inbound_expected_units;
-ENABLE TRIGGER core.tr_parties_audit ON core.parties;
 GO

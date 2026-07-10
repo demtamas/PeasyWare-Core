@@ -210,6 +210,12 @@ CREATE TABLE core.party_contacts
 
 /* ============================================================
    audit.party_changes
+   ------------------------------------------------------------
+   RULE: audit tables carry IDs, never enforced FKs.
+   party_id is a point-in-time reference, not a live relationship.
+   An enforced FK here makes it impossible to audit the deletion
+   of a party (the trigger INSERT fires after the parent row is
+   gone) and blocks legitimate cleanup.
    ============================================================ */
 CREATE TABLE audit.party_changes
 (
@@ -221,10 +227,9 @@ CREATE TABLE audit.party_changes
 
     changed_at   DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     changed_by   INT NULL,
-    session_id   UNIQUEIDENTIFIER NULL,
-
-    CONSTRAINT fk_party_changes_party
-        FOREIGN KEY (party_id)
-        REFERENCES core.parties(party_id)
+    session_id   UNIQUEIDENTIFIER NULL
 );
+
+CREATE NONCLUSTERED INDEX IX_party_changes_party_time
+    ON audit.party_changes (party_id, changed_at DESC);
 GO
