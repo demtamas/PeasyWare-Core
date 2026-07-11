@@ -23,6 +23,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'storage_types.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS storage_type_id; ROLLBACK; RETURN; END
+
         IF EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = @storage_type_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTYP01' AS result_code, 0 AS storage_type_id; ROLLBACK; RETURN; END
 
@@ -55,6 +58,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'storage_types.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         IF NOT EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = @storage_type_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTYP02' AS result_code; ROLLBACK; RETURN; END
@@ -91,6 +97,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'storage_types.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
+
         DECLARE @type_id INT;
         SELECT @type_id = storage_type_id FROM locations.storage_types WITH (UPDLOCK, HOLDLOCK)
         WHERE storage_type_code = @storage_type_code COLLATE Latin1_General_CS_AS AND is_active = 1;
@@ -124,6 +133,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'storage_types.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         DECLARE @type_id INT;
         SELECT @type_id = storage_type_id FROM locations.storage_types WITH (UPDLOCK, HOLDLOCK)

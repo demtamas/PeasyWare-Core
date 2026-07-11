@@ -123,20 +123,44 @@ public sealed class SqlLoginRepository : ILoginRepository
 
         var sessionTimeout = GetSessionTimeout(connection, clientApp);
 
+        var resolvedUserId = userId.Value == DBNull.Value ? (int?)null : (int)userId.Value;
+
+        var permissions = resolvedUserId is int uid
+            ? GetPermissions(connection, uid)
+            : new HashSet<string>();
+
         return new LoginResult
         {
             ResultCode            = code,
             FriendlyMessage       = message,
             Success               = success,
-            UserId                = userId.Value == DBNull.Value ? null : (int?)userId.Value,
+            UserId                = resolvedUserId,
             SessionId             = sessionId.Value == DBNull.Value ? null : (Guid?)sessionId.Value,
             DisplayName           = displayName.Value as string,
             RoleName              = roleName.Value as string,
             LastLoginTime         = lastLogin.Value == DBNull.Value ? null : (DateTime?)lastLogin.Value,
             FailedAttempts        = failedAttempts.Value == DBNull.Value ? 0 : (int)failedAttempts.Value,
             LockoutUntil          = lockoutUntil.Value == DBNull.Value ? null : (DateTime?)lockoutUntil.Value,
-            SessionTimeoutMinutes = sessionTimeout
+            SessionTimeoutMinutes = sessionTimeout,
+            Permissions           = permissions
         };
+    }
+
+    private static HashSet<string> GetPermissions(SqlConnection connection, int userId)
+    {
+        var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT permission_key FROM auth.v_user_permissions WHERE user_id = @user_id;";
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            permissions.Add(reader.GetString(0));
+        }
+
+        return permissions;
     }
 
     private int GetSessionTimeout(SqlConnection connection, string clientApp)

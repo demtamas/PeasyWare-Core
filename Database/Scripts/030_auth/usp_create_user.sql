@@ -35,6 +35,30 @@ BEGIN
     BEGIN TRY
 
         --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        -- Bootstrap escape hatch: while no admin role assignment
+        -- exists yet (fresh install — this is how the seed script
+        -- creates the first admin/api accounts with no session
+        -- context set), this check is skipped. Once any admin exists,
+        -- the guard is permanently live.
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@actor, 'users.manage') = 0
+           AND EXISTS (
+                SELECT 1
+                FROM auth.user_roles ur
+                JOIN auth.roles r ON r.id = ur.role_id
+                WHERE r.role_name = 'admin'
+           )
+        BEGIN
+            SET @result_code = 'ERRPERM01';
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
         -- Username uniqueness
         --------------------------------------------------------
         IF EXISTS (SELECT 1 FROM auth.users WHERE username = @username)

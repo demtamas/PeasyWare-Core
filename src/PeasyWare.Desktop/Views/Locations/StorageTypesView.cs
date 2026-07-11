@@ -1,6 +1,8 @@
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Drawing;
 using System.Linq;
@@ -11,6 +13,9 @@ namespace PeasyWare.Desktop.Views.Locations;
 public sealed class StorageTypesView : BaseView, IToolbarAware
 {
     private readonly IStorageTypeRepository _repo;
+
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canManageStorageTypes;
 
     private ToolStripButton? _btnRefresh;
     private ToolStripButton? _btnNew;
@@ -24,9 +29,10 @@ public sealed class StorageTypesView : BaseView, IToolbarAware
 
     private readonly DataGridView _dgv = new();
 
-    public StorageTypesView(IStorageTypeRepository repo)
+    public StorageTypesView(IStorageTypeRepository repo, SessionContext session)
     {
         _repo = repo;
+        _canManageStorageTypes = session.HasPermission("storage_types.manage");
         ConfigureGrid(_dgv);
         EnableDoubleBuffering(_dgv);
         _dgv.Dock              = DockStyle.Fill;
@@ -47,6 +53,7 @@ public sealed class StorageTypesView : BaseView, IToolbarAware
 
         _btnNew = new ToolStripButton("New storage type") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnNew.Click += Wrap(NewStorageType);
+        _btnNew.GateBy(_canManageStorageTypes);
 
         _btnEdit = new ToolStripButton("Edit") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnEdit.Click += Wrap(EditSelected);
@@ -133,10 +140,10 @@ public sealed class StorageTypesView : BaseView, IToolbarAware
     private void UpdateToolbarState()
     {
         var t = Selected();
-        if (_btnEdit       is not null) _btnEdit.Enabled       = t is not null;
-        if (_btnDeactivate is not null) _btnDeactivate.Enabled = t is not null &&  t.IsActive;
-        if (_btnReactivate is not null) _btnReactivate.Enabled = t is not null && !t.IsActive;
-        if (_btnDelete     is not null) _btnDelete.Enabled     = t is not null;
+        if (_btnEdit       is not null) _btnEdit.Enabled       = _canManageStorageTypes && t is not null;
+        if (_btnDeactivate is not null) _btnDeactivate.Enabled = _canManageStorageTypes && t is not null &&  t.IsActive;
+        if (_btnReactivate is not null) _btnReactivate.Enabled = _canManageStorageTypes && t is not null && !t.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = _canManageStorageTypes && t is not null;
     }
 
     private void DeleteSelected()

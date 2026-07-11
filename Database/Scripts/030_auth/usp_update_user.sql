@@ -22,6 +22,15 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@admin_user_id, 'users.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = @user_id)
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRAUTHUSR05' AS result_code;

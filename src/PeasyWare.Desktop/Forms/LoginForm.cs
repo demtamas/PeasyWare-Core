@@ -15,6 +15,7 @@ public partial class LoginForm : Form
     public string? RoleName { get; private set; }
     public UiMode UiMode { get; private set; } = UiMode.Minimal;
     public int SessionTimeoutMinutes { get; private set; }
+    public IReadOnlySet<string> Permissions { get; private set; } = new HashSet<string>();
 
     public LoginForm(LoginFlow loginFlow, bool diagnosticsEnabled)
     {
@@ -65,6 +66,7 @@ public partial class LoginForm : Form
                 RoleName = result.RoleName;
                 UiMode = result.UiMode;
                 SessionTimeoutMinutes = result.SessionTimeoutMinutes;
+                Permissions = result.Permissions;
                 DialogResult = DialogResult.OK;
                 Close();
                 return;
@@ -155,6 +157,7 @@ public partial class LoginForm : Form
         UserId = retryResult.UserId;
         RoleName = retryResult.RoleName;
         UiMode = retryResult.UiMode;
+        Permissions = retryResult.Permissions;
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -200,6 +203,7 @@ public partial class LoginForm : Form
         UserId = retryResult.UserId;
         RoleName = retryResult.RoleName;
         UiMode = retryResult.UiMode;
+        Permissions = retryResult.Permissions;
         DialogResult = DialogResult.OK;
         Close();
     }

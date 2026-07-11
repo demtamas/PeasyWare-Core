@@ -59,7 +59,8 @@ try
             osInfo: Environment.OSVersion.ToString(),
             roleName: loginForm.RoleName,
             uiMode: loginForm.UiMode,
-            sessionTimeoutMinutes: loginForm.SessionTimeoutMinutes
+            sessionTimeoutMinutes: loginForm.SessionTimeoutMinutes,
+            permissions: loginForm.Permissions
         );
 
         using var mainForm = new MainForm(

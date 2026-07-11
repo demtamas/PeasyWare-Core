@@ -1,4 +1,5 @@
-﻿using PeasyWare.Application.Dto;
+﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Security;
 using PeasyWare.Desktop.Forms;
@@ -14,10 +15,15 @@ namespace PeasyWare.Desktop.Views.Users;
 
 public partial class UsersView : BaseView, IToolbarAware
 {
+    private readonly SessionContext _session;
     private readonly Guid _currentSessionId;
     private readonly IUserQueryRepository _repo;
     private readonly IUserCommandRepository _commandRepo;
     private bool _onlineOnly = false;
+
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canManageUsers;
+    private readonly bool _canTerminateAllSessions;
 
     private ToolStripButton? _btnRefresh;
     private ToolStripButton? _btnEnable;
@@ -37,17 +43,21 @@ public partial class UsersView : BaseView, IToolbarAware
     private readonly ISessionCommandRepository _sessionRepo;
 
     public UsersView(
-    Guid currentSessionId,
+    SessionContext session,
     IUserQueryRepository repo,
     IUserCommandRepository commandRepo,
     ISessionCommandRepository sessionRepo)
     {
         InitializeComponent();
 
-        _currentSessionId = currentSessionId;
+        _session = session;
+        _currentSessionId = session.SessionId;
         _repo = repo;
         _commandRepo = commandRepo;
         _sessionRepo = sessionRepo;
+
+        _canManageUsers = session.HasPermission("users.manage");
+        _canTerminateAllSessions = session.HasPermission("sessions.terminate_all");
 
         ConfigureGrid(dgvUsers);
         EnableDoubleBuffering(dgvUsers);
@@ -81,6 +91,7 @@ public partial class UsersView : BaseView, IToolbarAware
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
         };
         _btnAdd.Click += Wrap(AddNewUser);
+        _btnAdd.GateBy(_canManageUsers);
 
         _btnEnable = new ToolStripButton("Enable")
         {
@@ -105,6 +116,7 @@ public partial class UsersView : BaseView, IToolbarAware
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
         };
         _btnLogoutAll.Click += Wrap(LogoutAllUsers);
+        _btnLogoutAll.GateBy(_canTerminateAllSessions);
 
         _btnUnlock = new ToolStripButton("Unlock / Reset")
         {
@@ -113,6 +125,7 @@ public partial class UsersView : BaseView, IToolbarAware
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
         };
         _btnUnlock.Click += Wrap(UnlockSelectedUser);
+        _btnUnlock.GateBy(_canManageUsers);
 
         _btnDetails = new ToolStripButton("Details")
         {
@@ -188,15 +201,15 @@ public partial class UsersView : BaseView, IToolbarAware
             _btnEnable.Enabled = false;
             _btnDisable.Enabled = false;
             _btnUnlock.Enabled = false;
-            _btnLogoutAll.Enabled = false;
+            _btnLogoutAll.Enabled = _canTerminateAllSessions;
             _btnDetails.Enabled = false;
             return;
         }
 
-        _btnEnable.Enabled    = !user.IsActive;
-        _btnDisable.Enabled   = user.IsActive;
-        _btnLogoutAll.Enabled = true;   // global — not selection-dependent
-        _btnUnlock.Enabled    = true;
+        _btnEnable.Enabled    = _canManageUsers && !user.IsActive;
+        _btnDisable.Enabled   = _canManageUsers && user.IsActive;
+        _btnLogoutAll.Enabled = _canTerminateAllSessions;   // global — not selection-dependent
+        _btnUnlock.Enabled    = _canManageUsers;
         _btnDetails.Enabled   = true;
     }
 
@@ -374,7 +387,7 @@ public partial class UsersView : BaseView, IToolbarAware
         var user = GetSelectedUser();
         if (user is null) return;
 
-        using var dlg = new UserDetailForm(user, _commandRepo, _repo);
+        using var dlg = new UserDetailForm(user, _commandRepo, _repo, _session);
         dlg.ShowDialog(this);
 
         if (dlg.UserWasChanged)

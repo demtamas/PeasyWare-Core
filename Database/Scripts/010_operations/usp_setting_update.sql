@@ -111,6 +111,18 @@ BEGIN
         END;
 
         --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+
+        IF auth.fn_has_permission(@user_id, 'settings.write') = 0
+        BEGIN
+            SET @result_code = 'ERRPERM01';
+            SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
+            ROLLBACK;
+            RETURN;
+        END;
+
+        --------------------------------------------------------
         -- Update
         --------------------------------------------------------
 

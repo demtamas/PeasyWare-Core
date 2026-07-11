@@ -1,4 +1,5 @@
-﻿using PeasyWare.Application.Dto;
+﻿using PeasyWare.Application.Contexts;
+using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Security;
 using PeasyWare.Desktop.Forms;
@@ -19,6 +20,9 @@ public partial class SettingsView : BaseView, IToolbarAware
     private readonly ISettingsQueryRepository _queryRepo;
     private readonly ISettingsCommandRepository _commandRepo;
 
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canWriteSettings;
+
     private ToolStripButton? _btnRefresh;
     private ToolStripButton? _btnEdit;
 
@@ -26,15 +30,16 @@ public partial class SettingsView : BaseView, IToolbarAware
     private readonly Font _categoryFont = new(SystemFonts.DefaultFont, FontStyle.Bold);
 
     public SettingsView(
-        Guid sessionId,
+        SessionContext session,
         ISettingsQueryRepository queryRepo,
         ISettingsCommandRepository commandRepo)
     {
         InitializeComponent();
 
-        _sessionId = sessionId;
+        _sessionId = session.SessionId;
         _queryRepo = queryRepo;
         _commandRepo = commandRepo;
+        _canWriteSettings = session.HasPermission("settings.write");
 
         ConfigureGrid(dgvSettings);
         EnableDoubleBuffering(dgvSettings);
@@ -77,6 +82,7 @@ public partial class SettingsView : BaseView, IToolbarAware
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
         };
         _btnEdit.Click += Wrap(EditSelectedSetting);
+        _btnEdit.GateBy(_canWriteSettings);
 
         toolStrip.Items.Add(_btnRefresh);
         toolStrip.Items.Add(new ToolStripSeparator());
@@ -90,7 +96,7 @@ public partial class SettingsView : BaseView, IToolbarAware
         if (_btnEdit == null)
             return;
 
-        _btnEdit.Enabled = GetSelectedSetting() != null;
+        _btnEdit.Enabled = _canWriteSettings && GetSelectedSetting() != null;
     }
 
     // ==========================================================

@@ -28,6 +28,13 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code,
+                   0 AS activated_count, 0 AS skipped_count;
+            ROLLBACK; RETURN;
+        END
+
         IF ISJSON(@bin_codes_json) = 0
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRBIN99' AS result_code,

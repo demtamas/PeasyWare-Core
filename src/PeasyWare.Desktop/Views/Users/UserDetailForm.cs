@@ -1,5 +1,7 @@
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -17,6 +19,7 @@ public sealed class UserDetailForm : Form
     private readonly UserSummaryDto         _user;
     private readonly IUserCommandRepository _commandRepo;
     private readonly IUserQueryRepository   _queryRepo;
+    private readonly ToolTip                _toolTip = new();
 
     // Read-only display labels (always visible)
     private readonly Label _lblUsername       = new();
@@ -55,7 +58,8 @@ public sealed class UserDetailForm : Form
     public UserDetailForm(
         UserSummaryDto          user,
         IUserCommandRepository  commandRepo,
-        IUserQueryRepository    queryRepo)
+        IUserQueryRepository    queryRepo,
+        SessionContext          session)
     {
         _user        = user;
         _commandRepo = commandRepo;
@@ -73,6 +77,11 @@ public sealed class UserDetailForm : Form
 
         BuildLayout();
         PopulateValues();
+
+        // RBAC (Phase 2d): editing a user is users.manage. Gate the Edit
+        // button itself rather than Save, so a user without permission
+        // never fills in changes only to be blocked afterwards.
+        _btnEdit.GateBy(session.HasPermission("users.manage"), _toolTip);
 
         _btnEdit.Click   += (_, _) => EnterEditMode();
         _btnSave.Click   += (_, _) => SaveChanges();

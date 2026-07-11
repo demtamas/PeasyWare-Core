@@ -1,6 +1,8 @@
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -15,6 +17,9 @@ public partial class InventoryView : BaseView, IToolbarAware
     private readonly IInventoryQueryRepository  _queryRepo;
     private readonly IInventoryCommandRepository _commandRepo;
 
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canChangeStockStatus;
+
     private ToolStripButton?      _btnRefresh;
     private ToolStripButton?      _btnSelectAll;
     private ToolStripButton?      _btnChangeStatus;
@@ -24,15 +29,16 @@ public partial class InventoryView : BaseView, IToolbarAware
     private List<ActiveInventoryDto> _inventory = new();
 
     public InventoryView(
-        Guid                        sessionId,
+        SessionContext              session,
         IInventoryQueryRepository   queryRepo,
         IInventoryCommandRepository commandRepo)
     {
         InitializeComponent();
 
-        _sessionId   = sessionId;
+        _sessionId   = session.SessionId;
         _queryRepo   = queryRepo;
         _commandRepo = commandRepo;
+        _canChangeStockStatus = session.HasPermission("stock.status_change");
 
         ConfigureGrid(dgvInventory);
         EnableDoubleBuffering(dgvInventory);
@@ -63,6 +69,7 @@ public partial class InventoryView : BaseView, IToolbarAware
             Enabled      = false
         };
         _btnChangeStatus.Click += Wrap(ChangeStatus);
+        _btnChangeStatus.GateBy(_canChangeStockStatus);
 
         _txtSearch = new TextBox
         {
@@ -91,7 +98,7 @@ public partial class InventoryView : BaseView, IToolbarAware
         var count = dgvInventory.SelectedRows.Count;
         if (_btnChangeStatus is not null)
         {
-            _btnChangeStatus.Enabled = count > 0;
+            _btnChangeStatus.Enabled = _canChangeStockStatus && count > 0;
             _btnChangeStatus.Text    = count > 1
                 ? $"Change status ({count})"
                 : "Change status";

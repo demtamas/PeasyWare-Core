@@ -26,6 +26,12 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS updated_count;
+            ROLLBACK; RETURN;
+        END
+
         IF ISJSON(@bin_codes_json) = 0
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRSEC99' AS result_code, 0 AS updated_count;
@@ -93,6 +99,12 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS updated_count;
+            ROLLBACK; RETURN;
+        END
 
         IF ISJSON(@bin_codes_json) = 0
         BEGIN

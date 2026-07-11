@@ -45,7 +45,7 @@ public sealed class ViewFactory
             _runtime.Repositories.CreateSessionCommand(session);
 
         return new UsersView(
-            session.SessionId,
+            session,
             _runtime.UserQueryRepository,
             userCommandRepo,
             sessionCommandRepo);
@@ -57,7 +57,7 @@ public sealed class ViewFactory
             _runtime.Repositories.CreateSettingsCommand(session);
 
         return new SettingsView(
-            session.SessionId,
+            session,
             _runtime.SettingsQueryRepository,
             commandRepo);
     }
@@ -66,7 +66,7 @@ public sealed class ViewFactory
     {
         var queryRepo   = _runtime.Repositories.CreateInventoryQuery(session);
         var commandRepo = _runtime.Repositories.CreateInventoryCommand(session);
-        return new InventoryView(session.SessionId, queryRepo, commandRepo);
+        return new InventoryView(session, queryRepo, commandRepo);
     }
 
     public UserControl CreateMaterialsView(SessionContext session)
@@ -139,7 +139,7 @@ public sealed class ViewFactory
         var queryRepo     = _runtime.Repositories.CreateLocationQuery(session);
         var commandRepo   = _runtime.Repositories.CreateLocationCommand(session);
         var inventoryRepo = _runtime.Repositories.CreateInventoryQuery(session);
-        return new PeasyWare.Desktop.Views.Locations.LocationsView(queryRepo, commandRepo, inventoryRepo);
+        return new PeasyWare.Desktop.Views.Locations.LocationsView(queryRepo, commandRepo, inventoryRepo, session);
     }
 
     public UserControl CreateZonesView(SessionContext session)
@@ -147,7 +147,7 @@ public sealed class ViewFactory
         var repo         = _runtime.Repositories.CreateZoneRepository(session);
         var locQuery     = _runtime.Repositories.CreateLocationQuery(session);
         var locCommand   = _runtime.Repositories.CreateLocationCommand(session);
-        return new PeasyWare.Desktop.Views.Locations.ZonesView(repo, locQuery, locCommand);
+        return new PeasyWare.Desktop.Views.Locations.ZonesView(repo, locQuery, locCommand, session);
     }
 
     public UserControl CreateSectionsView(SessionContext session)
@@ -155,13 +155,13 @@ public sealed class ViewFactory
         var repo         = _runtime.Repositories.CreateSectionRepository(session);
         var locQuery     = _runtime.Repositories.CreateLocationQuery(session);
         var locCommand   = _runtime.Repositories.CreateLocationCommand(session);
-        return new PeasyWare.Desktop.Views.Locations.SectionsView(repo, locQuery, locCommand);
+        return new PeasyWare.Desktop.Views.Locations.SectionsView(repo, locQuery, locCommand, session);
     }
 
     public UserControl CreateStorageTypesView(SessionContext session)
     {
         var repo = _runtime.Repositories.CreateStorageTypeRepository(session);
-        return new PeasyWare.Desktop.Views.Locations.StorageTypesView(repo);
+        return new PeasyWare.Desktop.Views.Locations.StorageTypesView(repo, session);
     }
 
     public UserControl CreateClientsView(SessionContext session)

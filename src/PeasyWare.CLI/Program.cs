@@ -38,6 +38,7 @@ string? displayName           = null;
 string? roleName              = null;
 UiMode  uiMode                = UiMode.Minimal;
 int     sessionTimeoutMinutes = 480;
+IReadOnlySet<string> permissions = new HashSet<string>();
 
 while (true)
 {
@@ -80,6 +81,7 @@ while (true)
                 roleName              = result.RoleName;
                 uiMode                = result.UiMode;
                 sessionTimeoutMinutes = result.SessionTimeoutMinutes;
+                permissions           = result.Permissions;
                 goto LoginSucceeded;
 
             case LoginOutcome.PasswordChangeRequired:
@@ -124,6 +126,7 @@ while (true)
                 roleName              = retry.RoleName;
                 uiMode                = retry.UiMode;
                 sessionTimeoutMinutes = retry.SessionTimeoutMinutes;
+                permissions           = retry.Permissions;
                 goto LoginSucceeded;
 
             default:
@@ -154,7 +157,8 @@ var session = new SessionContext(
     osInfo:                Environment.OSVersion.ToString(),
     roleName:              roleName,
     uiMode:                uiMode,
-    sessionTimeoutMinutes: sessionTimeoutMinutes
+    sessionTimeoutMinutes: sessionTimeoutMinutes,
+    permissions:           permissions
 );
 
 runtime.Logger.SetSession(session);
@@ -251,7 +255,7 @@ finally
 
 static void RunInbound(AppRuntime runtime, SessionContext session)
 {
-    bool canReverse = session.UiMode >= UiMode.Standard;
+    bool canReverse = session.HasPermission("inbound.reverse");
     var inboundQuery   = runtime.Repositories.CreateInboundQuery(session);
     var inboundCommand = runtime.Repositories.CreateInboundCommand(session);
 

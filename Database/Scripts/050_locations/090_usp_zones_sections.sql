@@ -23,6 +23,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS zone_id; ROLLBACK; RETURN; END
+
         IF EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = @zone_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRZON01' AS result_code, 0 AS zone_id; ROLLBACK; RETURN; END
 
@@ -55,6 +58,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         IF NOT EXISTS (SELECT 1 FROM locations.zones WHERE zone_code = @zone_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRZON02' AS result_code; ROLLBACK; RETURN; END
@@ -91,6 +97,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
+
         DECLARE @zone_id INT;
         SELECT @zone_id = zone_id FROM locations.zones WITH (UPDLOCK, HOLDLOCK)
         WHERE zone_code = @zone_code COLLATE Latin1_General_CS_AS AND is_active = 1;
@@ -124,6 +133,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         DECLARE @zone_id INT;
         SELECT @zone_id = zone_id FROM locations.zones WITH (UPDLOCK, HOLDLOCK)
@@ -165,6 +177,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS section_id; ROLLBACK; RETURN; END
+
         IF EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = @section_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRSEC01' AS result_code, 0 AS section_id; ROLLBACK; RETURN; END
 
@@ -197,6 +212,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         IF NOT EXISTS (SELECT 1 FROM locations.storage_sections WHERE section_code = @section_code COLLATE Latin1_General_CS_AS)
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRSEC02' AS result_code; ROLLBACK; RETURN; END
@@ -233,6 +251,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
+
         DECLARE @section_id INT;
         SELECT @section_id = storage_section_id FROM locations.storage_sections WITH (UPDLOCK, HOLDLOCK)
         WHERE section_code = @section_code COLLATE Latin1_General_CS_AS AND is_active = 1;
@@ -266,6 +287,9 @@ BEGIN
     SET NOCOUNT ON; SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code; ROLLBACK; RETURN; END
 
         DECLARE @section_id INT;
         SELECT @section_id = storage_section_id FROM locations.storage_sections WITH (UPDLOCK, HOLDLOCK)

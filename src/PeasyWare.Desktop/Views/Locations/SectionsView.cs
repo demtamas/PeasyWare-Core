@@ -1,6 +1,8 @@
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Drawing;
 using System.Linq;
@@ -13,6 +15,9 @@ public sealed class SectionsView : BaseView, IToolbarAware
     private readonly ISectionRepository            _repo;
     private readonly ILocationQueryRepository      _locationQuery;
     private readonly ILocationCommandRepository    _locationCommand;
+
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canManageZones;
 
     private ToolStripButton? _btnRefresh;
     private ToolStripButton? _btnNew;
@@ -30,11 +35,13 @@ public sealed class SectionsView : BaseView, IToolbarAware
     public SectionsView(
         ISectionRepository         repo,
         ILocationQueryRepository   locationQuery,
-        ILocationCommandRepository locationCommand)
+        ILocationCommandRepository locationCommand,
+        SessionContext             session)
     {
         _repo            = repo;
         _locationQuery   = locationQuery;
         _locationCommand = locationCommand;
+        _canManageZones  = session.HasPermission("zones.manage");
         ConfigureGrid(_dgv);
         EnableDoubleBuffering(_dgv);
         _dgv.Dock              = DockStyle.Fill;
@@ -55,6 +62,7 @@ public sealed class SectionsView : BaseView, IToolbarAware
 
         _btnNew = new ToolStripButton("New section") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnNew.Click += Wrap(NewSection);
+        _btnNew.GateBy(_canManageZones);
 
         _btnEdit = new ToolStripButton("Edit") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnEdit.Click += Wrap(EditSelected);
@@ -145,11 +153,11 @@ public sealed class SectionsView : BaseView, IToolbarAware
     private void UpdateToolbarState()
     {
         var s = Selected();
-        if (_btnEdit       is not null) _btnEdit.Enabled       = s is not null;
-        if (_btnAssign     is not null) _btnAssign.Enabled     = s is not null;
-        if (_btnDeactivate is not null) _btnDeactivate.Enabled = s is not null &&  s.IsActive;
-        if (_btnReactivate is not null) _btnReactivate.Enabled = s is not null && !s.IsActive;
-        if (_btnDelete     is not null) _btnDelete.Enabled     = s is not null;
+        if (_btnEdit       is not null) _btnEdit.Enabled       = _canManageZones && s is not null;
+        if (_btnAssign     is not null) _btnAssign.Enabled     = _canManageZones && s is not null;
+        if (_btnDeactivate is not null) _btnDeactivate.Enabled = _canManageZones && s is not null &&  s.IsActive;
+        if (_btnReactivate is not null) _btnReactivate.Enabled = _canManageZones && s is not null && !s.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = _canManageZones && s is not null;
     }
 
     private void AssignToLocations()

@@ -25,6 +25,20 @@ BEGIN
     BEGIN TRY
 
         --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@actor, 'users.manage') = 0
+        BEGIN
+            SET @result_code = 'ERRPERM01';
+
+            SELECT @friendly_msg = message_template
+            FROM operations.error_messages
+            WHERE error_code = @result_code;
+
+            GOTO LogAndExit;
+        END;
+
+        --------------------------------------------------------
         -- Validate target user
         --------------------------------------------------------
         IF NOT EXISTS (

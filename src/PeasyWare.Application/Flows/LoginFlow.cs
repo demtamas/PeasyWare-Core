@@ -36,7 +36,8 @@ public sealed class LoginFlow
                 loginResult.DisplayName,
                 loginResult.RoleName,
                 ResolveUiMode(loginResult.RoleName),
-                loginResult.SessionTimeoutMinutes),
+                loginResult.SessionTimeoutMinutes,
+                loginResult.Permissions),
 
             "ERRAUTH09" => LoginFlowResult.PasswordChangeRequired(
                 loginResult.FriendlyMessage),

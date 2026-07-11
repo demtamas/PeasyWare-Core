@@ -28,6 +28,15 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         DECLARE @bin_id   INT;
         DECLARE @is_active BIT;
 
@@ -113,6 +122,15 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         DECLARE @zone_id INT;
 
         SELECT @zone_id = zone_id
@@ -164,6 +182,15 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@user_id, 'zones.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         DECLARE @section_id INT;
 
         SELECT @section_id = storage_section_id
@@ -214,6 +241,15 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRAN;
+
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@user_id, 'storage_types.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
 
         DECLARE @type_id INT;
 

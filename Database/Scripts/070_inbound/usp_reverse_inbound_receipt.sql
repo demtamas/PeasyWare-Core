@@ -34,6 +34,19 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@user_id, 'inbound.reverse') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code,
+                   NULL AS inbound_id, NULL AS inbound_line_id,
+                   @receipt_id AS receipt_id, NULL AS reversal_receipt_id,
+                   NULL AS inventory_unit_id, CAST(0 AS BIT) AS header_reopened;
+            ROLLBACK;
+            RETURN;
+        END
+
         SELECT
             @inbound_line_id          = r.inbound_line_id,
             @inbound_expected_unit_id = r.inbound_expected_unit_id,

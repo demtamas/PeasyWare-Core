@@ -19,8 +19,8 @@ namespace PeasyWare.CLI.Flows
 
         public void Run()
         {
-            // Role guard — manager and admin only
-            if (_session.UiMode < UiMode.Standard)
+            // Role guard - requires inbound.reverse (Phase 2d)
+            if (!_session.HasPermission("inbound.reverse"))
             {
                 Console.WriteLine("You do not have permission to perform reversals.");
                 Console.ReadKey(true);

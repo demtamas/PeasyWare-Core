@@ -118,6 +118,10 @@ BEGIN
             N'User account created successfully.',
             N'Auth.CreateUser: Success'),
 
+        (N'ERRPERM01', N'PERM', N'ERROR',
+            N'You do not have permission for this action.',
+            N'RBAC guard: session user lacks the required permission (Phase 2c)'),
+
         (N'ERRINB01', N'INB', N'ERROR',
             N'Inbound delivery not found.',
             N'Inbound.Activate: inbound_id not found'),
@@ -646,6 +650,49 @@ BEGIN
             CONSTRAINT DF_auth_clients_created_at DEFAULT SYSUTCDATETIME(),
         created_by              INT             NULL
             DEFAULT (CONVERT(INT, SESSION_CONTEXT(N'user_id')))
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- 1.6 Permissions
+-- Verb-on-resource keys, e.g. 'users.manage', 'inbound.receive'.
+-- Data, not code — consistent with the thick-DB approach.
+---------------------------------------------------------------
+IF OBJECT_ID('auth.permissions', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.permissions
+    (
+        id              INT IDENTITY(1,1) PRIMARY KEY,
+        permission_key  NVARCHAR(100)   NOT NULL
+            CONSTRAINT UQ_auth_permissions_key UNIQUE,
+        description     NVARCHAR(255)   NULL,
+        is_active       BIT             NOT NULL
+            CONSTRAINT DF_auth_permissions_is_active DEFAULT (1),
+        created_at      DATETIME2(3)    NOT NULL
+            CONSTRAINT DF_auth_permissions_created_at DEFAULT (SYSUTCDATETIME()),
+        created_by      INT             NULL
+            CONSTRAINT DF_auth_permissions_created_by DEFAULT (CONVERT(INT, SESSION_CONTEXT(N'user_id')))
+    );
+END;
+GO
+
+---------------------------------------------------------------
+-- 1.7 Role → Permissions
+---------------------------------------------------------------
+IF OBJECT_ID('auth.role_permissions', 'U') IS NULL
+BEGIN
+    CREATE TABLE auth.role_permissions
+    (
+        role_id       INT NOT NULL,
+        permission_id INT NOT NULL,
+        PRIMARY KEY (role_id, permission_id),
+
+        CONSTRAINT FK_role_permissions_role FOREIGN KEY (role_id)
+            REFERENCES auth.roles(id),
+
+        CONSTRAINT FK_role_permissions_permission FOREIGN KEY (permission_id)
+            REFERENCES auth.permissions(id)
     );
 END;
 GO

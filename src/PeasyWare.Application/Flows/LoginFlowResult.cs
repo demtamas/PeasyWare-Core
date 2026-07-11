@@ -11,6 +11,7 @@ public sealed class LoginFlowResult
     public LoginOutcome Outcome { get; }
     public string? Message { get; }
     public int SessionTimeoutMinutes { get; set; }
+    public IReadOnlySet<string> Permissions { get; }
 
     private LoginFlowResult(
         bool success,
@@ -21,7 +22,8 @@ public sealed class LoginFlowResult
         UiMode uiMode,
         LoginOutcome outcome,
         string? message,
-        int sessionTimeoutMinutes)
+        int sessionTimeoutMinutes,
+        IReadOnlySet<string>? permissions = null)
     {
         Success = success;
         SessionId = sessionId;
@@ -32,6 +34,7 @@ public sealed class LoginFlowResult
         Outcome = outcome;
         Message = message;
         SessionTimeoutMinutes = sessionTimeoutMinutes;
+        Permissions = permissions ?? new HashSet<string>();
     }
 
     public static LoginFlowResult Succeeded(
@@ -40,9 +43,10 @@ public sealed class LoginFlowResult
         string? displayName,
         string? roleName,
         UiMode uiMode,
-        int sessionTimeoutMinutes)
+        int sessionTimeoutMinutes,
+        IReadOnlySet<string>? permissions = null)
         => new(true, sessionId, userId, displayName, roleName, uiMode,
-               LoginOutcome.Success, null, sessionTimeoutMinutes);
+               LoginOutcome.Success, null, sessionTimeoutMinutes, permissions);
 
     public static LoginFlowResult Failed(string? message = null)
         => new(false, null, null, null, null, UiMode.Minimal,

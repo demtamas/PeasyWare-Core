@@ -42,6 +42,7 @@ CLI (RF-style terminal)        Desktop Application
 **Design principles:**
 - Every process has a Reversal Path
 - Every operation carries a Correlation ID
+- Every mutating stored procedure enforces RBAC via `auth.fn_has_permission`, checked first, inside the transaction
 - All SPs use `SET XACT_ABORT ON` + `BEGIN CATCH`
 - Error codes follow `ERRAUTH01` pattern (prefix ERR/WAR/SUC, no hyphens)
 - `UPDLOCK, HOLDLOCK` on concurrent reads
@@ -265,6 +266,7 @@ dotnet test
 - Template auto-located by walking up from binary; inline fallback if not found
 
 ### Infrastructure
+- Role-based access control (RBAC) — verb-on-resource permissions (`auth.permissions` / `auth.role_permissions`), enforced in every mutating stored procedure via `auth.fn_has_permission`, mirrored in Desktop and CLI UI gating
 - Role-based UiMode (Minimal / Standard / Trace) — system ceiling enforced
 - Session management — TTL, heartbeat, force login, concurrent session guard
 - Structured audit log with JSON payload (`audit.trace_logs`)
@@ -292,8 +294,16 @@ Toggle via Settings view or directly in `operations.settings`.
 Full warehouse loop operational across both CLI and Desktop:
 Receive → Putaway → Move → Allocate (full/partial) → Pick → Load → Ship → Delivery note
 
+**Role-based access control (RBAC) complete**
+
+Verb-on-resource permission model (`auth.permissions` / `auth.role_permissions`),
+enforced at the stored-procedure layer via `auth.fn_has_permission` across every
+mutating operation, with matching gating in both Desktop and CLI. Denial and
+grant coverage tested per permission category, including bootstrap and
+system-role edge cases.
+
 **Next milestone: v1.0**
-- Role-based access controls on Desktop views
+- Concurrency proof harness for task claiming
 - Production hardening and edge case test coverage
 
 ---

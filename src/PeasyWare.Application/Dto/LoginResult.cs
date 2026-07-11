@@ -13,4 +13,5 @@ public sealed class LoginResult
     public int FailedAttempts { get; init; }
     public DateTime? LockoutUntil { get; init; }
     public int SessionTimeoutMinutes { get; set; }
+    public IReadOnlySet<string> Permissions { get; init; } = new HashSet<string>();
 }

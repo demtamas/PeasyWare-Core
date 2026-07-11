@@ -45,6 +45,17 @@ BEGIN
 
     BEGIN TRY
 
+        --------------------------------------------------------
+        -- Permission check (Phase 2c)
+        --------------------------------------------------------
+        IF auth.fn_has_permission(@admin_user_id, 'sessions.terminate_all') = 0
+        BEGIN
+            SET @result_code  = 'ERRPERM01';
+            SET @friendly_msg = 'You do not have permission for this action.';
+            SET @success      = 0;
+            RETURN;
+        END
+
         -- Collect active sessions (excluding caller)
         IF OBJECT_ID('tempdb..#ToRevoke') IS NOT NULL
             DROP TABLE #ToRevoke;

@@ -28,6 +28,12 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS bin_id;
+            ROLLBACK; RETURN;
+        END
+
         -- Validate bin code unique
         IF EXISTS (SELECT 1 FROM locations.bins WHERE bin_code = @bin_code COLLATE Latin1_General_CS_AS)
         BEGIN
@@ -107,6 +113,12 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS created_count, 0 AS skipped_count;
+            ROLLBACK; RETURN;
+        END
 
         DECLARE @storage_type_id INT =
             (SELECT storage_type_id FROM locations.storage_types

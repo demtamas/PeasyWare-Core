@@ -1,6 +1,8 @@
+using PeasyWare.Application.Contexts;
 using PeasyWare.Application.Dto;
 using PeasyWare.Application.Interfaces;
 using PeasyWare.Desktop.Infrastructure;
+using PeasyWare.Desktop.Infrastructure.Ui;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -14,6 +16,9 @@ public sealed class LocationsView : BaseView, IToolbarAware
     private readonly ILocationQueryRepository   _queryRepo;
     private readonly ILocationCommandRepository _commandRepo;
     private readonly IInventoryQueryRepository  _inventoryRepo;
+
+    // RBAC (Phase 2d) - computed once, session lifetime is static
+    private readonly bool _canManageBins;
 
     // Toolbar
     private ToolStripButton?      _btnRefresh;
@@ -44,11 +49,13 @@ public sealed class LocationsView : BaseView, IToolbarAware
     public LocationsView(
         ILocationQueryRepository   queryRepo,
         ILocationCommandRepository commandRepo,
-        IInventoryQueryRepository  inventoryRepo)
+        IInventoryQueryRepository  inventoryRepo,
+        SessionContext             session)
     {
         _queryRepo     = queryRepo;
         _commandRepo   = commandRepo;
         _inventoryRepo = inventoryRepo;
+        _canManageBins = session.HasPermission("bins.manage");
 
         BuildLayout();
         ConfigureMainGrid(_dgvLocations);
@@ -72,9 +79,11 @@ public sealed class LocationsView : BaseView, IToolbarAware
 
         _btnNewBin = new ToolStripButton("New location") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnNewBin.Click += Wrap(NewBin);
+        _btnNewBin.GateBy(_canManageBins);
 
         _btnBulkCreate = new ToolStripButton("Bulk create") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnBulkCreate.Click += Wrap(BulkCreate);
+        _btnBulkCreate.GateBy(_canManageBins);
 
         _btnEdit = new ToolStripButton("Edit") { DisplayStyle = ToolStripItemDisplayStyle.Text, Enabled = false };
         _btnEdit.Click += Wrap(EditSelected);
@@ -471,13 +480,13 @@ public sealed class LocationsView : BaseView, IToolbarAware
             .Cast<DataGridViewRow>()
             .Any(r => r.DataBoundItem is LocationDto l && !l.IsActive);
 
-        if (_btnEdit       is not null) _btnEdit.Enabled       = loc is not null;
-        if (_btnActivate   is not null) _btnActivate.Enabled   = hasInactive;
-        if (_btnLock       is not null) _btnLock.Enabled       = loc is not null &&  loc.IsActive && !loc.IsLocked;
-        if (_btnUnlock     is not null) _btnUnlock.Enabled     = loc is not null &&  loc.IsActive &&  loc.IsLocked;
-        if (_btnDeactivate is not null) _btnDeactivate.Enabled = loc is not null &&  loc.IsActive;
-        if (_btnReactivate is not null) _btnReactivate.Enabled = loc is not null && !loc.IsActive;
-        if (_btnDelete     is not null) _btnDelete.Enabled     = loc is not null && !loc.IsActive;
+        if (_btnEdit       is not null) _btnEdit.Enabled       = _canManageBins && loc is not null;
+        if (_btnActivate   is not null) _btnActivate.Enabled   = _canManageBins && hasInactive;
+        if (_btnLock       is not null) _btnLock.Enabled       = _canManageBins && loc is not null &&  loc.IsActive && !loc.IsLocked;
+        if (_btnUnlock     is not null) _btnUnlock.Enabled     = _canManageBins && loc is not null &&  loc.IsActive &&  loc.IsLocked;
+        if (_btnDeactivate is not null) _btnDeactivate.Enabled = _canManageBins && loc is not null &&  loc.IsActive;
+        if (_btnReactivate is not null) _btnReactivate.Enabled = _canManageBins && loc is not null && !loc.IsActive;
+        if (_btnDelete     is not null) _btnDelete.Enabled     = _canManageBins && loc is not null && !loc.IsActive;
     }
 
     // Single selected row (for edit/lock/unlock/deactivate/reactivate)

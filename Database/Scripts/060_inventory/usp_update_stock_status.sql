@@ -23,6 +23,13 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        -- Permission check (Phase 2c)
+        IF auth.fn_has_permission(@user_id, 'stock.status_change') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code, 0 AS affected_count;
+            ROLLBACK; RETURN;
+        END
+
         -- Validate target status exists
         IF NOT EXISTS (SELECT 1 FROM inventory.stock_statuses WHERE status_code = @new_status)
         BEGIN

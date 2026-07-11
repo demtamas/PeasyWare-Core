@@ -20,6 +20,12 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         DECLARE @bin_id INT;
 
         SELECT @bin_id = bin_id
@@ -72,6 +78,12 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRAN;
+
+        IF auth.fn_has_permission(@user_id, 'bins.manage') = 0
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRPERM01' AS result_code;
+            ROLLBACK; RETURN;
+        END
 
         DECLARE @bin_id INT;
 
