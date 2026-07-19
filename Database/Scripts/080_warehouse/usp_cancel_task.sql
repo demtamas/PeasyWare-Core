@@ -22,6 +22,8 @@ BEGIN
     DECLARE
         @current_state  VARCHAR(3),
         @is_terminal    BIT,
+        @task_type      NVARCHAR(20),
+        @dest_bin_id    INT,
         @now            DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
@@ -29,7 +31,9 @@ BEGIN
 
         SELECT
             @current_state = wt.task_state_code,
-            @is_terminal   = ts.is_terminal
+            @is_terminal   = ts.is_terminal,
+            @task_type     = wt.task_type_code,
+            @dest_bin_id   = wt.destination_bin_id
         FROM warehouse.warehouse_tasks wt WITH (UPDLOCK, HOLDLOCK)
         JOIN warehouse.task_states ts ON ts.state_code = wt.task_state_code
         WHERE wt.task_id = @task_id;
@@ -62,6 +66,16 @@ BEGIN
             updated_at      = @now,
             updated_by      = @user_id
         WHERE task_id = @task_id;
+
+        -- A cancelled PUTAWAY task's destination-bin reservation (created in
+        -- usp_putaway_create_task_for_unit) has no further purpose - release
+        -- it now rather than leave the bin needlessly held for the rest of
+        -- the TTL window.
+        IF @task_type = 'PUTAWAY' AND @dest_bin_id IS NOT NULL
+        BEGIN
+            DELETE FROM locations.bin_reservations
+            WHERE bin_id = @dest_bin_id AND reservation_type = 'PUTAWAY' AND expires_at >= @now;
+        END
 
         COMMIT;
 

@@ -66,7 +66,8 @@ BEGIN
         claimed_by_user_id       = NULL,
         claimed_at               = NULL,
         claim_expires_at         = NULL,
-        claim_token              = NULL
+        claim_token              = NULL,
+        updated_at               = @now
     WHERE claim_expires_at IS NOT NULL
       AND claim_expires_at < @now
       AND received_inventory_unit_id IS NULL
@@ -319,7 +320,9 @@ BEGIN
             claimed_by_user_id       = @user_id,
             claimed_at               = @now,
             claim_expires_at         = @claim_expires_at,
-            claim_token              = @claim_token
+            claim_token              = @claim_token,
+            updated_at               = @now,
+            updated_by               = @user_id
         WHERE inbound_expected_unit_id = @inbound_expected_unit_id
           AND received_inventory_unit_id IS NULL
           AND (

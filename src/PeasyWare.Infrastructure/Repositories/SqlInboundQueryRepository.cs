@@ -431,24 +431,36 @@ public sealed class SqlInboundQueryRepository : IInboundQueryRepository
                 h.display_name                              AS haulier_name,
                 CONVERT(NVARCHAR(16), d.expected_arrival_at, 120) AS expected_arrival,
                 d.inbound_mode_code                             AS inbound_mode,
-                COUNT(DISTINCT l.inbound_line_id)           AS total_lines,
-                ISNULL(SUM(l.expected_qty), 0)              AS total_expected,
-                ISNULL(SUM(l.received_qty), 0)              AS total_received,
-                ISNULL(SUM(l.expected_qty - l.received_qty), 0) AS total_outstanding,
-                COUNT(DISTINCT eu.inbound_expected_unit_id) AS total_units
+                ISNULL(lines_agg.total_lines, 0)       AS total_lines,
+                ISNULL(lines_agg.total_expected, 0)    AS total_expected,
+                ISNULL(lines_agg.total_received, 0)    AS total_received,
+                ISNULL(lines_agg.total_outstanding, 0) AS total_outstanding,
+                ISNULL(units_agg.total_units, 0)       AS total_units
             FROM inbound.inbound_deliveries d
             JOIN core.parties s ON s.party_id = d.supplier_party_id
             LEFT JOIN core.parties h ON h.party_id = d.haulier_party_id
-            LEFT JOIN inbound.inbound_lines l
-                ON l.inbound_id = d.inbound_id
-               AND l.line_state_code <> 'CNL'
-            LEFT JOIN inbound.inbound_expected_units eu
-                ON eu.inbound_line_id = l.inbound_line_id
+            OUTER APPLY
+            (
+                -- Line-level totals, aggregated once per line - kept separate
+                -- from the unit count below so neither join fans the other out.
+                SELECT
+                    COUNT(*)                             AS total_lines,
+                    SUM(l.expected_qty)                  AS total_expected,
+                    SUM(l.received_qty)                  AS total_received,
+                    SUM(l.expected_qty - l.received_qty) AS total_outstanding
+                FROM inbound.inbound_lines l
+                WHERE l.inbound_id = d.inbound_id
+                  AND l.line_state_code <> 'CNL'
+            ) lines_agg
+            OUTER APPLY
+            (
+                SELECT COUNT(*) AS total_units
+                FROM inbound.inbound_expected_units eu
+                JOIN inbound.inbound_lines l2 ON l2.inbound_line_id = eu.inbound_line_id
+                WHERE l2.inbound_id = d.inbound_id
+                  AND l2.line_state_code <> 'CNL'
+            ) units_agg
             WHERE (@status IS NULL OR d.inbound_status_code = @status)
-            GROUP BY
-                d.inbound_id, d.inbound_ref, d.inbound_status_code,
-                s.display_name, h.display_name,
-                d.expected_arrival_at, d.inbound_mode_code
             ORDER BY d.expected_arrival_at DESC, d.inbound_ref
         """;
 

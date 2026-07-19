@@ -39,7 +39,16 @@ SELECT
             JOIN inbound.inbound_deliveries d ON d.inbound_id   = l.inbound_id
             WHERE r.receipt_id = m.reference_id
         )
-        WHEN 'TASK'     THEN (SELECT CAST(task_id  AS NVARCHAR(20))   FROM warehouse.warehouse_tasks WHERE task_id   = m.reference_id)
+        WHEN 'TASK'     THEN (
+            SELECT CASE t.task_type_code
+                WHEN 'PUTAWAY' THEN 'PUT-'  + RIGHT('000000' + CAST(t.task_id AS VARCHAR(6)), 6)
+                WHEN 'PICK'    THEN 'PICK-' + RIGHT('000000' + CAST(t.task_id AS VARCHAR(6)), 6)
+                WHEN 'MOVE'    THEN 'MOVE-' + RIGHT('000000' + CAST(t.task_id AS VARCHAR(6)), 6)
+                ELSE CAST(t.task_id AS NVARCHAR(20))
+            END
+            FROM warehouse.warehouse_tasks t
+            WHERE t.task_id = m.reference_id
+        )
         ELSE NULL
     END                                     AS reference_ref,
     -- Reversal flag

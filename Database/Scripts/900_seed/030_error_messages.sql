@@ -102,6 +102,10 @@ FROM (VALUES
         N'Cannot cancel — orders on this shipment are being picked or have been loaded. Reverse picks first.',
         N'outbound.usp_cancel_shipment: orders in PICKING/PICKED/LOADED state'),
 
+    (N'ERRSHIP09', N'SHIP', N'ERROR',
+        N'One or more orders on this shipment have been picked but not yet loaded. Confirm loading for all orders before shipping.',
+        N'outbound.usp_ship: order_status_code = PICKED (load not confirmed) for at least one order'),
+
     (N'SUCSHIP01', N'SHIP', N'INFO', N'Shipment created successfully.',   N'Shipment.Create: success'),
     (N'SUCSHIP02', N'SHIP', N'INFO', N'Shipment departed. All units shipped.', N'Shipment.Ship: success'),
     (N'SUCSHIP03', N'SHIP', N'INFO', N'Order added to shipment.',          N'usp_add_order_to_shipment: success'),

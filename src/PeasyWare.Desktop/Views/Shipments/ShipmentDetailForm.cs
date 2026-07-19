@@ -21,6 +21,9 @@ public sealed class ShipmentDetailForm : Form
     private readonly ISettingsQueryRepository   _settingsRepo;
 
     private DataGridView _dgvOrders = null!;
+    private Button _btnAllocate = null!;
+    private Button _btnAllocateAll = null!;
+    private List<OutboundOrderSummaryDto> _orders = new();
 
     public ShipmentDetailForm(
         int                         shipmentId,
@@ -124,6 +127,8 @@ public sealed class ShipmentDetailForm : Form
             OpenOrderDetail();
         };
 
+        _dgvOrders.SelectionChanged += (_, _) => UpdateActionButtons();
+
         // Footer
         var pnlFooter = new Panel
         {
@@ -150,12 +155,32 @@ public sealed class ShipmentDetailForm : Form
         };
         btnAddOrder.Click += (_, _) => AddOrder();
 
+        _btnAllocate = new Button
+        {
+            Text     = "Allocate",
+            Width    = 100,
+            Height   = 28,
+            Location = new Point(224, 7),
+            Enabled  = false
+        };
+        _btnAllocate.Click += (_, _) => AllocateSelected();
+
+        _btnAllocateAll = new Button
+        {
+            Text     = "Allocate all",
+            Width    = 110,
+            Height   = 28,
+            Location = new Point(332, 7),
+            Enabled  = false
+        };
+        _btnAllocateAll.Click += (_, _) => AllocateAll();
+
         var btnPrintManifest = new Button
         {
             Text     = "Print manifest",
             Width    = 110,
             Height   = 28,
-            Location = new Point(224, 7)
+            Location = new Point(450, 7)
         };
         btnPrintManifest.Click += (_, _) => PrintManifest();
 
@@ -169,7 +194,7 @@ public sealed class ShipmentDetailForm : Form
         btnClose.Location = new Point(pnlFooter.Width - 96, 7);
         btnClose.Anchor   = AnchorStyles.Right | AnchorStyles.Top;
 
-        pnlFooter.Controls.AddRange([btnOrderDetail, btnAddOrder, btnPrintManifest, btnClose]);
+        pnlFooter.Controls.AddRange([btnOrderDetail, btnAddOrder, _btnAllocate, _btnAllocateAll, btnPrintManifest, btnClose]);
 
         Controls.Add(_dgvOrders);
         Controls.Add(pnlFooter);
@@ -181,9 +206,142 @@ public sealed class ShipmentDetailForm : Form
 
     private void LoadOrders()
     {
-        var orders = _queryRepo.GetOrdersOnShipment(_shipmentId).ToList();
+        _orders = _queryRepo.GetOrdersOnShipment(_shipmentId).ToList();
         _dgvOrders.DataSource = null;
-        _dgvOrders.DataSource = orders;
+        _dgvOrders.DataSource = _orders;
+        UpdateActionButtons();
+    }
+
+    private void UpdateActionButtons()
+    {
+        var selected = SelectedOrder();
+
+        var canAllocateSelected = selected is not null &&
+            (selected.OrderStatusCode == "NEW" ||
+             (selected.OrderStatusCode == "ALLOCATED" && selected.TotalAllocated < selected.TotalOrdered));
+
+        _btnAllocate.Enabled = canAllocateSelected;
+        _btnAllocate.Text = canAllocateSelected && selected!.OrderStatusCode == "ALLOCATED"
+            ? "Top up"
+            : "Allocate";
+
+        var unallocatedCount = _orders.Count(o => o.OrderStatusCode == "NEW");
+        _btnAllocateAll.Enabled = unallocatedCount > 0;
+        _btnAllocateAll.Text = unallocatedCount > 1
+            ? $"Allocate all ({unallocatedCount})"
+            : "Allocate all";
+    }
+
+    private OutboundOrderSummaryDto? SelectedOrder() =>
+        _dgvOrders.SelectedRows.Count == 1
+            ? _dgvOrders.SelectedRows[0].DataBoundItem as OutboundOrderSummaryDto
+            : null;
+
+    // ── Allocate selected order (same flow as Outstanding Orders: confirm,
+    //    offer partial on insufficient stock, refresh) ──
+    private void AllocateSelected()
+    {
+        var order = SelectedOrder();
+        if (order is null) return;
+
+        var confirm = MessageBox.Show(this,
+            $"Allocate order {order.OrderRef} for {order.CustomerName}?\n\nStock will be assigned automatically using the configured strategy.",
+            "Confirm Allocation",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button1);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var result = _commandRepo.AllocateOrder(order.OutboundOrderId);
+
+        if (!result.Success && result.ResultCode is "ERRALLOC01" or "ERRALLOC02")
+        {
+            var offerPartial = MessageBox.Show(this,
+                $"Insufficient stock to fully allocate {order.OrderRef}.\n\nAllocate whatever stock is currently available (partial allocation)?",
+                "Partial Allocation",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (offerPartial == DialogResult.Yes)
+                result = _commandRepo.AllocateOrder(order.OutboundOrderId, allowPartial: true);
+            else
+            {
+                LoadOrders();
+                return;
+            }
+        }
+
+        if (!result.Success)
+        {
+            MessageBox.Show(this, result.FriendlyMessage, "Allocation Failed",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            LoadOrders();
+            return;
+        }
+
+        var isPartial = result.ResultCode == "WARNORD01";
+        MessageBox.Show(this,
+            isPartial
+                ? $"Order {order.OrderRef} partially allocated — some lines could not be fully filled."
+                : $"Order {order.OrderRef} allocated successfully.",
+            isPartial ? "Partial Allocation" : "Allocation Complete",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+
+        LoadOrders();
+    }
+
+    // ── Allocate every unallocated (NEW) order on this shipment in one pass -
+    //    the point being nobody has to leave this screen with a shipment
+    //    that still has orphaned, never-allocated orders sitting on it.
+    //    No inline partial-allocation prompting here (that's a per-order
+    //    judgement call, made via the single Allocate button); this just
+    //    reports what happened for each one. ──
+    private void AllocateAll()
+    {
+        var pending = _orders.Where(o => o.OrderStatusCode == "NEW").ToList();
+        if (pending.Count == 0) return;
+
+        var confirm = MessageBox.Show(this,
+            $"Allocate all {pending.Count} unallocated order(s) on shipment {_shipmentRef}?\n\n" +
+            string.Join("\n", pending.Select(o => $"  • {o.OrderRef}  ({o.CustomerName})")),
+            "Confirm Bulk Allocation",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button1);
+
+        if (confirm != DialogResult.Yes) return;
+
+        var succeeded = new List<string>();
+        var partial   = new List<string>();
+        var failed    = new List<string>();
+
+        foreach (var order in pending)
+        {
+            var result = _commandRepo.AllocateOrder(order.OutboundOrderId);
+
+            if (result.Success && result.ResultCode == "WARNORD01")
+                partial.Add(order.OrderRef);
+            else if (result.Success)
+                succeeded.Add(order.OrderRef);
+            else
+                failed.Add($"{order.OrderRef}: {result.FriendlyMessage}");
+        }
+
+        var summary = new List<string>();
+        if (succeeded.Count > 0) summary.Add($"Allocated: {string.Join(", ", succeeded)}");
+        if (partial.Count   > 0) summary.Add($"Partially allocated (insufficient stock): {string.Join(", ", partial)}");
+        if (failed.Count    > 0) summary.Add($"Failed:\n{string.Join("\n", failed)}");
+
+        MessageBox.Show(this,
+            string.Join("\n\n", summary),
+            failed.Count > 0 ? "Bulk Allocation — Some Failed" : "Bulk Allocation Complete",
+            MessageBoxButtons.OK,
+            failed.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+
+        LoadOrders();
     }
 
     private void AddOrder()

@@ -34,7 +34,7 @@ SELECT
     m.moved_qty                                 AS quantity,
     sk.uom_code,
     sk.weight_per_unit,
-    CAST(sk.weight_per_unit * m.moved_qty / 1000.0 AS DECIMAL(10,3)) AS total_weight_kg,
+    CAST(sk.weight_per_unit * m.moved_qty AS DECIMAL(10,3)) AS total_weight_kg,
     -- Order reference for this unit
     ol_alloc.order_ref,
     -- Bin it was picked from

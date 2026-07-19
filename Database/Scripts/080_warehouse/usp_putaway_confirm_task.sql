@@ -42,17 +42,35 @@ BEGIN
         IF LTRIM(RTRIM(@scanned_bin_code)) COLLATE Latin1_General_CS_AS <> LTRIM(RTRIM(@dest_bin_code)) COLLATE Latin1_General_CS_AS
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTASK08' AS result_code; ROLLBACK; RETURN; END
 
+        -- Lock the destination bin itself before checking capacity - counting
+        -- inventory.inventory_placements/locations.bin_reservations with
+        -- HOLDLOCK does NOT prevent this race, since with zero prior rows
+        -- there is nothing to lock (the classic phantom-insert problem).
+        -- Locking the bin row instead serializes every concurrent confirm
+        -- targeting it, matching the UPDLOCK/HOLDLOCK pattern already used
+        -- for the task row above and for orders in usp_allocate_order.
         SELECT @scanned_bin_id = bin_id, @bin_capacity = capacity, @bin_active = is_active
-        FROM locations.bins WHERE bin_id = @dest_bin_id;
+        FROM locations.bins WITH (UPDLOCK, HOLDLOCK) WHERE bin_id = @dest_bin_id;
 
         IF @bin_active = 0
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTASK09' AS result_code; ROLLBACK; RETURN; END
+
+        -- Release this task's own reservation on the destination bin BEFORE
+        -- checking capacity. It was created (usp_putaway_create_task_for_unit)
+        -- purely to hold the bin open until THIS confirmation happens - it is
+        -- not a competing claim from someone else, so counting it against
+        -- this same confirmation is wrong and would make it impossible to
+        -- ever confirm into a capacity-1 bin. If the transaction rolls back
+        -- for any other reason below, this delete rolls back with it, so
+        -- nothing is lost on a genuine failure.
+        DELETE FROM locations.bin_reservations
+        WHERE bin_id = @dest_bin_id AND reservation_type = 'PUTAWAY' AND expires_at >= @now;
 
         SELECT @current_placements = COUNT(*) FROM inventory.inventory_placements WHERE bin_id = @dest_bin_id;
         SELECT @active_reservations = COUNT(*) FROM locations.bin_reservations
         WHERE bin_id = @dest_bin_id AND expires_at > @now;
 
-        IF (@current_placements + @active_reservations - 1) >= @bin_capacity
+        IF (@current_placements + @active_reservations) >= @bin_capacity
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTASK09' AS result_code; ROLLBACK; RETURN; END
 
         SELECT @sku_id = sku_id, @quantity = quantity, @current_status_code = stock_status_code
@@ -69,9 +87,6 @@ BEGIN
         SET task_state_code = 'CNF', completed_at = @now, completed_by_user_id = @user_id,
             updated_at = @now, updated_by = @user_id
         WHERE task_id = @task_id;
-
-        DELETE FROM locations.bin_reservations
-        WHERE bin_id = @dest_bin_id AND reservation_type = 'PUTAWAY' AND expires_at >= @now;
 
         INSERT INTO inventory.inventory_movements
             (inventory_unit_id, sku_id, moved_qty, from_bin_id, to_bin_id,

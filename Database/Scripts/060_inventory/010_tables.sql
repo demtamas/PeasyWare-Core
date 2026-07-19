@@ -76,6 +76,7 @@ VALUES
 ('RCD', 'RECEIVED', 0),
 ('PTW', 'PUTAWAY', 0),
 ('PKD', 'PICKED', 0),
+('LDD', 'LOADED', 0),
 ('MOV', 'IN MOVEMENT', 0),
 ('REV', 'REVERSED', 1),
 ('SHP', 'SHIPPED', 1);
@@ -115,7 +116,9 @@ VALUES
 ('MOV','PTW',0,'Move confirmed into destination bin'),
 ('MOV','RCD',1,'Move cancelled — unit returned to staging'),
 ('PTW','PKD',0,'Picked'),
-('PKD','SHP',0,'Shipped');
+('PKD','LDD',0,'Loaded onto vehicle'),
+('LDD','PKD',1,'Load reversed — unit returned to picked state'),
+('LDD','SHP',0,'Shipped');
 
 CREATE TABLE inventory.stock_operation_rules
 (

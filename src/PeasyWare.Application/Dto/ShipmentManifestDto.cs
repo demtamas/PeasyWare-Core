@@ -28,7 +28,7 @@ public sealed class ShipmentManifestLineDto
     public string?  BestBefore    { get; init; }
     public int      Quantity      { get; init; }
     public string?  UomCode       { get; init; }
-    public decimal? WeightPerUnit { get; init; }  // grams
+    public decimal? WeightPerUnit { get; init; }  // kg, per case/handling unit
     public decimal? TotalWeightKg { get; init; }
     public string?  OrderRef      { get; init; }
     public string?  PickedFromBin { get; init; }

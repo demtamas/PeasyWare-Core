@@ -59,7 +59,78 @@ BEGIN
             updated_by        = @user_id
         WHERE outbound_order_id = @outbound_order_id;
 
-        /* ── 3. Transition shipment → LOADING if still OPEN ── */
+        /* ── 3. Transition every picked unit on this order: PKD → LDD,
+               remove its placement (physically leaving the warehouse
+               floor the moment it's loaded, same convention usp_ship
+               already uses at SHP), and log a LOAD movement. Mirrors
+               usp_ship's own ship_cursor almost exactly, just scoped to
+               one order instead of a whole shipment, and one step earlier
+               in the lifecycle. ── */
+        DECLARE
+            @unit_id      INT,
+            @sku_id       INT,
+            @qty          INT,
+            @status_code  VARCHAR(2),
+            @from_bin_id  INT;
+
+        DECLARE load_cursor CURSOR LOCAL FAST_FORWARD FOR
+            SELECT
+                iu.inventory_unit_id,
+                iu.sku_id,
+                iu.quantity,
+                iu.stock_status_code,
+                ip.bin_id
+            FROM outbound.outbound_lines ol
+            JOIN outbound.outbound_allocations a
+                ON a.outbound_line_id = ol.outbound_line_id
+               AND a.allocation_status = 'PICKED'
+            JOIN inventory.inventory_units iu WITH (UPDLOCK)
+                ON iu.inventory_unit_id = a.inventory_unit_id
+               AND iu.stock_state_code  = 'PKD'
+            LEFT JOIN inventory.inventory_placements ip
+                ON ip.inventory_unit_id = iu.inventory_unit_id
+            WHERE ol.outbound_order_id = @outbound_order_id;
+
+        OPEN load_cursor;
+        FETCH NEXT FROM load_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_bin_id;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            UPDATE inventory.inventory_units
+            SET stock_state_code = 'LDD',
+                updated_at       = @now,
+                updated_by       = @user_id
+            WHERE inventory_unit_id = @unit_id;
+
+            DELETE FROM inventory.inventory_placements
+            WHERE inventory_unit_id = @unit_id;
+
+            INSERT INTO inventory.inventory_movements
+            (
+                inventory_unit_id, sku_id, moved_qty,
+                from_bin_id, to_bin_id,
+                from_state_code, to_state_code,
+                from_status_code, to_status_code,
+                movement_type, reference_type, reference_id,
+                moved_at, moved_by_user_id, session_id
+            )
+            VALUES
+            (
+                @unit_id, @sku_id, @qty,
+                @from_bin_id, NULL,
+                'PKD', 'LDD',
+                @status_code, @status_code,
+                'LOAD', 'OUTBOUND', @outbound_order_id,
+                @now, @user_id, @session_id
+            );
+
+            FETCH NEXT FROM load_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_bin_id;
+        END
+
+        CLOSE load_cursor;
+        DEALLOCATE load_cursor;
+
+        /* ── 4. Transition shipment → LOADING if still OPEN ── */
         UPDATE outbound.shipments
         SET shipment_status = 'LOADING',
             updated_at      = @now,
@@ -74,6 +145,7 @@ BEGIN
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
+        IF CURSOR_STATUS('local','load_cursor') >= 0 BEGIN CLOSE load_cursor; DEALLOCATE load_cursor; END
         SELECT CAST(0 AS BIT) AS success, N'ERRTASK99' AS result_code;
     END CATCH
 END;

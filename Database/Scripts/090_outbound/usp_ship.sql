@@ -72,12 +72,26 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
+        /* ── Load is mandatory before ship: reject if anything on this
+               shipment is still sitting at PICKED (load never confirmed) ── */
+        IF EXISTS (
+            SELECT 1 FROM outbound.outbound_orders
+            WHERE shipment_id       = @shipment_id
+              AND order_status_code = 'PICKED'
+        )
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRSHIP09' AS result_code,
+                   @shipment_id AS shipment_id, 0 AS units_shipped;
+            ROLLBACK; RETURN;
+        END
+
         /* ── Ship each allocated unit ── */
         DECLARE
             @unit_id           INT,
             @sku_id            INT,
             @qty               INT,
             @status_code       VARCHAR(2),
+            @from_state        VARCHAR(3),
             @from_bin_id       INT;
 
         DECLARE ship_cursor CURSOR LOCAL FAST_FORWARD FOR
@@ -86,6 +100,7 @@ BEGIN
                 iu.sku_id,
                 iu.quantity,
                 iu.stock_status_code,
+                iu.stock_state_code,
                 ip.bin_id
             FROM outbound.outbound_orders o
             JOIN outbound.outbound_lines ol
@@ -95,23 +110,26 @@ BEGIN
                AND a.allocation_status = 'PICKED'
             JOIN inventory.inventory_units iu WITH (UPDLOCK)
                 ON iu.inventory_unit_id = a.inventory_unit_id
-            JOIN inventory.inventory_placements ip
+            LEFT JOIN inventory.inventory_placements ip
                 ON ip.inventory_unit_id = iu.inventory_unit_id
             WHERE o.shipment_id = @shipment_id;
 
         OPEN ship_cursor;
-        FETCH NEXT FROM ship_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_bin_id;
+        FETCH NEXT FROM ship_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_state, @from_bin_id;
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            /* Transition unit → SHP */
+            /* Transition unit → SHP (from whichever state it's actually in -
+               LDD if load was confirmed, PKD in the (now blocked-by-default)
+               case load was somehow skipped) */
             UPDATE inventory.inventory_units
             SET stock_state_code = 'SHP',
                 updated_at       = @now,
                 updated_by       = @user_id
             WHERE inventory_unit_id = @unit_id;
 
-            /* Remove placement — unit is no longer in the warehouse */
+            /* Remove placement — unit is no longer in the warehouse.
+               No-op if LOAD already removed it. */
             DELETE FROM inventory.inventory_placements
             WHERE inventory_unit_id = @unit_id;
 
@@ -129,7 +147,7 @@ BEGIN
             (
                 @unit_id, @sku_id, @qty,
                 @from_bin_id, NULL,
-                'PKD', 'SHP',
+                @from_state, 'SHP',
                 @status_code, @status_code,
                 'SHIP', 'SHIPMENT', @shipment_id,
                 @now, @user_id, @session_id
@@ -137,7 +155,7 @@ BEGIN
 
             SET @units_shipped += 1;
 
-            FETCH NEXT FROM ship_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_bin_id;
+            FETCH NEXT FROM ship_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_state, @from_bin_id;
         END
 
         CLOSE ship_cursor;

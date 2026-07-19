@@ -264,7 +264,14 @@ BEGIN
         BEGIN
             UPDATE inbound.inbound_expected_units
             SET received_inventory_unit_id = @inventory_unit_id,
-                expected_unit_state_code   = 'RCV'
+                expected_unit_state_code   = 'RCV',
+                claimed_session_id         = NULL,
+                claimed_by_user_id         = NULL,
+                claimed_at                 = NULL,
+                claim_expires_at           = NULL,
+                claim_token                = NULL,
+                updated_at                 = SYSUTCDATETIME(),
+                updated_by                 = @user_id
             WHERE inbound_expected_unit_id = @inbound_expected_unit_id;
         END
 

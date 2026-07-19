@@ -46,6 +46,7 @@ CLI (RF-style terminal)        Desktop Application
 - All SPs use `SET XACT_ABORT ON` + `BEGIN CATCH`
 - Error codes follow `ERRAUTH01` pattern (prefix ERR/WAR/SUC, no hyphens)
 - `UPDLOCK, HOLDLOCK` on concurrent reads
+- C# session identity (`UserId`, `SessionId`) is bound into SQL Server's `SESSION_CONTEXT` once per connection via `SqlConnectionFactory.CreateForCommand` — the mechanism `auth.fn_has_permission` and several SPs (settings, user management) rely on; most SPs take `@user_id`/`@session_id` as explicit parameters instead
 - Bin and reference lookups enforce case sensitivity (`COLLATE Latin1_General_CS_AS`)
 
 ---
@@ -192,7 +193,20 @@ Initial credentials: `admin` / `admin0` — password change required on first lo
 ### 8 — Tests
 
 ```bash
-dotnet test
+dotnet test --filter "Category!=Concurrency"
+```
+
+This is the fast run — unit tests plus the DB test suite, no live locking scenarios.
+
+The concurrency proof harness (`tests/PeasyWare.ConcurrencyTests`) is excluded from
+the command above on purpose: it opens real concurrent connections against
+`PEASYWARE_DB` and hammers the same rows to prove locking invariants hold
+(e.g. two orders can never both be allocated the last unit of stock), which
+is slower and needs a live, seeded database rather than being a fast
+sanity check. Run it explicitly:
+
+```bash
+dotnet test tests/PeasyWare.ConcurrencyTests
 ```
 
 ---
@@ -232,7 +246,8 @@ dotnet test
 - Partial allocation with operator prompt
 - Re-allocation and top-up allocation during active picking
 - Pick flow — bin scan validated before SSCC prompt
-- Load and ship confirmation
+- Order-level load confirmation tied to its shipment (`usp_confirm_load`) — no per-SSCC re-scan after picking
+- Ship confirmation — transitions all units to SHP, closes shipment
 - Delivery addresses per order — supports multi-depot customers
 - Create shipments from Desktop — haulier, vehicle, planned departure, add orders
 - Cancel shipments — OPEN / LOADING only, blocked if orders in progress
@@ -267,8 +282,9 @@ dotnet test
 
 ### Infrastructure
 - Role-based access control (RBAC) — verb-on-resource permissions (`auth.permissions` / `auth.role_permissions`), enforced in every mutating stored procedure via `auth.fn_has_permission`, mirrored in Desktop and CLI UI gating
+- Concurrency proof suite (`tests/PeasyWare.ConcurrencyTests`) — load-tests the highest-contention paths (allocation, putaway confirm, pick confirm) against a real database; found and fixed a destination-bin overfill race plus a related off-by-one
 - Role-based UiMode (Minimal / Standard / Trace) — system ceiling enforced
-- Session management — TTL, heartbeat, force login, concurrent session guard
+- Session management — `SessionContext` (`SourceApp`, `SourceClient`, `CorrelationId`) carried through every operation, TTL, heartbeat, force login, concurrent session guard
 - Structured audit log with JSON payload (`audit.trace_logs`)
 - Error message resolver — all codes in DB, operator-facing message + tech note
 - Settings registry — all runtime config in `operations.settings`, editable from Desktop
@@ -302,8 +318,19 @@ mutating operation, with matching gating in both Desktop and CLI. Denial and
 grant coverage tested per permission category, including bootstrap and
 system-role edge cases.
 
+**Concurrency proof complete**
+
+Permanent load-tested proof suite (`tests/PeasyWare.ConcurrencyTests`) covering
+the three highest-contention paths: order allocation of the last available
+unit, putaway confirmation against destination bin capacity, and pick
+confirmation double-claim. Found and fixed two real defects in
+`usp_putaway_confirm_task` — a missing lock on the destination bin allowing
+concurrent confirms to overfill it, and an unrelated off-by-one in the
+capacity check itself, exposed once the lock made the race deterministic.
+Allocation and pick confirmation were proven correct under load rather than
+assumed so from the code.
+
 **Next milestone: v1.0**
-- Concurrency proof harness for task claiming
 - Production hardening and edge case test coverage
 
 ---
