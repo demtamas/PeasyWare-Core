@@ -8,6 +8,25 @@ Built with reference to enterprise platforms such as **SAP EWM**, **Manhattan WM
 
 ---
 
+## See it in action
+
+<table>
+<tr>
+<td width="50%">
+<a href="docs/screenshots/readme/movements_log.png"><img src="docs/screenshots/readme/movements_log.png" width="100%" alt="Full pallet lifecycle in the Movements screen"></a>
+<br><sub>One pallet's full lifecycle — <code>RCD → PTW → PKD → LDD → SHP</code> — in a single view, with reference codes and clean order/shipment naming throughout.</sub>
+</td>
+<td width="50%">
+<a href="docs/screenshots/readme/events_log.png"><img src="docs/screenshots/readme/events_log.png" width="100%" alt="Structured event log with JSON payload and a live guard firing"></a>
+<br><sub>The structured event log — a mandatory-load-before-ship guard (<code>ERRSHIP09</code>) actually firing and recovering, not a cherry-picked clean run, with full correlation-ID payload detail below.</sub>
+</td>
+</tr>
+</table>
+
+More screenshots: [`docs/screenshots/`](docs/screenshots/)
+
+---
+
 ## Tech stack
 
 - C# / .NET 10
@@ -81,11 +100,19 @@ Outbound Order → Allocation Engine (FEFO / FIFO / LIFO / NONE)
 Pick Task → Operator scans bin + SSCC → PKD state
          │
          ▼
-Load Confirmation → Ship Confirmation → SHP state
+Load Confirmation → LDD state
+│  Placement removed here, not at ship — the unit
+│  physically leaves the warehouse floor the moment
+│  it's loaded, freeing the loading bay's capacity
+│  while the vehicle is still on-site awaiting
+│  departure. Mandatory before ship.
+         │
+         ▼
+Ship Confirmation → SHP state
 │  Delivery note auto-printed if configured
          │
          ▼
-Unit removed from warehouse, audit trail complete
+Full lifecycle audit trail complete
 ```
 
 ---
@@ -225,7 +252,7 @@ dotnet test tests/PeasyWare.ConcurrencyTests
 - Desktop view — status, progress, line drill-down, SSCC-level detail with received by / at
 
 ### Inventory
-- State machine (`RCD → PTW → MOV/PKD → SHP/REV`)
+- State machine (`RCD → PTW → MOV/PKD → LDD → SHP/REV`)
 - Bin placements — rack (capacity 1) and bulk (capacity-based)
 - SSCC enquiry — UiMode-tiered display (Minimal / Standard / Trace)
 - Bin enquiry — single unit detail or multi-unit summary with drill-down
@@ -246,7 +273,8 @@ dotnet test tests/PeasyWare.ConcurrencyTests
 - Partial allocation with operator prompt
 - Re-allocation and top-up allocation during active picking
 - Pick flow — bin scan validated before SSCC prompt
-- Order-level load confirmation tied to its shipment (`usp_confirm_load`) — no per-SSCC re-scan after picking
+- Order-level load confirmation tied to its shipment (`usp_confirm_load`) — transitions picked units to `LDD` and removes their placement at load time, not ship time; no per-SSCC re-scan after picking
+- Load confirmation is mandatory before ship — a shipment with any picked-but-not-yet-loaded order is rejected (`ERRSHIP09`)
 - Ship confirmation — transitions all units to SHP, closes shipment
 - Delivery addresses per order — supports multi-depot customers
 - Create shipments from Desktop — haulier, vehicle, planned departure, add orders
@@ -329,6 +357,18 @@ concurrent confirms to overfill it, and an unrelated off-by-one in the
 capacity check itself, exposed once the lock made the race deterministic.
 Allocation and pick confirmation were proven correct under load rather than
 assumed so from the code.
+
+**Pre-loading (LDD state) complete**
+
+New `LDD` (Loaded) inventory state models a pattern every site runs into:
+stock physically leaves the warehouse at load time, not ship time — a
+loading bay only has room for so many pallets, and treating a loaded pallet
+as if it still occupies that bay (because it technically hasn't departed
+yet) makes bay capacity impossible to reason about. Load confirmation now
+removes the unit's placement immediately, mirroring the same pattern
+`usp_ship` already used one step later, and is mandatory before ship.
+Reversal (`LDD → PKD`) has a transition-table entry ready but no SP yet —
+deliberately deferred to a later pass.
 
 **Next milestone: v1.0**
 - Production hardening and edge case test coverage

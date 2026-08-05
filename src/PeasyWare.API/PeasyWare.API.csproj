@@ -8,7 +8,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!-- Pinned below 3.x deliberately: Microsoft.OpenApi 3.x made
+         IOpenApiMediaType.Example read-only, which breaks the XML-comment
+         source generator embedded in Microsoft.AspNetCore.OpenApi 10.0.10
+         (it still assumes the old, mutable contract). Known, currently-open
+         issue - dotnet/aspnetcore#64317, microsoft/OpenAPI.NET#2610/#2582/#2618 -
+         with a fix in progress for a future ASP.NET Core release, not this
+         one. 2.7.5 specifically (not just "any 2.x") because CVE-2026-49451
+         (GHSA-v5pm-xwqc-g5wc, stack-overflow DoS on circular schema refs
+         during parsing) affects every 2.x release up to 2.7.4 - 2.7.5 is the
+         first patched 2.x version, so it's the one version that's both
+         source-generator-compatible and not flagged by NuGetAudit. Safe to
+         bump past 3.x once a Microsoft.AspNetCore.OpenApi release ships with
+         real 3.x support. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
   <ItemGroup>
