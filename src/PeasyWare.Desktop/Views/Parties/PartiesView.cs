@@ -91,6 +91,8 @@ public partial class PartiesView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()
@@ -187,6 +189,7 @@ public partial class PartiesView : BaseView, IToolbarAware
 
         dgvParties.DataSource = null;
         dgvParties.DataSource = data;
+        UpdateToolbarState();
     }
 
     private PartyDto? Selected() =>

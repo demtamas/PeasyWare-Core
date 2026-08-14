@@ -91,6 +91,8 @@ public partial class InventoryView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnChangeStatus);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()
@@ -137,6 +139,7 @@ public partial class InventoryView : BaseView, IToolbarAware
     {
         dgvInventory.DataSource = null;
         dgvInventory.DataSource = data;
+        UpdateToolbarState();
     }
 
     private void RefreshInventory() => Execute(LoadInventory);

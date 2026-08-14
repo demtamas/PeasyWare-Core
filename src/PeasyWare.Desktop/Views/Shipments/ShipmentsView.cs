@@ -100,6 +100,8 @@ public partial class ShipmentsView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
+
+        UpdateToolbarState();
     }
 
     // ==========================================================
@@ -193,6 +195,7 @@ public partial class ShipmentsView : BaseView, IToolbarAware
 
         dgvShipments.DataSource = null;
         dgvShipments.DataSource = data;
+        UpdateToolbarState();
     }
 
     private ShipmentSummaryDto? SelectedShipment() =>

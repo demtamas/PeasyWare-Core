@@ -23,6 +23,13 @@ BEGIN
         @cancelled_count    INT = 0,
         @now                DATETIME2(3) = SYSUTCDATETIME();
 
+    -- Captures every unit actually deallocated in this call, for logging/search
+    DECLARE @cancelled_allocations TABLE
+    (
+        allocation_id     INT,
+        inventory_unit_id INT
+    );
+
     BEGIN TRY
         BEGIN TRAN;
 
@@ -49,6 +56,8 @@ BEGIN
         SET a.allocation_status = 'CANCELLED',
             a.updated_at        = @now,
             a.updated_by        = @user_id
+        OUTPUT inserted.allocation_id, inserted.inventory_unit_id
+        INTO @cancelled_allocations
         FROM outbound.outbound_allocations a
         JOIN outbound.outbound_lines l
             ON l.outbound_line_id = a.outbound_line_id
@@ -116,6 +125,16 @@ BEGIN
         COMMIT;
 
         SELECT CAST(1 AS BIT) AS success, N'SUCORD10' AS result_code;
+
+        -- Second result set: exactly which units this call deallocated
+        SELECT
+            ca.allocation_id,
+            ca.inventory_unit_id,
+            iu.external_ref AS sscc,
+            sk.sku_code
+        FROM @cancelled_allocations ca
+        JOIN inventory.inventory_units iu ON iu.inventory_unit_id = ca.inventory_unit_id
+        JOIN inventory.skus sk           ON sk.sku_id = iu.sku_id;
 
     END TRY
     BEGIN CATCH

@@ -87,6 +87,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnToggleActive);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(searchHost);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()

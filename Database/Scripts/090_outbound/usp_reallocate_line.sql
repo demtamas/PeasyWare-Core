@@ -31,6 +31,8 @@ BEGIN
         @unit_id            INT,
         @unit_qty           INT,
         @new_allocation_id  INT,
+        @sscc               NVARCHAR(100),
+        @sku_code           NVARCHAR(50),
         @now                DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
@@ -126,7 +128,10 @@ BEGIN
                          ELSE iu.created_at
                     END
             END ASC,
-            CASE WHEN @strategy = 'LIFO' THEN iu.created_at END DESC;
+            CASE WHEN @strategy = 'LIFO' THEN iu.created_at END DESC,
+            -- Same tiebreak as usp_allocate_order - FEFO/NONE ties on BBE
+            -- resolve to received-first rather than an unspecified row order.
+            CASE WHEN @strategy = 'FEFO' OR @strategy NOT IN ('FIFO','LIFO') THEN iu.created_at END ASC;
 
         IF @unit_id IS NULL
         BEGIN
@@ -149,6 +154,12 @@ BEGIN
         );
 
         SET @new_allocation_id = SCOPE_IDENTITY();
+
+        -- Grab SSCC/SKU for the caller to log
+        SELECT @sscc = iu.external_ref, @sku_code = sk.sku_code
+        FROM inventory.inventory_units iu
+        JOIN inventory.skus sk ON sk.sku_id = iu.sku_id
+        WHERE iu.inventory_unit_id = @unit_id;
 
         /* ── 7. Update line allocated_qty and status ── */
         UPDATE outbound.outbound_lines
@@ -174,7 +185,13 @@ BEGIN
 
         COMMIT;
 
-        SELECT CAST(1 AS BIT) AS success, N'SUCALLOC03' AS result_code, @new_allocation_id AS allocation_id;
+        SELECT
+            CAST(1 AS BIT) AS success,
+            N'SUCALLOC03'      AS result_code,
+            @new_allocation_id AS allocation_id,
+            @unit_id           AS inventory_unit_id,
+            @sscc              AS sscc,
+            @sku_code          AS sku_code;
 
     END TRY
     BEGIN CATCH
@@ -186,10 +203,6 @@ GO
 
 PRINT 'outbound.usp_reallocate_line created.';
 GO
-
-PRINT 'outbound.usp_reallocate_line created.';
-GO
-
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- Deallocation SP + error codes  (merged from WIP_deallocate)

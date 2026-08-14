@@ -66,6 +66,8 @@ public sealed class ClientsView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnReactivate);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnShowInactive);
+
+        UpdateToolbarState();
     }
 
     private static void ConfigureGrid(DataGridView dgv)

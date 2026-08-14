@@ -328,8 +328,9 @@ public sealed class CreateOrderForm : Form
         var requiredDate = _chkRequired.Checked ? (DateTime?)_dtpRequired.Value.Date : null;
         var notes        = string.IsNullOrWhiteSpace(_txtNotes.Text) ? null : _txtNotes.Text.Trim();
 
-        var lines = _lines.Select(l => new OrderLineDto
+        var lines = _lines.Select((l, index) => new OrderLineDto
         {
+            LineNo         = (index + 1) * 10,
             SkuCode        = l.SkuCode,
             OrderedQty     = l.Qty,
             RequestedBatch = l.Batch,

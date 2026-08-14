@@ -102,6 +102,8 @@ public partial class TasksView : BaseView, IToolbarAware
         toolStrip.Items.Add(_filterHost);
         toolStrip.Items.Add(_chkAllHost);
         toolStrip.Items.Add(_lblStatus);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()
@@ -216,6 +218,7 @@ public partial class TasksView : BaseView, IToolbarAware
 
         dgvTasks.DataSource = null;
         dgvTasks.DataSource = data;
+        UpdateToolbarState();
     }
 
     private WarehouseTaskDto? SelectedTask() =>

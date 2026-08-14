@@ -291,8 +291,19 @@ public sealed class SqlOutboundCommandRepository
         var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code    = reader.GetString(reader.GetOrdinal("result_code"));
 
+        if (!success)
+        {
+            return BuildResult("Outbound.CancelAllocation", code,
+                new { AllocationId = allocationId, Reason = reason });
+        }
+
+        // Success path only - these columns don't exist on the failure result shape
+        var inventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id"));
+        var sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc"));
+        var skuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code"));
+
         return BuildResult("Outbound.CancelAllocation", code,
-            new { AllocationId = allocationId, Reason = reason });
+            new { AllocationId = allocationId, InventoryUnitId = inventoryUnitId, Sscc = sscc, SkuCode = skuCode, Reason = reason });
     }
 
     public OperationResult ReallocateLine(int outboundLineId)
@@ -310,12 +321,22 @@ public sealed class SqlOutboundCommandRepository
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRALLOC99", "Unexpected error.");
 
-        var success      = reader.GetBoolean(reader.GetOrdinal("success"));
-        var code         = reader.GetString(reader.GetOrdinal("result_code"));
-        var allocationId = success ? reader.GetInt32(reader.GetOrdinal("allocation_id")) : 0;
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        if (!success)
+        {
+            return BuildResult("Outbound.ReallocateLine", code,
+                new { OutboundLineId = outboundLineId });
+        }
+
+        var allocationId    = reader.GetInt32(reader.GetOrdinal("allocation_id"));
+        var inventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id"));
+        var sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc"));
+        var skuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code"));
 
         return BuildResult("Outbound.ReallocateLine", code,
-            new { OutboundLineId = outboundLineId, NewAllocationId = allocationId });
+            new { OutboundLineId = outboundLineId, NewAllocationId = allocationId, InventoryUnitId = inventoryUnitId, Sscc = sscc, SkuCode = skuCode });
     }
 
     public OperationResult AddOrderToShipment(
@@ -392,10 +413,31 @@ public sealed class SqlOutboundCommandRepository
         if (!reader.Read())
             throw new InvalidOperationException("Unexpected empty response from usp_allocate_order.");
 
-        var code = reader.GetString(reader.GetOrdinal("result_code"));
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        // Failure paths never produce the second result set - only walk it on success
+        if (!success || !reader.NextResult())
+        {
+            return BuildResult("Outbound.AllocateOrder", code,
+                new { OutboundOrderId = outboundOrderId });
+        }
+
+        var allocatedUnits = new List<object>();
+        while (reader.Read())
+        {
+            allocatedUnits.Add(new
+            {
+                AllocationId    = reader.GetInt32(reader.GetOrdinal("allocation_id")),
+                InventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id")),
+                Sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc")),
+                SkuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code")),
+                AllocatedQty    = reader.GetInt32(reader.GetOrdinal("allocated_qty"))
+            });
+        }
 
         return BuildResult("Outbound.AllocateOrder", code,
-            new { OutboundOrderId = outboundOrderId });
+            new { OutboundOrderId = outboundOrderId, AllocatedUnits = allocatedUnits });
     }
 
     // ────────────────────────────────────────────────────────
@@ -421,10 +463,29 @@ public sealed class SqlOutboundCommandRepository
         if (!reader.Read())
             throw new InvalidOperationException("Unexpected empty response from usp_deallocate_order.");
 
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code = reader.GetString(reader.GetOrdinal("result_code"));
 
+        if (!success || !reader.NextResult())
+        {
+            return BuildResult("Outbound.DeallocateOrder", code,
+                new { OutboundOrderId = outboundOrderId });
+        }
+
+        var deallocatedUnits = new List<object>();
+        while (reader.Read())
+        {
+            deallocatedUnits.Add(new
+            {
+                AllocationId    = reader.GetInt32(reader.GetOrdinal("allocation_id")),
+                InventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id")),
+                Sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc")),
+                SkuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code"))
+            });
+        }
+
         return BuildResult("Outbound.DeallocateOrder", code,
-            new { OutboundOrderId = outboundOrderId });
+            new { OutboundOrderId = outboundOrderId, DeallocatedUnits = deallocatedUnits });
     }
 
     // ────────────────────────────────────────────────────────

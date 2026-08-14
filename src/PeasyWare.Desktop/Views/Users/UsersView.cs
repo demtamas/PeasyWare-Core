@@ -177,6 +177,8 @@ public partial class UsersView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
 
         toolStrip.Items.Add(_searchHost);
+
+        UpdateToolbarState();
     }
 
     private void RefreshUsers()

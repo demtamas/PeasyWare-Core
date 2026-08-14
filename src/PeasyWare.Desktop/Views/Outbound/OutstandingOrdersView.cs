@@ -124,6 +124,8 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
         toolStrip.Items.Add(_btnCancelOrder);
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnOrderDetails);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()
@@ -195,6 +197,7 @@ public partial class OutstandingOrdersView : BaseView, IToolbarAware
     {
         dgvOrders.DataSource = null;
         dgvOrders.DataSource = data;
+        UpdateToolbarState();
     }
 
     private void RefreshOrders() => Execute(LoadOrders);

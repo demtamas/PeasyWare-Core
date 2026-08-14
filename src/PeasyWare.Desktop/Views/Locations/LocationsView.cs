@@ -146,6 +146,8 @@ public sealed class LocationsView : BaseView, IToolbarAware
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_typeFilterHost);
         toolStrip.Items.Add(_stockFilterHost);
+
+        UpdateToolbarState();
     }
 
     // ==========================================================

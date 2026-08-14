@@ -65,6 +65,17 @@ BEGIN
             @allocated_total      INT,
             @newly_allocated_qty  INT = 0;
 
+        -- Captures every unit actually allocated in this call, so the caller
+        -- can log (and later search) which SSCCs/SKUs were affected, not just
+        -- the order ID.
+        DECLARE @new_allocations TABLE
+        (
+            allocation_id     INT,
+            inventory_unit_id INT,
+            outbound_line_id  INT,
+            allocated_qty     INT
+        );
+
         DECLARE line_cursor CURSOR LOCAL FAST_FORWARD FOR
             SELECT outbound_line_id, sku_id, ordered_qty, requested_batch, requested_bbe
             FROM outbound.outbound_lines
@@ -134,7 +145,13 @@ BEGIN
                             END
                         ELSE iu.created_at
                     END ASC,
-                    CASE WHEN @strategy = 'LIFO' THEN iu.created_at END DESC;
+                    CASE WHEN @strategy = 'LIFO' THEN iu.created_at END DESC,
+                    -- Tiebreak for FEFO/NONE when multiple units share the same BBE -
+                    -- without this, which unit wins is whatever order SQL Server
+                    -- happens to return matching rows in, not a real rule. FIFO and
+                    -- LIFO already have their own deterministic ordering above, so
+                    -- this only ever activates for the two strategies that needed it.
+                    CASE WHEN @strategy IN ('FEFO','NONE') THEN iu.created_at END ASC;
 
             OPEN unit_cursor;
             FETCH NEXT FROM unit_cursor INTO @unit_id, @unit_qty;
@@ -149,6 +166,10 @@ BEGIN
                         allocated_qty, allocation_status,
                         allocated_at, allocated_by
                     )
+                    OUTPUT
+                        inserted.allocation_id, inserted.inventory_unit_id,
+                        inserted.outbound_line_id, inserted.allocated_qty
+                    INTO @new_allocations
                     VALUES
                     (
                         @line_id, @unit_id,
@@ -221,6 +242,18 @@ BEGIN
             CAST(1 AS BIT) AS success,
             CASE WHEN @newly_allocated_qty > 0 THEN N'SUCORD02' ELSE N'WARNORD01' END AS result_code,
             @outbound_order_id AS outbound_order_id;
+
+        -- Second result set: exactly which units this call allocated, for logging/search
+        SELECT
+            na.allocation_id,
+            na.inventory_unit_id,
+            iu.external_ref AS sscc,
+            sk.sku_code,
+            na.outbound_line_id,
+            na.allocated_qty
+        FROM @new_allocations na
+        JOIN inventory.inventory_units iu ON iu.inventory_unit_id = na.inventory_unit_id
+        JOIN inventory.skus sk           ON sk.sku_id = iu.sku_id;
 
     END TRY
     BEGIN CATCH

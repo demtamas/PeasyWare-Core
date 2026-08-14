@@ -95,6 +95,8 @@ public partial class InboundView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_filterHost);
+
+        UpdateToolbarState();
     }
 
     private void UpdateToolbarState()
@@ -211,6 +213,7 @@ public partial class InboundView : BaseView, IToolbarAware
 
         dgvInbound.DataSource = null;
         dgvInbound.DataSource = data;
+        UpdateToolbarState();
     }
 
     private InboundDeliverySummaryDto? Selected() =>

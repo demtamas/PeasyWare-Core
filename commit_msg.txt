@@ -1,73 +1,50 @@
-﻿Zone-ordered putaway suggestion, NuGet cleanup, README screenshots,
-plus the claim/reservation/LDD/weight fixes from this session
+﻿Close allocation logging/ordering gaps, fix Desktop order line numbering,
+fix toolbar selection-state bug across the app
 
-Claim lifecycle (usp_receive_inbound_line, usp_validate_sscc_for_receive):
-- Successful receive now clears all claim fields and sets updated_at/by
-- Expired-claim cleanup sets updated_at only, not updated_by (the caller
-  is whoever scans next, not who the claim expired on)
-- New-claim creation sets both, correctly
+Allocation event logging (usp_allocate_order, usp_cancel_allocation,
+usp_deallocate_order, usp_reallocate_line + SqlOutboundCommandRepository):
+- All four now surface which unit(s)/SSCC/SKU they actually affected in
+  their result sets, not just the order ID - via OUTPUT clauses on the
+  multi-unit SPs (allocate, deallocate) and extra result columns on the
+  single-unit ones (cancel, reallocate)
+- Closes a real gap: searching the Event Log by SSCC previously found
+  Inbound.ReceiveLine but not Outbound.AllocateOrder/CancelAllocation for
+  the same unit, since the payload never mentioned it
+- Verified end-to-end against live allocation-strategy testing: search by
+  SSCC now surfaces the full allocate/deallocate history in one place
 
-Putaway reservation ordering (usp_putaway_confirm_task, usp_cancel_task):
-- A task's own destination-bin reservation was released after the
-  capacity check instead of before, permanently self-blocking
-  confirmation on any bin at capacity - moved the release earlier
-- usp_cancel_task now releases the same way on cancel
+Allocation strategy tiebreak (usp_allocate_order, usp_reallocate_line):
+- FEFO and NONE had no secondary sort when multiple units shared the same
+  BBE - which unit won was whatever order SQL Server happened to return
+  matching rows in, not a guaranteed rule (FIFO/LIFO were never at risk -
+  their sort key is created_at, which is never actually tied)
+- Added created_at ASC as the explicit tiebreak for FEFO/NONE
+- Verified deterministic across three separate identical-setting runs
+  before and after: same units, same order, every time
 
-LDD (Loaded) inventory state - pre-loading:
-- New state + transitions (PKD->LDD, LDD->SHP, LDD->PKD scaffolded
-  for a future reversal SP)
-- usp_confirm_load now does real unit-level work: PKD->LDD, placement
-  removed at load time (mirrors usp_ship's existing pattern), LOAD
-  movement logged
-- usp_ship: load now mandatory before ship (new ERRSHIP09), cursor
-  join INNER->LEFT, from_state_code read dynamically
-- README's lifecycle diagram, state-machine line, Outbound bullets,
-  and Project Status updated to match
+Desktop order line numbering (CreateOrderForm):
+- OrderLineDto.LineNo was never set when building lines from the Desktop
+  "New Order" form, silently defaulting to 0 for every line
+- For a single-line order this just showed line_no = 0; for a multi-line
+  order every line collided on the same (order_id, line_no) unique
+  constraint, so the Desktop app could not create multi-line orders at
+  all - failed with a generic, unrelated-looking error
+- Now assigns 10/20/30... matching the convention used everywhere else
 
-Weight-unit bugs:
-- Seed data authored in grams, inserted into a kg column - corrected
-- v_shipment_manifest divided by 1000 on top of that - removed
-- Checked v_skus and v_active_inventory for the same mistake - clean
-
-Movement reference codes:
-- v_movements: task-type references now show as PUT-000006 /
-  PICK-000003 / MOVE-000004 instead of a bare task ID, matching the
-  INB-/SHIP- formatting already used for inbound and shipment refs
-
-Shipments view allocation:
-- ShipmentDetailForm: Allocate (selected order) and Allocate all
-  (every NEW order on the shipment, reports per-order outcome) -
-  closes the orphaned-order gap without making allocation automatic
-  on add-to-shipment
-
-Zone-ordered putaway bin suggestion (usp_suggest_putaway_bin):
-- Rebuilt around zone_task_count ASC / zone_code ASC (numeric-aware)
-  instead of the old zone_activity load-balance-across-everything
-  approach - fills the lowest eligible zone first, and when every
-  zone is equally loaded, resolves to zone 1 again rather than
-  finding no candidate at all
-- Added is_locked = 0 to the eligibility filter (previously missing)
-- Verified against real multi-user concurrent putaway data: correct
-  1->2->3->4->5 zone spread under load, correct fallback when a
-  zone's only eligible bin is genuinely full vs. merely contested,
-  and correct interaction with per-SKU section restrictions
-
-NuGet cleanup:
-- Microsoft.OpenApi 3.x (pulled in by an "update all" pass) broke
-  Microsoft.AspNetCore.OpenApi 10.0.10's XML-comment source generator,
-  which still expects the pre-3.x mutable IOpenApiMediaType.Example
-  contract - known, currently-open upstream issue
-- Removed the stray reference entirely from the seven projects that
-  never used it (Domain, Application, Infrastructure, Desktop, CLI,
-  Tools, both test projects) - PeasyWare.API is the only project that
-  actually needs it
-- Pinned to 2.7.5 specifically, not just any 2.x - 2.3.9 and earlier
-  are hit by CVE-2026-49451 (GHSA-v5pm-xwqc-g5wc), 2.7.5 is the first
-  patched 2.x release
-
-Docs:
-- docs/screenshots/ added, with docs/screenshots/readme/ holding the
-  two images actually embedded in the README (movements log, event
-  log) and the rest available via a plain link for anyone who wants
-  to look further
-- README: new "See it in action" section up top, before Tech Stack
+Toolbar selection-state bug (14 views across Views/):
+- Symptom: a single auto-selected row on view load looked selected but
+  action buttons (Allocate order, etc.) stayed disabled until Refresh
+- Root cause had two layers, both fixed:
+  1. Bind()/ApplyFilter() rebinding the grid without re-syncing toolbar
+     state afterward - relied entirely on SelectionChanged firing
+     reliably, which it doesn't on the initial auto-select during data
+     binding (OutstandingOrdersView, InboundView, PartiesView,
+     ShipmentsView, TasksView, InventoryView, EventLogView)
+  2. MainForm.ShowView() adds the view to the panel - which fires Load
+     synchronously - before calling ConfigureToolbar(), so the very
+     first data bind runs before the toolbar buttons even exist;
+     nothing re-synced them once ConfigureToolbar() finally created
+     them (all 14 IToolbarAware views except SessionsView, which
+     already had the right pattern and was the template for the fix)
+- Verified fixed against the exact single-row Outstanding Orders case
+  that surfaced it

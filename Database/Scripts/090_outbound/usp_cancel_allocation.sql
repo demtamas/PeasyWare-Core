@@ -25,6 +25,9 @@ BEGIN
         @outbound_line_id   INT,
         @allocated_qty      INT,
         @line_status        VARCHAR(10),
+        @inv_unit_id        INT,
+        @sscc               NVARCHAR(100),
+        @sku_code           NVARCHAR(50),
         @now                DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
@@ -63,10 +66,16 @@ BEGIN
         WHERE allocation_id = @allocation_id;
 
         /* ── 3b. Cancel any open PICK tasks for this unit ── */
-        DECLARE @inv_unit_id INT;
         SELECT @inv_unit_id = inventory_unit_id
         FROM outbound.outbound_allocations
         WHERE allocation_id = @allocation_id;
+
+        -- Also grab SSCC/SKU for the caller to log - identifies which
+        -- physical unit this cancellation actually affected
+        SELECT @sscc = iu.external_ref, @sku_code = sk.sku_code
+        FROM inventory.inventory_units iu
+        JOIN inventory.skus sk ON sk.sku_id = iu.sku_id
+        WHERE iu.inventory_unit_id = @inv_unit_id;
 
         UPDATE warehouse.warehouse_tasks
         SET task_state_code = 'CNL',
@@ -105,7 +114,12 @@ BEGIN
 
         COMMIT;
 
-        SELECT CAST(1 AS BIT) AS success, N'SUCALLOC02' AS result_code;
+        SELECT
+            CAST(1 AS BIT) AS success,
+            N'SUCALLOC02'  AS result_code,
+            @inv_unit_id   AS inventory_unit_id,
+            @sscc          AS sscc,
+            @sku_code      AS sku_code;
 
     END TRY
     BEGIN CATCH

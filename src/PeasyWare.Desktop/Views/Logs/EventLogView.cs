@@ -115,6 +115,8 @@ public sealed class EventLogView : BaseView, IToolbarAware
         // Apply any pre-set filter now that _txtSearch exists
         if (_pendingActionFilter is not null)
             _txtSearch.Text = _pendingActionFilter;
+
+        OnEventSelected();
     }
 
     // ==========================================================
@@ -292,8 +294,7 @@ public sealed class EventLogView : BaseView, IToolbarAware
             ).ToList();
             dgvEvents.DataSource = null;
             dgvEvents.DataSource = corrData;
-            txtPayload.Clear();
-            if (_btnCopyPayload is not null) _btnCopyPayload.Enabled = false;
+            OnEventSelected();
             return;
         }
 
@@ -311,13 +312,18 @@ public sealed class EventLogView : BaseView, IToolbarAware
 
         dgvEvents.DataSource = null;
         dgvEvents.DataSource = data;
-        txtPayload.Clear();
-        if (_btnCopyPayload is not null) _btnCopyPayload.Enabled = false;
+        OnEventSelected();
     }
 
     private void OnEventSelected()
     {
-        if (dgvEvents.SelectedRows.Count == 0) return;
+        if (dgvEvents.SelectedRows.Count == 0)
+        {
+            txtPayload.Clear();
+            if (_btnCopyPayload is not null) _btnCopyPayload.Enabled = false;
+            if (_lblCorrelation is not null) _lblCorrelation.Visible = false;
+            return;
+        }
         if (dgvEvents.SelectedRows[0].DataBoundItem is not EventLogDto evt) return;
 
         if (string.IsNullOrWhiteSpace(evt.PayloadJson))

@@ -93,6 +93,8 @@ public sealed class ZonesView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_btnShowInactive);
         toolStrip.Items.Add(_btnDelete);
+
+        UpdateToolbarState();
     }
 
     private static void ConfigureGrid(DataGridView dgv)
