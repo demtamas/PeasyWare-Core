@@ -98,6 +98,11 @@ GO
     SELECT 'manager',  'inbound.reverse'      UNION ALL
     SELECT 'manager',  'pick.reallocate'      UNION ALL
     SELECT 'manager',  'sku_audit.view'       UNION ALL
+    SELECT 'manager',  'settings.write'       UNION ALL
+    SELECT 'manager',  'materials.manage'     UNION ALL
+    SELECT 'manager',  'zones.manage'         UNION ALL
+    SELECT 'manager',  'storage_types.manage' UNION ALL
+    SELECT 'manager',  'bins.manage'          UNION ALL
 
     SELECT 'admin', permission_key FROM auth.permissions
 )

@@ -1,9 +1,18 @@
-USE PW_Core_DEV;
+USE [PW_Core_DEV]
 GO
 
-SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON
 GO
 
+SET QUOTED_IDENTIFIER ON
+GO
+
+-------------------------------------------------------------------------
+-- auth.fn_is_system_user
+-- Returns 1 if the user holds any role with is_system_role = 1
+-- (e.g. 'system', 'api'), 0 otherwise. Used by auth.fn_has_permission
+-- to grant trusted automation identities a universal bypass.
+-------------------------------------------------------------------------
 CREATE OR ALTER FUNCTION auth.fn_is_system_user
 (
     @user_id INT

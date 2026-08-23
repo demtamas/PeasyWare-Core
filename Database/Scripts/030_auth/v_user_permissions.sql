@@ -1,7 +1,10 @@
-USE PW_Core_DEV;
+USE [PW_Core_DEV]
 GO
 
-SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
 GO
 
 -------------------------------------------------------------------------
@@ -34,4 +37,5 @@ JOIN auth.permissions p
     AND p.is_active = 1
 
 WHERE u.is_active = 1;
+
 GO

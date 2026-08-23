@@ -35,6 +35,12 @@ CREATE TABLE inventory.skus
     is_hazardous            BIT NOT NULL DEFAULT (0),
     is_active               BIT NOT NULL DEFAULT (1),
 
+    -- Minimum remaining shelf life (days) required at delivery date for
+    -- this SKU when no customer-specific override applies. NULL = no
+    -- requirement configured (the floor still applies at allocation time:
+    -- BBE must simply be in the future relative to delivery date).
+    minimum_remaining_shelf_life_days INT NULL,
+
     created_at              DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     created_by              INT NULL,
     updated_at              DATETIME2(3) NULL,
@@ -79,7 +85,8 @@ VALUES
 ('LDD', 'LOADED', 0),
 ('MOV', 'IN MOVEMENT', 0),
 ('REV', 'REVERSED', 1),
-('SHP', 'SHIPPED', 1);
+('SHP', 'SHIPPED', 1),
+('SCR', 'SCRAPPED', 1);
 
 CREATE TABLE inventory.stock_statuses
 (
@@ -92,7 +99,8 @@ VALUES
 ('AV', 'AVAILABLE'),
 ('QC', 'QC HOLD'),
 ('BL', 'BLOCKED'),
-('DM', 'DAMAGED');
+('DM', 'DAMAGED'),
+('EX', 'EXPIRED');
 
 CREATE TABLE inventory.stock_state_transitions
 (
@@ -112,10 +120,12 @@ VALUES
 ('RCD','PTW',0,'Putaway complete'),
 ('RCD','REV',1,'Reversed'),
 ('RCD','MOV',0,'Staging fallback move initiated'),
+('RCD','SCR',1,'Unit rejected before putaway / scrapped'),
 ('PTW','MOV',0,'Bin-to-bin move initiated'),
 ('MOV','PTW',0,'Move confirmed into destination bin'),
 ('MOV','RCD',1,'Move cancelled — unit returned to staging'),
 ('PTW','PKD',0,'Picked'),
+('PTW','SCR',1,'Unit written off / scrapped'),
 ('PKD','LDD',0,'Loaded onto vehicle'),
 ('LDD','PKD',1,'Load reversed — unit returned to picked state'),
 ('LDD','SHP',0,'Shipped');
@@ -146,7 +156,11 @@ VALUES
 ('PTW','QC',1,0,0,1,1),
 
 -- Blocked
-('PTW','BL',0,0,0,0,1);
+('PTW','BL',0,0,0,0,1),
+
+-- Expired - can still be moved (e.g. to a scrap area), never
+-- allocated or shipped without an explicit override
+('PTW','EX',1,0,0,1,1);
 GO
 
 /* ============================================================
@@ -253,6 +267,40 @@ CREATE TABLE inventory.inventory_placements
 
 CREATE INDEX IX_inventory_placements_bin
 ON inventory.inventory_placements (bin_id);
+
+/* ============================================================
+   inventory.customer_shelf_life_requirements
+   ------------------------------------------------------------
+   Customer+SKU override for minimum remaining shelf life -
+   takes precedence over inventory.skus' own default when both
+   exist for a given customer/SKU pair. Resolved at allocation
+   time, cascading customer+SKU -> SKU default -> 0.
+   ============================================================ */
+CREATE TABLE inventory.customer_shelf_life_requirements
+(
+    customer_party_id                 INT NOT NULL,
+    sku_id                             INT NOT NULL,
+    minimum_remaining_shelf_life_days INT NOT NULL,
+
+    created_at                        DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    created_by                        INT NULL,
+    updated_at                        DATETIME2(3) NULL,
+    updated_by                        INT NULL,
+
+    CONSTRAINT PK_customer_shelf_life_requirements
+        PRIMARY KEY (customer_party_id, sku_id),
+
+    CONSTRAINT FK_customer_shelf_life_customer
+        FOREIGN KEY (customer_party_id)
+        REFERENCES core.parties(party_id),
+
+    CONSTRAINT FK_customer_shelf_life_sku
+        FOREIGN KEY (sku_id)
+        REFERENCES inventory.skus(sku_id),
+
+    CONSTRAINT CK_customer_shelf_life_days_nonnegative
+        CHECK (minimum_remaining_shelf_life_days >= 0)
+);
 
 /* ============================================================
    inventory.inventory_movements

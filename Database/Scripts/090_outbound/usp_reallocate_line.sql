@@ -6,9 +6,10 @@ GO
 
 CREATE OR ALTER PROCEDURE outbound.usp_reallocate_line
 (
-    @outbound_line_id   INT,
-    @user_id            INT,
-    @session_id         UNIQUEIDENTIFIER
+    @outbound_line_id           INT,
+    @allow_shelf_life_override  BIT              = 0,
+    @user_id                    INT,
+    @session_id                 UNIQUEIDENTIFIER
 )
 AS
 BEGIN
@@ -27,39 +28,51 @@ BEGIN
         @remaining_qty      INT,
         @req_batch          NVARCHAR(100),
         @req_bbe            DATE,
+        @customer_party_id  INT,
+        @required_date      DATE,
+        @delivery_date      DATE,
+        @required_min_days  INT,
         @strategy           NVARCHAR(20),
         @unit_id            INT,
         @unit_qty           INT,
         @new_allocation_id  INT,
         @sscc               NVARCHAR(100),
         @sku_code           NVARCHAR(50),
+        @unit_bbe           DATE,
         @now                DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
         BEGIN TRAN;
 
-        /* ── 1. Lock and read line ── */
+        /* ── 1. Lock and read line (+ order, for delivery date / customer) ── */
         SELECT
-            @line_status   = l.line_status_code,
-            @sku_id        = l.sku_id,
-            @ordered_qty   = l.ordered_qty,
-            @allocated_qty = l.allocated_qty,
-            @picked_qty    = l.picked_qty,
-            @req_batch     = l.requested_batch,
-            @req_bbe       = l.requested_bbe
+            @line_status       = l.line_status_code,
+            @sku_id            = l.sku_id,
+            @ordered_qty       = l.ordered_qty,
+            @allocated_qty     = l.allocated_qty,
+            @picked_qty        = l.picked_qty,
+            @req_batch         = l.requested_batch,
+            @req_bbe           = l.requested_bbe,
+            @customer_party_id = o.customer_party_id,
+            @required_date     = o.required_date
         FROM outbound.outbound_lines l WITH (UPDLOCK, HOLDLOCK)
+        JOIN outbound.outbound_orders o ON o.outbound_order_id = l.outbound_order_id
         WHERE l.outbound_line_id = @outbound_line_id;
+
+        -- Computed here, before validation, so it's included on every
+        -- result set below, not just the success path.
+        SET @delivery_date = COALESCE(@required_date, CAST(@now AS DATE));
 
         IF @line_status IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
         /* ── 2. Validate line is in a re-allocatable state ── */
         IF @line_status NOT IN ('NEW', 'ALLOCATED', 'PICKING')
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
@@ -78,7 +91,7 @@ BEGIN
         IF @remaining_qty <= 0
         BEGIN
             -- Already fully allocated (shouldn't be called in this state)
-            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC07' AS result_code, NULL AS allocation_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
@@ -89,6 +102,18 @@ BEGIN
 
         IF @strategy IS NULL OR @strategy NOT IN ('FEFO','FIFO','LIFO','NONE')
             SET @strategy = 'NONE';
+
+        -- Cascading lookup: customer+SKU override -> SKU default -> 0
+        SET @required_min_days = COALESCE(
+            (SELECT csl.minimum_remaining_shelf_life_days
+             FROM inventory.customer_shelf_life_requirements csl
+             WHERE csl.customer_party_id = @customer_party_id
+               AND csl.sku_id            = @sku_id),
+            (SELECT sk.minimum_remaining_shelf_life_days
+             FROM inventory.skus sk
+             WHERE sk.sku_id = @sku_id),
+            0
+        );
 
         /* ── 5. Find next eligible unit ── */
         -- Same eligibility rules as usp_allocate_order; exclude already-allocated units
@@ -107,6 +132,11 @@ BEGIN
           AND iu.stock_status_code = 'AV'
           AND (@req_batch IS NULL OR iu.batch_number     = @req_batch)
           AND (@req_bbe   IS NULL OR iu.best_before_date = @req_bbe)
+          AND (
+              @allow_shelf_life_override = 1
+              OR iu.best_before_date IS NULL
+              OR DATEDIFF(day, @delivery_date, iu.best_before_date) >= @required_min_days
+          )
           AND st.storage_type_code <> 'STAGE'
           AND NOT EXISTS (
               SELECT 1 FROM outbound.outbound_allocations a
@@ -135,7 +165,7 @@ BEGIN
 
         IF @unit_id IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC06' AS result_code, NULL AS allocation_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRALLOC06' AS result_code, NULL AS allocation_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
@@ -155,8 +185,8 @@ BEGIN
 
         SET @new_allocation_id = SCOPE_IDENTITY();
 
-        -- Grab SSCC/SKU for the caller to log
-        SELECT @sscc = iu.external_ref, @sku_code = sk.sku_code
+        -- Grab SSCC/SKU/BBE for the caller to log
+        SELECT @sscc = iu.external_ref, @sku_code = sk.sku_code, @unit_bbe = iu.best_before_date
         FROM inventory.inventory_units iu
         JOIN inventory.skus sk ON sk.sku_id = iu.sku_id
         WHERE iu.inventory_unit_id = @unit_id;
@@ -191,12 +221,15 @@ BEGIN
             @new_allocation_id AS allocation_id,
             @unit_id           AS inventory_unit_id,
             @sscc              AS sscc,
-            @sku_code          AS sku_code;
+            @sku_code          AS sku_code,
+            @unit_bbe          AS best_before_date,
+            @required_min_days AS required_min_days,
+            @delivery_date     AS delivery_date;
 
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
-        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC99' AS result_code, NULL AS allocation_id;
+        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC99' AS result_code, NULL AS allocation_id, @delivery_date AS delivery_date;
     END CATCH
 END;
 GO

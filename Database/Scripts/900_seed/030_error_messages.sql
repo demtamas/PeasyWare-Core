@@ -208,7 +208,65 @@ FROM (VALUES
 
     (N'ERRTASK07', N'WAREHOUSE', N'ERROR',
         N'Task cancellation is not permitted from its current state.',
-        N'warehouse.usp_cancel_task: invalid transition')
+        N'warehouse.usp_cancel_task: invalid transition'),
+
+    -- ── Inventory / write-off / expiry ───────────────────────────────────────
+    (N'ERRSCR01', N'INV', N'ERROR',
+        N'Unit not found.',
+        N'usp_write_off_unit: inventory_unit_id not found'),
+
+    (N'ERRSCR02', N'INV', N'ERROR',
+        N'Unit is not in a status eligible for write-off.',
+        N'usp_write_off_unit: stock_status_code not in eligible list'),
+
+    (N'ERRSCR03', N'INV', N'ERROR',
+        N'Unit is mid-flow (picked, loaded, or in movement) and cannot be written off from here.',
+        N'usp_write_off_unit: stock_state_code not in (PTW, RCD)'),
+
+    (N'ERRSCR99', N'INV', N'ERROR',
+        N'Unexpected error while writing off the unit.',
+        N'usp_write_off_unit: unhandled exception'),
+
+    (N'SUCSCR01', N'INV', N'INFO',
+        N'Unit written off successfully.',
+        N'usp_write_off_unit: transitioned to SCR'),
+
+    (N'ERREXP99', N'INV', N'ERROR',
+        N'Unexpected error while running the expiry sweep.',
+        N'usp_run_expiry_sweep: unhandled exception'),
+
+    (N'SUCEXP01', N'INV', N'INFO',
+        N'Expiry sweep completed.',
+        N'usp_run_expiry_sweep: units flagged EX'),
+
+    -- ── Customer shelf-life requirements ───────────────────────────────────────
+    (N'ERRCSL01', N'INV', N'ERROR',
+        N'Customer not found or inactive.',
+        N'usp_set/delete_customer_shelf_life_requirement: party_code not found'),
+
+    (N'ERRCSL02', N'INV', N'ERROR',
+        N'SKU not found or inactive.',
+        N'usp_set_customer_shelf_life_requirement: sku_code not found'),
+
+    (N'ERRCSL03', N'INV', N'ERROR',
+        N'Minimum remaining shelf life cannot be negative.',
+        N'usp_set_customer_shelf_life_requirement: negative value supplied'),
+
+    (N'ERRCSL04', N'INV', N'ERROR',
+        N'No shelf-life requirement exists for this customer and SKU.',
+        N'usp_delete_customer_shelf_life_requirement: row not found'),
+
+    (N'ERRCSL99', N'INV', N'ERROR',
+        N'Unexpected error while saving the shelf-life requirement.',
+        N'usp_set/delete_customer_shelf_life_requirement: unhandled exception'),
+
+    (N'SUCCSL01', N'INV', N'INFO',
+        N'Shelf-life requirement saved successfully.',
+        N'usp_set_customer_shelf_life_requirement: upsert complete'),
+
+    (N'SUCCSL02', N'INV', N'INFO',
+        N'Shelf-life requirement removed successfully.',
+        N'usp_delete_customer_shelf_life_requirement: delete complete')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (

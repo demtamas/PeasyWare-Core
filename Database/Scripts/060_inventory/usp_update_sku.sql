@@ -19,6 +19,7 @@ CREATE OR ALTER PROCEDURE inventory.usp_update_sku
     @preferred_storage_type_code    NVARCHAR(50)     = NULL,
     @preferred_storage_section_code NVARCHAR(50)     = NULL,
     @owner_party_code               NVARCHAR(50)     = NULL,
+    @minimum_remaining_shelf_life_days INT           = NULL,
     @user_id                        INT              = NULL,
     @session_id                     UNIQUEIDENTIFIER = NULL
 )
@@ -83,6 +84,13 @@ BEGIN
             preferred_storage_type_id    = @storage_type_id,
             preferred_storage_section_id = @storage_section_id,
             owner_party_id               = @owner_party_id,
+            -- Preserve-on-NULL, unlike most fields above: the current
+            -- EditSkuForm doesn't know about this field yet and will keep
+            -- calling this SP without it. A blind overwrite would silently
+            -- wipe every SKU's shelf-life requirement on its next unrelated
+            -- edit (description, weight, anything) - COALESCE keeps the
+            -- existing value unless a real one is explicitly supplied.
+            minimum_remaining_shelf_life_days = COALESCE(@minimum_remaining_shelf_life_days, minimum_remaining_shelf_life_days),
             updated_at                   = SYSUTCDATETIME(),
             updated_by                   = @user_id
         WHERE sku_code = @sku_code;

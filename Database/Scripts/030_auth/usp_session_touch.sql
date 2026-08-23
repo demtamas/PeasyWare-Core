@@ -94,6 +94,30 @@ BEGIN
             @result_code = @transition_code OUTPUT,
             @friendly_msg = @transition_msg OUTPUT;
 
+        -- Logged here, matching the sibling usp_login's own call to
+        -- audit.usp_log_event in this same file - a session forcibly
+        -- expiring is exactly the kind of critical state transition
+        -- audit.audit_events exists for, same as auth.login/session.logout.
+        DECLARE @audit_payload NVARCHAR(MAX) = (
+            SELECT
+                CONVERT(NVARCHAR(36), @session_id)                            AS SessionId,
+                COALESCE(CONVERT(NVARCHAR(30), @last_seen, 126), N'NULL')     AS LastSeen,
+                N'touch timeout'                                               AS Reason,
+                @source_app                                                    AS SourceApp,
+                @source_client                                                 AS SourceClient,
+                N'ERRAUTH06'                                                   AS ResultCode
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        EXEC audit.usp_log_event
+            @correlation_id = NULL,
+            @user_id        = @user_id,
+            @session_id     = @session_id,
+            @event_name     = N'session.expired',
+            @result_code    = N'EXPIRED',
+            @success        = 0,
+            @payload_json   = @audit_payload;
+
         SET @result_code = 'ERRAUTH06';
         SET @friendly_msg = operations.fn_get_friendly_message(@result_code);
         RETURN;

@@ -59,6 +59,7 @@ public sealed class SqlAuditQueryRepository : IAuditQueryRepository
                 StorageBefore   = Str(reader, "storage_before"),
                 SectionBefore   = Str(reader, "section_before"),
                 OwnerBefore     = Str(reader, "owner_before"),
+                ShelfLifeBefore = Int(reader, "shelf_life_before"),
                 DescAfter       = Str(reader, "desc_after"),
                 EanAfter        = Str(reader, "ean_after"),
                 UomAfter        = Str(reader, "uom_after"),
@@ -71,6 +72,7 @@ public sealed class SqlAuditQueryRepository : IAuditQueryRepository
                 StorageAfter    = Str(reader, "storage_after"),
                 SectionAfter    = Str(reader, "section_after"),
                 OwnerAfter      = Str(reader, "owner_after"),
+                ShelfLifeAfter  = Int(reader, "shelf_life_after"),
             });
         }
 

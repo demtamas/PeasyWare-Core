@@ -6,10 +6,11 @@ GO
 
 CREATE OR ALTER PROCEDURE outbound.usp_allocate_order
 (
-    @outbound_order_id  INT,
-    @allow_partial      BIT              = 0,
-    @user_id            INT              = NULL,
-    @session_id         UNIQUEIDENTIFIER = NULL
+    @outbound_order_id          INT,
+    @allow_partial              BIT              = 0,
+    @allow_shelf_life_override  BIT              = 0,
+    @user_id                    INT              = NULL,
+    @session_id                 UNIQUEIDENTIFIER = NULL
 )
 AS
 BEGIN
@@ -20,27 +21,39 @@ BEGIN
     EXEC sys.sp_set_session_context @key = N'session_id', @value = @session_id;
 
     DECLARE
-        @order_status   VARCHAR(10),
-        @strategy       NVARCHAR(20),
-        @now            DATETIME2(3) = SYSUTCDATETIME();
+        @order_status      VARCHAR(10),
+        @customer_party_id INT,
+        @required_date     DATE,
+        @delivery_date     DATE,
+        @strategy          NVARCHAR(20),
+        @now               DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
         BEGIN TRAN;
 
         /* ── 1. Validate order ── */
-        SELECT @order_status = order_status_code
+        SELECT
+            @order_status      = order_status_code,
+            @customer_party_id = customer_party_id,
+            @required_date     = required_date
         FROM outbound.outbound_orders WITH (UPDLOCK, HOLDLOCK)
         WHERE outbound_order_id = @outbound_order_id;
 
+        -- Computed here, before validation, so it's available (and
+        -- included) on every result set below, not just the success path -
+        -- knowing the delivery date used is exactly the context needed to
+        -- diagnose a shelf-life-driven shortfall (ERRALLOC01/02).
+        SET @delivery_date = COALESCE(@required_date, CAST(@now AS DATE));
+
         IF @order_status IS NULL
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code, NULL AS outbound_order_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code, NULL AS outbound_order_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
         IF @order_status NOT IN ('NEW', 'ALLOCATED')
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRORD02' AS result_code, @outbound_order_id AS outbound_order_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRORD02' AS result_code, @outbound_order_id AS outbound_order_id, @delivery_date AS delivery_date;
             ROLLBACK; RETURN;
         END
 
@@ -59,6 +72,7 @@ BEGIN
             @ordered_qty          INT,
             @req_batch            NVARCHAR(100),
             @req_bbe              DATE,
+            @required_min_days    INT,
             @unit_id              INT,
             @unit_qty             INT,
             @remaining            INT,
@@ -67,13 +81,18 @@ BEGIN
 
         -- Captures every unit actually allocated in this call, so the caller
         -- can log (and later search) which SSCCs/SKUs were affected, not just
-        -- the order ID.
+        -- the order ID. required_min_days is backfilled per-line after each
+        -- line's unit_cursor completes (OUTPUT can only capture columns
+        -- actually being inserted into outbound_allocations, and this isn't
+        -- one of them - it's the requirement that applied to the decision,
+        -- not something that belongs stored on the allocation row itself).
         DECLARE @new_allocations TABLE
         (
-            allocation_id     INT,
-            inventory_unit_id INT,
-            outbound_line_id  INT,
-            allocated_qty     INT
+            allocation_id      INT,
+            inventory_unit_id  INT,
+            outbound_line_id   INT,
+            allocated_qty      INT,
+            required_min_days  INT NULL
         );
 
         DECLARE line_cursor CURSOR LOCAL FAST_FORWARD FOR
@@ -105,6 +124,20 @@ BEGIN
 
             SET @allocated_total = 0;
 
+            -- Cascading lookup: customer+SKU override -> SKU default -> 0
+            -- (0 is the floor itself - BBE simply must be in the future
+            -- relative to delivery date when nothing is configured).
+            SET @required_min_days = COALESCE(
+                (SELECT csl.minimum_remaining_shelf_life_days
+                 FROM inventory.customer_shelf_life_requirements csl
+                 WHERE csl.customer_party_id = @customer_party_id
+                   AND csl.sku_id            = @sku_id),
+                (SELECT sk.minimum_remaining_shelf_life_days
+                 FROM inventory.skus sk
+                 WHERE sk.sku_id = @sku_id),
+                0
+            );
+
             /* ── Per line: find eligible units ordered by strategy ── */
             DECLARE unit_cursor CURSOR LOCAL FAST_FORWARD FOR
                 SELECT iu.inventory_unit_id, iu.quantity
@@ -121,6 +154,15 @@ BEGIN
                   -- Respect requested batch / BBE if specified on the line
                   AND (@req_batch IS NULL OR iu.batch_number    = @req_batch)
                   AND (@req_bbe   IS NULL OR iu.best_before_date = @req_bbe)
+                  -- Minimum remaining shelf life: exempt entirely for units
+                  -- with no BBE at all (non-batch-managed SKUs never carry
+                  -- one); otherwise must clear the resolved requirement as
+                  -- of delivery date, unless explicitly overridden.
+                  AND (
+                      @allow_shelf_life_override = 1
+                      OR iu.best_before_date IS NULL
+                      OR DATEDIFF(day, @delivery_date, iu.best_before_date) >= @required_min_days
+                  )
                   -- Only allocate from storage, not staging
                   AND st.storage_type_code <> 'STAGE'
                   -- Not already allocated
@@ -169,7 +211,7 @@ BEGIN
                     OUTPUT
                         inserted.allocation_id, inserted.inventory_unit_id,
                         inserted.outbound_line_id, inserted.allocated_qty
-                    INTO @new_allocations
+                    INTO @new_allocations (allocation_id, inventory_unit_id, outbound_line_id, allocated_qty)
                     VALUES
                     (
                         @line_id, @unit_id,
@@ -188,6 +230,13 @@ BEGIN
             CLOSE unit_cursor;
             DEALLOCATE unit_cursor;
 
+            -- Backfill the requirement that applied to this line's units -
+            -- same value for all of them, since it's resolved once per line
+            UPDATE @new_allocations
+            SET required_min_days = @required_min_days
+            WHERE outbound_line_id = @line_id
+              AND required_min_days IS NULL;
+
             /* ── Check line fully allocated ── */
             IF @remaining > 0
             BEGIN
@@ -196,9 +245,9 @@ BEGIN
                     CLOSE line_cursor;
                     DEALLOCATE line_cursor;
                     IF @req_batch IS NOT NULL OR @req_bbe IS NOT NULL
-                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC02' AS result_code, @outbound_order_id AS outbound_order_id;
+                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC02' AS result_code, @outbound_order_id AS outbound_order_id, @delivery_date AS delivery_date;
                     ELSE
-                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC01' AS result_code, @outbound_order_id AS outbound_order_id;
+                        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC01' AS result_code, @outbound_order_id AS outbound_order_id, @delivery_date AS delivery_date;
                     ROLLBACK; RETURN;
                 END
                 /* Partial mode: record what was allocated on this line, move to next */
@@ -241,16 +290,19 @@ BEGIN
         SELECT
             CAST(1 AS BIT) AS success,
             CASE WHEN @newly_allocated_qty > 0 THEN N'SUCORD02' ELSE N'WARNORD01' END AS result_code,
-            @outbound_order_id AS outbound_order_id;
+            @outbound_order_id AS outbound_order_id,
+            @delivery_date      AS delivery_date;
 
         -- Second result set: exactly which units this call allocated, for logging/search
         SELECT
             na.allocation_id,
             na.inventory_unit_id,
-            iu.external_ref AS sscc,
+            iu.external_ref      AS sscc,
             sk.sku_code,
             na.outbound_line_id,
-            na.allocated_qty
+            na.allocated_qty,
+            iu.best_before_date,
+            na.required_min_days
         FROM @new_allocations na
         JOIN inventory.inventory_units iu ON iu.inventory_unit_id = na.inventory_unit_id
         JOIN inventory.skus sk           ON sk.sku_id = iu.sku_id;
@@ -260,7 +312,7 @@ BEGIN
         IF @@TRANCOUNT > 0 ROLLBACK;
         IF CURSOR_STATUS('local','line_cursor') >= 0 BEGIN CLOSE line_cursor; DEALLOCATE line_cursor; END
         IF CURSOR_STATUS('local','unit_cursor') >= 0 BEGIN CLOSE unit_cursor; DEALLOCATE unit_cursor; END
-        SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code, NULL AS outbound_order_id;
+        SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code, NULL AS outbound_order_id, @delivery_date AS delivery_date;
     END CATCH
 END;
 

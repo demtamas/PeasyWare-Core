@@ -32,7 +32,7 @@ public interface IOutboundCommandRepository
 
     // ── Allocation management ────────────────────────────────────────────
 
-    OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false);
+    OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false, bool allowShelfLifeOverride = false);
 
     OperationResult DeallocateOrder(int outboundOrderId);
 
@@ -50,7 +50,7 @@ public interface IOutboundCommandRepository
 
     OperationResult CancelAllocation(int allocationId, string? reason = null);
 
-    OperationResult ReallocateLine(int outboundLineId);
+    OperationResult ReallocateLine(int outboundLineId, bool allowShelfLifeOverride = false);
 
     LoadConfirmResult ConfirmLoad(int outboundOrderId, int shipmentId);
 

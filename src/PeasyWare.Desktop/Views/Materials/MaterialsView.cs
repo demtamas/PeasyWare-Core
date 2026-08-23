@@ -202,7 +202,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isFullHuRequired:         form.IsFullHuRequired,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
             preferredSectionCode:     form.PreferredSectionCode,
-            ownerPartyCode:           form.OwnerPartyCode);
+            ownerPartyCode:           form.OwnerPartyCode,
+            minimumRemainingShelfLifeDays: form.MinimumRemainingShelfLifeDays);
 
         if (!result.Success)
         {
@@ -237,7 +238,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isActive:                 form.IsActive,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
             preferredSectionCode:     form.PreferredSectionCode,
-            ownerPartyCode:           form.OwnerPartyCode);
+            ownerPartyCode:           form.OwnerPartyCode,
+            minimumRemainingShelfLifeDays: form.MinimumRemainingShelfLifeDays);
 
         if (!result.Success)
         {
@@ -278,7 +280,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
             isFullHuRequired:         form.IsFullHuRequired,
             preferredStorageTypeCode: form.PreferredStorageTypeCode,
             preferredSectionCode:     form.PreferredSectionCode,
-            ownerPartyCode:           form.OwnerPartyCode);
+            ownerPartyCode:           form.OwnerPartyCode,
+            minimumRemainingShelfLifeDays: form.MinimumRemainingShelfLifeDays);
 
         if (!result.Success)
         {
@@ -354,6 +357,8 @@ public partial class MaterialsView : BaseView, IToolbarAware
         dgv.Columns.Add(Col(nameof(SkuDto.WeightPerUnit),               "Weight (kg)",     7,
             new DataGridViewCellStyle { Format = "F3", Alignment = DataGridViewContentAlignment.MiddleRight }));
         dgv.Columns.Add(Col(nameof(SkuDto.StandardHuQuantity),          "HU Qty",          5,
+            new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }));
+        dgv.Columns.Add(Col(nameof(SkuDto.MinimumRemainingShelfLifeDays), "Min shelf life", 6,
             new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }));
         dgv.Columns.Add(BoolCol(nameof(SkuDto.IsBatchRequired),         "Batch Req",       6));
         dgv.Columns.Add(BoolCol(nameof(SkuDto.IsHazardous),             "Hazardous",       6));

@@ -21,6 +21,7 @@ public sealed class SqlEventLogQueryRepository : IEventLogQueryRepository
     public IReadOnlyList<EventLogDto> GetEventLog(
         string?   actionFilter   = null,
         string?   levelFilter    = null,
+        string?   sourceFilter   = null,
         string?   usernameFilter = null,
         DateTime? fromDate       = null,
         DateTime? toDate         = null,
@@ -30,18 +31,19 @@ public sealed class SqlEventLogQueryRepository : IEventLogQueryRepository
         using var command    = connection.CreateCommand();
 
         var where = new List<string>();
-        if (actionFilter   is not null) where.Add("action LIKE @action");
+        if (actionFilter   is not null) where.Add("event_name LIKE @action");
         if (levelFilter    is not null) where.Add("level = @level");
+        if (sourceFilter   is not null) where.Add("source = @source");
         if (usernameFilter is not null) where.Add("username LIKE @username");
         if (fromDate       is not null) where.Add("occurred_at >= @from_date");
         if (toDate         is not null) where.Add("occurred_at <  @to_date");
 
         command.CommandText = $"""
             SELECT TOP (@top)
-                trace_id, occurred_at, level, action,
-                user_id, username, source_app, source_client,
-                result_code, success, payload_json
-            FROM audit.v_event_log
+                event_id AS trace_id, occurred_at, source, level, event_name AS action,
+                user_id, username, session_id, correlation_id,
+                source_app, source_client, result_code, success, payload_json
+            FROM audit.v_all_events
             {(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
             ORDER BY occurred_at DESC
             """;
@@ -52,6 +54,8 @@ public sealed class SqlEventLogQueryRepository : IEventLogQueryRepository
             command.Parameters.Add(new SqlParameter("@action",   SqlDbType.NVarChar, 200) { Value = $"%{actionFilter}%" });
         if (levelFilter    is not null)
             command.Parameters.Add(new SqlParameter("@level",    SqlDbType.NVarChar, 10)  { Value = levelFilter });
+        if (sourceFilter   is not null)
+            command.Parameters.Add(new SqlParameter("@source",   SqlDbType.NVarChar, 10)  { Value = sourceFilter });
         if (usernameFilter is not null)
             command.Parameters.Add(new SqlParameter("@username", SqlDbType.NVarChar, 100) { Value = $"%{usernameFilter}%" });
         if (fromDate       is not null)
@@ -66,17 +70,19 @@ public sealed class SqlEventLogQueryRepository : IEventLogQueryRepository
         {
             results.Add(new EventLogDto
             {
-                TraceId      = reader.GetInt64(reader.GetOrdinal("trace_id")),
-                OccurredAt   = reader.GetDateTime(reader.GetOrdinal("occurred_at")),
-                Level        = reader.GetString(reader.GetOrdinal("level")),
-                Action       = reader.GetString(reader.GetOrdinal("action")),
-                UserId       = reader.IsDBNull(reader.GetOrdinal("user_id"))       ? null : reader.GetInt32(reader.GetOrdinal("user_id")),
-                Username     = reader.IsDBNull(reader.GetOrdinal("username"))      ? null : reader.GetString(reader.GetOrdinal("username")),
-                SourceApp    = reader.IsDBNull(reader.GetOrdinal("source_app"))    ? null : reader.GetString(reader.GetOrdinal("source_app")),
-                SourceClient = reader.IsDBNull(reader.GetOrdinal("source_client")) ? null : reader.GetString(reader.GetOrdinal("source_client")),
-                ResultCode   = reader.IsDBNull(reader.GetOrdinal("result_code"))   ? null : reader.GetString(reader.GetOrdinal("result_code")),
-                Success      = reader.IsDBNull(reader.GetOrdinal("success"))       ? null : reader.GetString(reader.GetOrdinal("success")),
-                PayloadJson  = reader.IsDBNull(reader.GetOrdinal("payload_json"))  ? null : reader.GetString(reader.GetOrdinal("payload_json"))
+                TraceId       = reader.GetInt64(reader.GetOrdinal("trace_id")),
+                OccurredAt    = reader.GetDateTime(reader.GetOrdinal("occurred_at")),
+                Source        = reader.IsDBNull(reader.GetOrdinal("source"))        ? null : reader.GetString(reader.GetOrdinal("source")),
+                Level         = reader.GetString(reader.GetOrdinal("level")),
+                Action        = reader.GetString(reader.GetOrdinal("action")),
+                UserId        = reader.IsDBNull(reader.GetOrdinal("user_id"))       ? null : reader.GetInt32(reader.GetOrdinal("user_id")),
+                Username      = reader.IsDBNull(reader.GetOrdinal("username"))      ? null : reader.GetString(reader.GetOrdinal("username")),
+                CorrelationId = reader.IsDBNull(reader.GetOrdinal("correlation_id")) ? null : reader.GetGuid(reader.GetOrdinal("correlation_id")).ToString(),
+                SourceApp     = reader.IsDBNull(reader.GetOrdinal("source_app"))    ? null : reader.GetString(reader.GetOrdinal("source_app")),
+                SourceClient  = reader.IsDBNull(reader.GetOrdinal("source_client")) ? null : reader.GetString(reader.GetOrdinal("source_client")),
+                ResultCode    = reader.IsDBNull(reader.GetOrdinal("result_code"))   ? null : reader.GetString(reader.GetOrdinal("result_code")),
+                Success       = reader.IsDBNull(reader.GetOrdinal("success"))       ? null : reader.GetString(reader.GetOrdinal("success")),
+                PayloadJson   = reader.IsDBNull(reader.GetOrdinal("payload_json"))  ? null : reader.GetString(reader.GetOrdinal("payload_json"))
             });
         }
 

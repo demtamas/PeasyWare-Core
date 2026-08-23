@@ -42,7 +42,8 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         string?  preferredStorageTypeCode = null,
         string?  preferredSectionCode     = null,
         string?  ownerPartyCode           = null,
-        string?  storageTypeCode          = null)
+        string?  storageTypeCode          = null,
+        int?     minimumRemainingShelfLifeDays = null)
     {
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
@@ -64,6 +65,7 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         command.Parameters.Add(new SqlParameter("@preferred_storage_type_code",    SqlDbType.NVarChar, 50)  { Value = (object?)(storageTypeCode ?? preferredStorageTypeCode) ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@preferred_storage_section_code", SqlDbType.NVarChar, 50)  { Value = (object?)preferredSectionCode      ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@owner_party_code",               SqlDbType.NVarChar, 50)  { Value = (object?)ownerPartyCode            ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@minimum_remaining_shelf_life_days", SqlDbType.Int)         { Value = (object?)minimumRemainingShelfLifeDays ?? DBNull.Value });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRSKU99", "Unexpected error.");
@@ -88,10 +90,12 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         bool     isActive                 = true,
         string?  preferredStorageTypeCode = null,
         string?  preferredSectionCode     = null,
-        string?  ownerPartyCode           = null)
+        string?  ownerPartyCode           = null,
+        int?     minimumRemainingShelfLifeDays = null)
     {
         // Fetch before-state for audit trail
         object? before = null;
+        int?    shelfLifeBefore = null;
         using (var readConn = _factory.CreateForCommand(_session))
         using (var readCmd  = readConn.CreateCommand())
         {
@@ -99,13 +103,16 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
                 SELECT sku_description, ean, uom_code, weight_per_unit,
                        standard_hu_quantity, is_hazardous, is_batch_required,
                        is_full_hu_required, is_active,
-                       preferred_storage_type_code, preferred_section_code
+                       preferred_storage_type_code, preferred_section_code,
+                       minimum_remaining_shelf_life_days
                 FROM inventory.v_skus
                 WHERE sku_code = @sku_code
                 """;
             readCmd.Parameters.AddWithValue("@sku_code", skuCode);
             using var r = readCmd.ExecuteReader();
             if (r.Read())
+            {
+                shelfLifeBefore = r.IsDBNull(11) ? null : r.GetInt32(11);
                 before = new
                 {
                     SkuDescription     = r.IsDBNull(0) ? null : r.GetString(0),
@@ -118,8 +125,10 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
                     IsFullHuRequired   = r.GetBoolean(7),
                     IsActive           = r.GetBoolean(8),
                     StorageTypeCode    = r.IsDBNull(9)  ? null : r.GetString(9),
-                    SectionCode        = r.IsDBNull(10) ? null : r.GetString(10)
+                    SectionCode        = r.IsDBNull(10) ? null : r.GetString(10),
+                    MinimumRemainingShelfLifeDays = shelfLifeBefore
                 };
+            }
         }
 
         using var connection = _factory.CreateForCommand(_session);
@@ -143,6 +152,7 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         command.Parameters.Add(new SqlParameter("@preferred_storage_type_code",    SqlDbType.NVarChar, 50)  { Value = (object?)preferredStorageTypeCode  ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@preferred_storage_section_code", SqlDbType.NVarChar, 50)  { Value = (object?)preferredSectionCode      ?? DBNull.Value });
         command.Parameters.Add(new SqlParameter("@owner_party_code",               SqlDbType.NVarChar, 50)  { Value = (object?)ownerPartyCode            ?? DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@minimum_remaining_shelf_life_days", SqlDbType.Int)         { Value = (object?)minimumRemainingShelfLifeDays ?? DBNull.Value });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRSKU99", "Unexpected error.");
@@ -150,6 +160,9 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
         var success = reader.GetBoolean(reader.GetOrdinal("success"));
         var code    = reader.GetString(reader.GetOrdinal("result_code"));
 
+        // The SP preserves-on-NULL, so what actually landed is either the
+        // supplied value or whatever was there before - reflect that in
+        // the After state rather than logging a NULL that didn't really happen.
         var after = new
         {
             SkuDescription     = skuDescription,
@@ -163,7 +176,8 @@ public sealed class SqlSkuCommandRepository : RepositoryBase, ISkuCommandReposit
             IsActive           = isActive,
             StorageTypeCode    = preferredStorageTypeCode,
             SectionCode        = preferredSectionCode,
-            OwnerPartyCode     = ownerPartyCode
+            OwnerPartyCode     = ownerPartyCode,
+            MinimumRemainingShelfLifeDays = minimumRemainingShelfLifeDays ?? shelfLifeBefore
         };
 
         return BuildResult("Sku.Update", code, new { SkuCode = skuCode, Before = before, After = after });

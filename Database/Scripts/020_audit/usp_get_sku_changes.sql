@@ -24,9 +24,11 @@ BEGIN
         desc_before,     ean_before,       uom_before,       weight_before,
         hu_qty_before,   batch_req_before,  full_hu_req_before,
         hazardous_before, active_before,   storage_before,   section_before,   owner_before,
+        shelf_life_before,
         desc_after,      ean_after,        uom_after,        weight_after,
         hu_qty_after,    batch_req_after,   full_hu_req_after,
-        hazardous_after,  active_after,    storage_after,    section_after,    owner_after
+        hazardous_after,  active_after,    storage_after,    section_after,    owner_after,
+        shelf_life_after
     FROM audit.v_sku_changes
     WHERE (@sku_code  IS NULL OR sku_code     = @sku_code)
       AND (@from_date IS NULL OR occurred_at >= @from_date)

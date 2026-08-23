@@ -306,7 +306,7 @@ public sealed class SqlOutboundCommandRepository
             new { AllocationId = allocationId, InventoryUnitId = inventoryUnitId, Sscc = sscc, SkuCode = skuCode, Reason = reason });
     }
 
-    public OperationResult ReallocateLine(int outboundLineId)
+    public OperationResult ReallocateLine(int outboundLineId, bool allowShelfLifeOverride = false)
     {
         using var connection = _factory.CreateForCommand(_session);
         using var command    = connection.CreateCommand();
@@ -317,26 +317,30 @@ public sealed class SqlOutboundCommandRepository
         command.Parameters.AddWithValue("@user_id",    _session.UserId);
         command.Parameters.AddWithValue("@session_id", _session.SessionId);
         command.Parameters.Add(new SqlParameter("@outbound_line_id", SqlDbType.Int) { Value = outboundLineId });
+        command.Parameters.Add(new SqlParameter("@allow_shelf_life_override", SqlDbType.Bit) { Value = allowShelfLifeOverride });
 
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return OperationResult.Create(false, "ERRALLOC99", "Unexpected error.");
 
-        var success = reader.GetBoolean(reader.GetOrdinal("success"));
-        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var success      = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code         = reader.GetString(reader.GetOrdinal("result_code"));
+        var deliveryDate = reader.IsDBNull(reader.GetOrdinal("delivery_date")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("delivery_date"));
 
         if (!success)
         {
             return BuildResult("Outbound.ReallocateLine", code,
-                new { OutboundLineId = outboundLineId });
+                new { OutboundLineId = outboundLineId, AllowShelfLifeOverride = allowShelfLifeOverride, DeliveryDate = deliveryDate });
         }
 
-        var allocationId    = reader.GetInt32(reader.GetOrdinal("allocation_id"));
-        var inventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id"));
-        var sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc"));
-        var skuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code"));
+        var allocationId     = reader.GetInt32(reader.GetOrdinal("allocation_id"));
+        var inventoryUnitId  = reader.GetInt32(reader.GetOrdinal("inventory_unit_id"));
+        var sscc             = reader.IsDBNull(reader.GetOrdinal("sscc"))              ? null : reader.GetString(reader.GetOrdinal("sscc"));
+        var skuCode          = reader.IsDBNull(reader.GetOrdinal("sku_code"))          ? null : reader.GetString(reader.GetOrdinal("sku_code"));
+        var bestBeforeDate   = reader.IsDBNull(reader.GetOrdinal("best_before_date"))  ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("best_before_date"));
+        var requiredMinDays  = reader.IsDBNull(reader.GetOrdinal("required_min_days")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("required_min_days"));
 
         return BuildResult("Outbound.ReallocateLine", code,
-            new { OutboundLineId = outboundLineId, NewAllocationId = allocationId, InventoryUnitId = inventoryUnitId, Sscc = sscc, SkuCode = skuCode });
+            new { OutboundLineId = outboundLineId, NewAllocationId = allocationId, InventoryUnitId = inventoryUnitId, Sscc = sscc, SkuCode = skuCode, BestBeforeDate = bestBeforeDate, RequiredMinDays = requiredMinDays, DeliveryDate = deliveryDate, AllowShelfLifeOverride = allowShelfLifeOverride });
     }
 
     public OperationResult AddOrderToShipment(
@@ -393,7 +397,7 @@ public sealed class SqlOutboundCommandRepository
     // Allocate order (Desktop — calls existing usp_allocate_order)
     // ────────────────────────────────────────────────────────
 
-    public OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false)
+    public OperationResult AllocateOrder(int outboundOrderId, bool allowPartial = false, bool allowShelfLifeOverride = false)
     {
         EnsureSession();
 
@@ -405,6 +409,7 @@ public sealed class SqlOutboundCommandRepository
 
         command.Parameters.Add("@outbound_order_id", System.Data.SqlDbType.Int).Value              = outboundOrderId;
         command.Parameters.Add("@allow_partial",     System.Data.SqlDbType.Bit).Value              = allowPartial;
+        command.Parameters.Add("@allow_shelf_life_override", System.Data.SqlDbType.Bit).Value      = allowShelfLifeOverride;
         command.Parameters.Add("@user_id",           System.Data.SqlDbType.Int).Value              = _session.UserId;
         command.Parameters.Add("@session_id",        System.Data.SqlDbType.UniqueIdentifier).Value = _session.SessionId;
 
@@ -413,14 +418,15 @@ public sealed class SqlOutboundCommandRepository
         if (!reader.Read())
             throw new InvalidOperationException("Unexpected empty response from usp_allocate_order.");
 
-        var success = reader.GetBoolean(reader.GetOrdinal("success"));
-        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+        var success      = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code         = reader.GetString(reader.GetOrdinal("result_code"));
+        var deliveryDate = reader.IsDBNull(reader.GetOrdinal("delivery_date")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("delivery_date"));
 
         // Failure paths never produce the second result set - only walk it on success
         if (!success || !reader.NextResult())
         {
             return BuildResult("Outbound.AllocateOrder", code,
-                new { OutboundOrderId = outboundOrderId });
+                new { OutboundOrderId = outboundOrderId, AllowShelfLifeOverride = allowShelfLifeOverride, DeliveryDate = deliveryDate });
         }
 
         var allocatedUnits = new List<object>();
@@ -430,14 +436,16 @@ public sealed class SqlOutboundCommandRepository
             {
                 AllocationId    = reader.GetInt32(reader.GetOrdinal("allocation_id")),
                 InventoryUnitId = reader.GetInt32(reader.GetOrdinal("inventory_unit_id")),
-                Sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))     ? null : reader.GetString(reader.GetOrdinal("sscc")),
-                SkuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code")) ? null : reader.GetString(reader.GetOrdinal("sku_code")),
-                AllocatedQty    = reader.GetInt32(reader.GetOrdinal("allocated_qty"))
+                Sscc            = reader.IsDBNull(reader.GetOrdinal("sscc"))               ? null : reader.GetString(reader.GetOrdinal("sscc")),
+                SkuCode         = reader.IsDBNull(reader.GetOrdinal("sku_code"))           ? null : reader.GetString(reader.GetOrdinal("sku_code")),
+                AllocatedQty    = reader.GetInt32(reader.GetOrdinal("allocated_qty")),
+                BestBeforeDate  = reader.IsDBNull(reader.GetOrdinal("best_before_date"))   ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("best_before_date")),
+                RequiredMinDays = reader.IsDBNull(reader.GetOrdinal("required_min_days"))  ? (int?)null : reader.GetInt32(reader.GetOrdinal("required_min_days"))
             });
         }
 
         return BuildResult("Outbound.AllocateOrder", code,
-            new { OutboundOrderId = outboundOrderId, AllocatedUnits = allocatedUnits });
+            new { OutboundOrderId = outboundOrderId, AllocatedUnits = allocatedUnits, AllowShelfLifeOverride = allowShelfLifeOverride, DeliveryDate = deliveryDate });
     }
 
     // ────────────────────────────────────────────────────────

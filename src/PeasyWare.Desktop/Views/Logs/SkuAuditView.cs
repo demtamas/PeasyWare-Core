@@ -149,6 +149,8 @@ public partial class SkuAuditView : BaseView, IToolbarAware
         dgv.Columns.Add(Col("SectionAfter", "Section (aft)", 6));
         dgv.Columns.Add(Col("OwnerBefore",  "Owner (bef)",   7));
         dgv.Columns.Add(Col("OwnerAfter",   "Owner (aft)",   7));
+        dgv.Columns.Add(Col("ShelfLifeBefore", "Min shelf life (bef)", 8));
+        dgv.Columns.Add(Col("ShelfLifeAfter",  "Min shelf life (aft)", 8));
         dgv.Columns.Add(BoolCol("BatchReqBefore", "Batch req (bef)", 7));
         dgv.Columns.Add(BoolCol("BatchReqAfter",  "Batch req (aft)", 7));
         dgv.Columns.Add(BoolCol("ActiveBefore",   "Active (bef)",    5));

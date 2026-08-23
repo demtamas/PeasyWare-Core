@@ -18,6 +18,7 @@ SELECT
     s.is_batch_required,
     s.is_full_hu_required,
     s.is_active,
+    s.minimum_remaining_shelf_life_days,
     st.storage_type_code        AS preferred_storage_type_code,
     ss.section_code             AS preferred_section_code,
     s.created_at,

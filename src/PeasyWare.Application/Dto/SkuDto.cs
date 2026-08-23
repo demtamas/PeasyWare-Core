@@ -13,6 +13,7 @@ public sealed record SkuDto
     public bool     IsBatchRequired           { get; init; }
     public bool     IsFullHuRequired          { get; init; }
     public bool     IsActive                  { get; init; }
+    public int?     MinimumRemainingShelfLifeDays { get; init; }
     public string?  PreferredStorageTypeCode  { get; init; }
     public string?  PreferredSectionCode      { get; init; }
     public string?  OwnerPartyCode            { get; init; }

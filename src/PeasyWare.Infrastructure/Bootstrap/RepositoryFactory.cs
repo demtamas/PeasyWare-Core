@@ -168,6 +168,22 @@ public sealed class RepositoryFactory
         => new SqlAuditQueryRepository(_factory, session);
 
     // --------------------------------------------------
+    // CUSTOMER SHELF LIFE REQUIREMENTS
+    // --------------------------------------------------
+
+    public ICustomerShelfLifeCommandRepository CreateCustomerShelfLifeCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlCustomerShelfLifeCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
+    public ICustomerShelfLifeQueryRepository CreateCustomerShelfLifeQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlCustomerShelfLifeQueryRepository(_factory, session);
+    }
+
+    // --------------------------------------------------
     // PARTIES
     // --------------------------------------------------
 

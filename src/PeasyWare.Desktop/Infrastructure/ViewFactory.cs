@@ -185,4 +185,13 @@ public sealed class ViewFactory
         return new TasksView(_runtime, session);
     }
 
+    public UserControl CreateCustomerShelfLifeView(SessionContext session)
+    {
+        var queryRepo   = _runtime.Repositories.CreateCustomerShelfLifeQuery(session);
+        var commandRepo = _runtime.Repositories.CreateCustomerShelfLifeCommand(session);
+        var partyRepo   = _runtime.Repositories.CreatePartyQuery(session);
+        var skuRepo     = _runtime.Repositories.CreateSkuQuery(session);
+        return new PeasyWare.Desktop.Views.Materials.CustomerShelfLifeView(session, queryRepo, commandRepo, partyRepo, skuRepo);
+    }
+
 }

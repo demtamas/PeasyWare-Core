@@ -1,50 +1,86 @@
-﻿Close allocation logging/ordering gaps, fix Desktop order line numbering,
-fix toolbar selection-state bug across the app
+﻿Allocation audit enrichment, customer shelf-life management,
+RBAC gap fixes and object preservation, session/event-log hardening
 
-Allocation event logging (usp_allocate_order, usp_cancel_allocation,
-usp_deallocate_order, usp_reallocate_line + SqlOutboundCommandRepository):
-- All four now surface which unit(s)/SSCC/SKU they actually affected in
-  their result sets, not just the order ID - via OUTPUT clauses on the
-  multi-unit SPs (allocate, deallocate) and extra result columns on the
-  single-unit ones (cancel, reallocate)
-- Closes a real gap: searching the Event Log by SSCC previously found
-  Inbound.ReceiveLine but not Outbound.AllocateOrder/CancelAllocation for
-  the same unit, since the payload never mentioned it
-- Verified end-to-end against live allocation-strategy testing: search by
-  SSCC now surfaces the full allocate/deallocate history in one place
+Allocation logging enrichment (usp_allocate_order, usp_reallocate_line,
+SqlOutboundCommandRepository):
+- Every allocated unit's log entry now carries its own BestBeforeDate and
+  the RequiredMinDays that applied to it, plus DeliveryDate and
+  AllowShelfLifeOverride at the top level - every branch (success and
+  failure) produces the same consistent shape, not just the happy path
+- Fixes a real gap: a shelf-life-driven allocation decision was previously
+  unreconstructable from the trace log alone without live narration
 
-Allocation strategy tiebreak (usp_allocate_order, usp_reallocate_line):
-- FEFO and NONE had no secondary sort when multiple units shared the same
-  BBE - which unit won was whatever order SQL Server happened to return
-  matching rows in, not a guaranteed rule (FIFO/LIFO were never at risk -
-  their sort key is created_at, which is never actually tied)
-- Added created_at ASC as the explicit tiebreak for FEFO/NONE
-- Verified deterministic across three separate identical-setting runs
-  before and after: same units, same order, every time
+Customer shelf-life management (new feature, full stack):
+- Schema: nullable minimum_remaining_shelf_life_days on inventory.skus,
+  new inventory.customer_shelf_life_requirements table (customer+SKU
+  override, cascades customer+SKU -> SKU default -> 0 at allocation time)
+- usp_set/delete_customer_shelf_life_requirement (RBAC-gated on
+  materials.manage, reused rather than a new dedicated key)
+- New Desktop screen (Inventory -> Customer shelf life): grid, add/edit/
+  delete, Add/Edit/Delete gated by permission with disable-not-hide
+  convention (PermissionGating.GateBy)
+- SkuEditForm extended with the SKU-level default field; MaterialsView
+  and SkuAuditView both extended to show it (audit trail required
+  extending Sku.Update's Before/After payload and v_sku_changes'
+  JSON_VALUE extractions, not just adding a grid column)
+- Verified end-to-end across many threshold values: boundary inclusion/
+  exclusion, FEFO interaction, multi-lot cascading, customer-override
+  precedence over the SKU default, and correct fallback on override
+  deletion - all confirmed against real allocation runs, not just reasoned
+  through
 
-Desktop order line numbering (CreateOrderForm):
-- OrderLineDto.LineNo was never set when building lines from the Desktop
-  "New Order" form, silently defaulting to 0 for every line
-- For a single-line order this just showed line_no = 0; for a multi-line
-  order every line collided on the same (order_id, line_no) unique
-  constraint, so the Desktop app could not create multi-line orders at
-  all - failed with a generic, unrelated-looking error
-- Now assigns 10/20/30... matching the convention used everywhere else
+RBAC: real gaps found and fixed, real objects recovered
+- auth.fn_has_permission, auth.fn_is_system_user, auth.v_user_permissions
+  were all live and load-bearing in the database (the entire Phase 2c/2d
+  permission pipeline actually works) but existed nowhere in the repo -
+  same "created directly in SSMS, never scripted" pattern as the SQL
+  Agent jobs found earlier. All three now saved under 030_auth/
+- manager was missing settings.write, materials.manage, zones.manage,
+  storage_types.manage, bins.manage - audited the full permission list
+  against manager's actual grants and added the ones matching "elevated
+  warehouse access" (kept users.manage, sessions.terminate_all, and
+  clients.manage admin-only as a deliberate call, not an oversight)
+- Verified by logging in as manager and confirming both settings and the
+  new shelf-life screen are actually usable, not just seeded correctly
 
-Toolbar selection-state bug (14 views across Views/):
-- Symptom: a single auto-selected row on view load looked selected but
-  action buttons (Allocate order, etc.) stayed disabled until Refresh
-- Root cause had two layers, both fixed:
-  1. Bind()/ApplyFilter() rebinding the grid without re-syncing toolbar
-     state afterward - relied entirely on SelectionChanged firing
-     reliably, which it doesn't on the initial auto-select during data
-     binding (OutstandingOrdersView, InboundView, PartiesView,
-     ShipmentsView, TasksView, InventoryView, EventLogView)
-  2. MainForm.ShowView() adds the view to the panel - which fires Load
-     synchronously - before calling ConfigureToolbar(), so the very
-     first data bind runs before the toolbar buttons even exist;
-     nothing re-synced them once ConfigureToolbar() finally created
-     them (all 14 IToolbarAware views except SessionsView, which
-     already had the right pattern and was the template for the fix)
-- Verified fixed against the exact single-row Outstanding Orders case
-  that surfaced it
+Session lifecycle hardening:
+- usp_session_cleanup: TRY/CATCH added and contained internally (this SP
+  is called inline by every login attempt, not just the 10-minute Agent
+  job, so a failure here must never propagate and break login itself);
+  cursor cleaned up defensively on error; failures logged
+- usp_session_touch: session.expired now logged via audit.usp_log_event,
+  matching its sibling usp_login in the same file - previously a session
+  could expire via heartbeat with zero record of it anywhere
+
+Unified event log (audit.v_all_events):
+- New view unions audit.trace_logs with audit.audit_events (deliberately
+  excludes auth.session_events, which stays a specialised, directly-
+  queried session-state-machine log)
+- EventLogView extended: new Source column + filter dropdown (mirrors the
+  existing Level filter), Result column unified to prefer the granular
+  ERRAUTH/SUCAUTH-style code over the coarser table-level status word
+- Fixed a real bug found while wiring this up: the correlation-ID
+  click-to-filter feature only ever worked for trace_logs rows (JSON-
+  parsed out of a nested shape that audit_events rows don't have) - now
+  uses the real correlation_id column from both sources directly
+
+Expiry / write-off foundation, SQL Agent jobs:
+- EX status, SCR terminal state, usp_run_expiry_sweep (self-logs, since
+  it has no C# caller to log on its behalf) and usp_write_off_unit
+  (single-unit foundation; documented Disposal Order workflow deliberately
+  out of scope)
+- Original session-cleanup job script recovered and preserved; new expiry-
+  sweep job added using a portable ORIGINAL_LOGIN() owner and a dynamic
+  SYSTEM-user lookup rather than a hardcoded ID (safe across reset-db,
+  where IDENTITY values aren't stable)
+- Deliberately kept outside Database/Scripts/ - these are one-time,
+  manually-run setup scripts, not part of the automated reset cycle
+  (documented in Database/Jobs/README.md)
+
+Known open item, deliberately deferred: two coexisting conventions for
+how SPs receive session context (explicit @user_id/@session_id parameters
+vs. reading SESSION_CONTEXT() directly) still exist side by side. Found
+that SqlConnectionFactory.CreateForCommand already sets full session
+context on every connection unconditionally, so both patterns are safe
+today - this is a consistency question, not a correctness risk. Next
+session's first task.

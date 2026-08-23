@@ -18,6 +18,7 @@ CREATE OR ALTER PROCEDURE inventory.usp_create_sku
     @preferred_storage_type_code    NVARCHAR(50)     = NULL,
     @preferred_storage_section_code NVARCHAR(50)     = NULL,
     @owner_party_code               NVARCHAR(50)     = NULL,
+    @minimum_remaining_shelf_life_days INT           = NULL,
     @user_id                        INT              = NULL,
     @session_id                     UNIQUEIDENTIFIER = NULL
 )
@@ -87,12 +88,14 @@ BEGIN
              standard_hu_quantity, is_hazardous, is_batch_required, is_full_hu_required,
              is_active, owner_party_id,
              preferred_storage_type_id, preferred_storage_section_id,
+             minimum_remaining_shelf_life_days,
              created_at, created_by)
         VALUES
             (@sku_code, @sku_description, @ean, @uom_code, @weight_per_unit,
              @standard_hu_quantity, @is_hazardous, @is_batch_required, @is_full_hu_required,
              1, @owner_party_id,
              @storage_type_id, @storage_section_id,
+             @minimum_remaining_shelf_life_days,
              SYSUTCDATETIME(), @user_id);
 
         DECLARE @sku_id INT = SCOPE_IDENTITY();

@@ -7,6 +7,7 @@ public interface IEventLogQueryRepository
     IReadOnlyList<EventLogDto> GetEventLog(
         string?   actionFilter  = null,
         string?   levelFilter   = null,
+        string?   sourceFilter  = null,
         string?   usernameFilter = null,
         DateTime? fromDate      = null,
         DateTime? toDate        = null,

@@ -274,6 +274,11 @@ public partial class MainForm : Form
         ShowView(_views.CreateMaterialsView(_session));
     }
 
+    private void customerShelfLifeToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateCustomerShelfLifeView(_session));
+    }
+
     private void skuChangesToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateSkuAuditView(_session));

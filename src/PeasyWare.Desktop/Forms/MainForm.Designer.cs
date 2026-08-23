@@ -38,6 +38,7 @@
             inventoryToolStripMenuItem = new ToolStripMenuItem();
             inventoryActiveToolStripMenuItem = new ToolStripMenuItem();
             materialsToolStripMenuItem = new ToolStripMenuItem();
+            customerShelfLifeToolStripMenuItem = new ToolStripMenuItem();
             movementsToolStripMenuItem = new ToolStripMenuItem();
             countingToolStripMenuItem = new ToolStripMenuItem();
             shipmentsToolStripMenuItem = new ToolStripMenuItem();
@@ -151,7 +152,7 @@
             // 
             // inventoryToolStripMenuItem
             // 
-            inventoryToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { inventoryActiveToolStripMenuItem, materialsToolStripMenuItem });
+            inventoryToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { inventoryActiveToolStripMenuItem, materialsToolStripMenuItem, customerShelfLifeToolStripMenuItem });
             inventoryToolStripMenuItem.Name = "inventoryToolStripMenuItem";
             inventoryToolStripMenuItem.Size = new Size(69, 20);
             inventoryToolStripMenuItem.Text = "In&ventory";
@@ -169,6 +170,13 @@
             materialsToolStripMenuItem.Size = new Size(168, 22);
             materialsToolStripMenuItem.Text = "&Materials";
             materialsToolStripMenuItem.Click += materialsToolStripMenuItem_Click;
+            // 
+            // customerShelfLifeToolStripMenuItem
+            // 
+            customerShelfLifeToolStripMenuItem.Name = "customerShelfLifeToolStripMenuItem";
+            customerShelfLifeToolStripMenuItem.Size = new Size(168, 22);
+            customerShelfLifeToolStripMenuItem.Text = "Customer shelf &life";
+            customerShelfLifeToolStripMenuItem.Click += customerShelfLifeToolStripMenuItem_Click;
             // 
             // movementsToolStripMenuItem
             // 
@@ -583,6 +591,7 @@
         private ToolStripMenuItem zonesToolStripMenuItem;
         private ToolStripMenuItem sectionsToolStripMenuItem;
         private ToolStripMenuItem materialsToolStripMenuItem;
+        private ToolStripMenuItem customerShelfLifeToolStripMenuItem;
         private ToolStripMenuItem partiesToolStripMenuItem;
         private ToolStripMenuItem allPartiesToolStripMenuItem;
         private ToolStripMenuItem suppliersPartiesMenuItem;

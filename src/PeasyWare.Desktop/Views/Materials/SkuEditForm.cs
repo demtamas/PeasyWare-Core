@@ -20,6 +20,7 @@ public sealed class SkuEditForm : Form
     private readonly ComboBox      _cboUom          = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox       _txtWeight       = new();
     private readonly NumericUpDown _nudHuQty        = new() { Minimum = 0, Maximum = 9999 };
+    private readonly NumericUpDown _nudShelfLife    = new() { Minimum = 0, Maximum = 9999 };
     private readonly ComboBox      _cboStorageType  = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox      _cboSection      = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox      _cboOwner        = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -38,6 +39,7 @@ public sealed class SkuEditForm : Form
     public string   UomCode            => _cboUom.SelectedItem?.ToString()          ?? "Each";
     public decimal? WeightPerUnit      => decimal.TryParse(_txtWeight.Text, out var w) ? w : null;
     public int      StandardHuQuantity => (int)_nudHuQty.Value;
+    public int      MinimumRemainingShelfLifeDays => (int)_nudShelfLife.Value;
     public string?  PreferredStorageTypeCode => (_cboStorageType.SelectedItem as StorageLookup)?.Code;
     public string?  PreferredSectionCode     => (_cboSection.SelectedItem as StorageLookup)?.Code;
     public string?  OwnerPartyCode           => (_cboOwner.SelectedItem as StorageLookup)?.Code;
@@ -69,7 +71,7 @@ public sealed class SkuEditForm : Form
         IReadOnlyList<StorageLookup> sections,
         IReadOnlyList<StorageLookup> owners)
     {
-        Size            = new Size(500, 570);
+        Size            = new Size(500, 600);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
         MinimizeBox     = false;
@@ -110,7 +112,8 @@ public sealed class SkuEditForm : Form
             AutoSize    = false
         };
 
-        for (int i = 0; i < 14; i++)
+        table.RowCount = 15;
+        for (int i = 0; i < 15; i++)
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -123,6 +126,7 @@ public sealed class SkuEditForm : Form
         AddRow(table, row++, "Unit of Measure",      _cboUom);
         AddRow(table, row++, "Weight (kg)",          _txtWeight);
         AddRow(table, row++, "HU Quantity",          _nudHuQty);
+        AddRow(table, row++, "Min shelf life (days, 0 = none)", _nudShelfLife);
         AddRow(table, row++, "Preferred Storage",    _cboStorageType);
         AddRow(table, row++, "Preferred Section",    _cboSection);
         AddRow(table, row++, "Owner",                _cboOwner);
@@ -223,6 +227,7 @@ public sealed class SkuEditForm : Form
         _txtDescription.Text = dto.SkuDescription;
         _txtEan.Text         = dto.Ean ?? "";
         _nudHuQty.Value      = dto.StandardHuQuantity;
+        _nudShelfLife.Value  = dto.MinimumRemainingShelfLifeDays ?? 0;
         _txtWeight.Text      = dto.WeightPerUnit?.ToString("F3") ?? "";
         _chkBatchReq.Checked  = dto.IsBatchRequired;
         _chkFullHuReq.Checked = dto.IsFullHuRequired;

@@ -21,6 +21,7 @@ public sealed class SkuChangeLogDto
     public string?   StorageBefore      { get; init; }
     public string?   SectionBefore      { get; init; }
     public string?   OwnerBefore        { get; init; }
+    public int?      ShelfLifeBefore    { get; init; }
 
     // After
     public string?   DescAfter          { get; init; }
@@ -35,4 +36,5 @@ public sealed class SkuChangeLogDto
     public string?   StorageAfter       { get; init; }
     public string?   SectionAfter       { get; init; }
     public string?   OwnerAfter         { get; init; }
+    public int?      ShelfLifeAfter     { get; init; }
 }

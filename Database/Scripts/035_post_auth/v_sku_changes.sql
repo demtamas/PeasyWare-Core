@@ -29,6 +29,7 @@ SELECT
     JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.StorageTypeCode')      AS storage_before,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.SectionCode')          AS section_before,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.OwnerPartyCode')       AS owner_before,
+    TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.Before.MinimumRemainingShelfLifeDays') AS INT) AS shelf_life_before,
 
     -- After state
     JSON_VALUE(t.payload_json, '$.Data.Outcome.After.SkuDescription')        AS desc_after,
@@ -42,7 +43,8 @@ SELECT
     TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.After.IsActive')            AS BIT)           AS active_after,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.After.StorageTypeCode')       AS storage_after,
     JSON_VALUE(t.payload_json, '$.Data.Outcome.After.SectionCode')           AS section_after,
-    JSON_VALUE(t.payload_json, '$.Data.Outcome.After.OwnerPartyCode')        AS owner_after
+    JSON_VALUE(t.payload_json, '$.Data.Outcome.After.OwnerPartyCode')        AS owner_after,
+    TRY_CAST(JSON_VALUE(t.payload_json, '$.Data.Outcome.After.MinimumRemainingShelfLifeDays') AS INT) AS shelf_life_after
 
 FROM audit.trace_logs t
 LEFT JOIN auth.users u ON u.id = t.user_id

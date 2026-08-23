@@ -15,7 +15,8 @@ public interface ISkuCommandRepository
         string?  preferredStorageTypeCode   = null,
         string?  preferredSectionCode       = null,
         string?  ownerPartyCode             = null,
-        string?  storageTypeCode            = null);
+        string?  storageTypeCode            = null,
+        int?     minimumRemainingShelfLifeDays = null);
 
     OperationResult UpdateSku(
         string   skuCode,
@@ -30,5 +31,6 @@ public interface ISkuCommandRepository
         bool     isActive                   = true,
         string?  preferredStorageTypeCode   = null,
         string?  preferredSectionCode       = null,
-        string?  ownerPartyCode             = null);
+        string?  ownerPartyCode             = null,
+        int?     minimumRemainingShelfLifeDays = null);
 }

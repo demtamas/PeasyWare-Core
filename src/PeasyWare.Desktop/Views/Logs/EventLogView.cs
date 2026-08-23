@@ -18,10 +18,12 @@ public sealed class EventLogView : BaseView, IToolbarAware
     private ToolStripButton?      _btnCopyPayload;
     private ToolStripControlHost? _searchHost;
     private ToolStripControlHost? _levelHost;
+    private ToolStripControlHost? _sourceHost;
     private ToolStripControlHost? _fromDateHost;
     private ToolStripControlHost? _toDateHost;
     private TextBox?              _txtSearch;
     private ComboBox?             _cmbLevel;
+    private ComboBox?             _cmbSource;
     private DateTimePicker?       _dtpFrom;
     private DateTimePicker?       _dtpTo;
 
@@ -93,6 +95,12 @@ public sealed class EventLogView : BaseView, IToolbarAware
         _cmbLevel.SelectedIndexChanged += (_, _) => Execute(LoadEvents);
         _levelHost = new ToolStripControlHost(_cmbLevel) { AutoSize = false, Width = 95 };
 
+        _cmbSource = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
+        _cmbSource.Items.AddRange(["All", "TRACE", "AUDIT"]);
+        _cmbSource.SelectedIndex = 0;
+        _cmbSource.SelectedIndexChanged += (_, _) => Execute(LoadEvents);
+        _sourceHost = new ToolStripControlHost(_cmbSource) { AutoSize = false, Width = 95 };
+
         _dtpFrom = new DateTimePicker { Format = DateTimePickerFormat.Short, Value = DateTime.Today.AddDays(-1), Width = 90 };
         _dtpFrom.ValueChanged += (_, _) => Execute(LoadEvents);
         _fromDateHost = new ToolStripControlHost(_dtpFrom) { AutoSize = false, Width = 95 };
@@ -107,6 +115,7 @@ public sealed class EventLogView : BaseView, IToolbarAware
         toolStrip.Items.Add(new ToolStripSeparator());
         toolStrip.Items.Add(_searchHost);
         toolStrip.Items.Add(_levelHost);
+        toolStrip.Items.Add(_sourceHost);
         toolStrip.Items.Add(new ToolStripLabel("From:"));
         toolStrip.Items.Add(_fromDateHost);
         toolStrip.Items.Add(new ToolStripLabel("To:"));
@@ -213,6 +222,7 @@ public sealed class EventLogView : BaseView, IToolbarAware
 
         dgv.Columns.Clear();
         dgv.Columns.Add(Col(nameof(EventLogDto.OccurredAt),   "Time",          10));
+        dgv.Columns.Add(Col(nameof(EventLogDto.Source),       "Src",            3));
         dgv.Columns.Add(Col(nameof(EventLogDto.Level),        "Level",          4));
         dgv.Columns.Add(Col(nameof(EventLogDto.Action),       "Action",        18));
         dgv.Columns.Add(Col(nameof(EventLogDto.Username),     "User",           6));
@@ -273,10 +283,15 @@ public sealed class EventLogView : BaseView, IToolbarAware
             ? _cmbLevel.SelectedItem?.ToString()
             : null;
 
+        var source = _cmbSource?.SelectedIndex is > 0
+            ? _cmbSource.SelectedItem?.ToString()
+            : null;
+
         _events = _queryRepo.GetEventLog(
-            levelFilter: level,
-            fromDate:    _dtpFrom?.Value.Date,
-            toDate:      _dtpTo?.Value.Date
+            levelFilter:  level,
+            sourceFilter: source,
+            fromDate:     _dtpFrom?.Value.Date,
+            toDate:       _dtpTo?.Value.Date
         ).ToList();
 
         _correlationFilter = null;
@@ -285,12 +300,15 @@ public sealed class EventLogView : BaseView, IToolbarAware
 
     private void ApplyFilter()
     {
-        // Correlation filter takes priority when set
+        // Correlation filter takes priority when set - compares the real
+        // CorrelationId column directly now, not a payload-text substring
+        // search (which never matched AUDIT rows, whose payload doesn't
+        // embed the correlation id as text at all).
         if (_correlationFilter is not null)
         {
             var corrId = _correlationFilter;
             var corrData = _events.Where(e =>
-                e.PayloadJson?.Contains(corrId, StringComparison.OrdinalIgnoreCase) == true
+                string.Equals(e.CorrelationId, corrId, StringComparison.OrdinalIgnoreCase)
             ).ToList();
             dgvEvents.DataSource = null;
             dgvEvents.DataSource = corrData;
@@ -303,11 +321,13 @@ public sealed class EventLogView : BaseView, IToolbarAware
             ? _events
             : _events.Where(e =>
                 e.Action.Contains(q, StringComparison.OrdinalIgnoreCase)                ||
-                (e.Username     ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)  ||
-                (e.ResultCode   ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)  ||
-                (e.SourceApp    ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)  ||
-                (e.SourceClient ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)  ||
-                (e.PayloadJson  ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
+                (e.Username      ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.ResultCode    ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.SourceApp     ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.SourceClient  ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.Source        ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.CorrelationId ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (e.PayloadJson   ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
             ).ToList();
 
         dgvEvents.DataSource = null;
@@ -347,38 +367,18 @@ public sealed class EventLogView : BaseView, IToolbarAware
 
         if (_btnCopyPayload is not null) _btnCopyPayload.Enabled = true;
 
-        // Show correlation ID link if present
+        // Correlation ID now comes straight from the DTO (a real column on
+        // both source tables), not parsed out of payload JSON - the old
+        // approach only worked for trace_logs' nested {Session:{...}} shape
+        // and silently failed for every AUDIT-sourced row, which never had
+        // a "Session" wrapper to find in the first place.
         if (_lblCorrelation is not null)
         {
-            if (evt.PayloadJson is not null)
+            if (!string.IsNullOrEmpty(evt.CorrelationId))
             {
-                try
-                {
-                    var doc = JsonDocument.Parse(evt.PayloadJson);
-                    if (doc.RootElement.TryGetProperty("Session", out var session) &&
-                        session.TryGetProperty("CorrelationId", out var corrId))
-                    {
-                        var id = corrId.GetString();
-                        if (!string.IsNullOrEmpty(id))
-                        {
-                            _lblCorrelation.Text    = $"Correlation: {id[..8]}…  (click to filter)";
-                            _lblCorrelation.Tag     = id;
-                            _lblCorrelation.Visible = true;
-                        }
-                        else
-                        {
-                            _lblCorrelation.Visible = false;
-                        }
-                    }
-                    else
-                    {
-                        _lblCorrelation.Visible = false;
-                    }
-                }
-                catch
-                {
-                    _lblCorrelation.Visible = false;
-                }
+                _lblCorrelation.Text    = $"Correlation: {evt.CorrelationId[..8]}…  (click to filter)";
+                _lblCorrelation.Tag     = evt.CorrelationId;
+                _lblCorrelation.Visible = true;
             }
             else
             {

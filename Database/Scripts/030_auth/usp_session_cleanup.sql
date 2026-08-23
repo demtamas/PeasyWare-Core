@@ -9,6 +9,15 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @SystemUserId INT =
+    (
+        SELECT TOP (1) id
+        FROM auth.users
+        WHERE username = 'system'
+    );
+
+    BEGIN TRY
+
     DECLARE @default_timeout_minutes INT =
     (
         SELECT TRY_CONVERT(INT, setting_value)
@@ -20,13 +29,6 @@ BEGIN
         SET @default_timeout_minutes = 30;
 
     DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
-
-    DECLARE @SystemUserId INT =
-    (
-        SELECT TOP (1) id
-        FROM auth.users
-        WHERE username = 'system'
-    );
 
     ------------------------------------------------------------------
     -- First: materialise expired rows into a temp table (bulletproof)
@@ -107,6 +109,38 @@ BEGIN
 
     CLOSE expired_cursor;
     DEALLOCATE expired_cursor;
+
+    END TRY
+    BEGIN CATCH
+        IF CURSOR_STATUS('local', 'expired_cursor') >= 0
+        BEGIN
+            CLOSE expired_cursor;
+            DEALLOCATE expired_cursor;
+        END
+
+        -- Contained here deliberately: this SP is called inline by every
+        -- login attempt (usp_login), not just the 10-minute Agent job. A
+        -- failure here must never propagate and break login itself - log
+        -- it and return normally so every caller is automatically safe,
+        -- rather than relying on each caller to guard against it.
+        DECLARE @cleanup_err NVARCHAR(4000) = ERROR_MESSAGE();
+        DECLARE @cleanup_payload NVARCHAR(MAX) = (
+            SELECT
+                FORMAT(SYSUTCDATETIME(), 'yyyy-MM-ddTHH:mm:ss.fffZ') AS [Timestamp],
+                N'ERROR' AS [Level],
+                N'Auth.SessionCleanup' AS [Action],
+                JSON_QUERY((
+                    SELECT @cleanup_err AS ErrorMessage
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                )) AS [Data]
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+
+        INSERT INTO audit.trace_logs
+            (occurred_at, correlation_id, user_id, session_id, level, action, payload_json)
+        VALUES
+            (SYSUTCDATETIME(), NEWID(), @SystemUserId, NULL, N'ERROR', N'Auth.SessionCleanup', @cleanup_payload);
+    END CATCH
 
 END;
 GO
