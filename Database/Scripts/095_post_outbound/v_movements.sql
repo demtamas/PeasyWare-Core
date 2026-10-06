@@ -49,6 +49,11 @@ SELECT
             FROM warehouse.warehouse_tasks t
             WHERE t.task_id = m.reference_id
         )
+        WHEN 'COUNT'    THEN (
+            SELECT 'CNT-' + RIGHT('000000' + CAST(cl.count_id AS VARCHAR(6)), 6)
+            FROM warehouse.count_lines cl
+            WHERE cl.count_line_id = m.reference_id
+        )
         ELSE NULL
     END                                     AS reference_ref,
     -- Reversal flag

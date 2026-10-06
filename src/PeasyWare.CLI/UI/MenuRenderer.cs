@@ -15,7 +15,8 @@ public static class MenuRenderer
         Console.WriteLine("1. Inbound");
         Console.WriteLine("2. Inventory");
         Console.WriteLine("3. Orders");
-        Console.WriteLine("4. Admin");
+        Console.WriteLine("4. Counts");
+        Console.WriteLine("5. Admin");
         Console.WriteLine("7. Logout");
         Console.WriteLine();
 
@@ -59,7 +60,6 @@ public static class MenuRenderer
         Console.WriteLine("2. Query bin");
         Console.WriteLine("3. Query pallet / HU");
         Console.WriteLine("4. Move stock");
-        Console.WriteLine("5. Count stock");
         Console.WriteLine("0. Back");
         Console.WriteLine();
 
@@ -85,11 +85,9 @@ public static class MenuRenderer
     public static string ShowCountMenu()
     {
         Console.WriteLine();
-        Console.WriteLine("Stock Count");
+        Console.WriteLine("Counts");
         Console.WriteLine("──────────────────────────");
-        Console.WriteLine("1. Cycle count");
-        Console.WriteLine("2. Ad-hoc count");
-        Console.WriteLine("3. View last differences");
+        Console.WriteLine("1. Empty bin check");
         Console.WriteLine("0. Back");
         Console.WriteLine();
 

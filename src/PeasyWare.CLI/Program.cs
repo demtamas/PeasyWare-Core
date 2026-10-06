@@ -100,7 +100,7 @@ while (true)
 
             case LoginOutcome.AlreadyLoggedIn:
                 Console.WriteLine(result.Message);
-                Console.Write("Terminate the other session and continue? (y/N): ");
+                Console.Write("Terminate all other active sessions and continue? (y/N): ");
                 var answer = Console.ReadLine();
                 if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
                     return;
@@ -214,6 +214,7 @@ try
             case "1": RunInbound(runtime, session);  break;
             case "2": RunInventory(runtime, session); break;
             case "3": RunOrders(runtime, session);   break;
+            case "4": RunCounts(runtime, session);   break;
 
             case "7":
                 {
@@ -350,6 +351,24 @@ static void RunOrders(AppRuntime runtime, SessionContext session)
             case "5": new ShipFlow(runtime, session).Run(); break;
             case "0": return;
             default: Console.WriteLine("Coming soon."); Console.ReadKey(true); break;
+        }
+    }
+}
+
+// --------------------------------------------------
+// COUNTS
+// --------------------------------------------------
+
+static void RunCounts(AppRuntime runtime, SessionContext session)
+{
+    while (true)
+    {
+        var input = MenuRenderer.ShowCountMenu();
+        switch (input)
+        {
+            case "1": new CountEmptyBinFlow(runtime, session).Run(); break;
+            case "0": return;
+            default: Console.WriteLine("Invalid option."); break;
         }
     }
 }

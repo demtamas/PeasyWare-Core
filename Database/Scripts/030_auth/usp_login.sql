@@ -188,14 +188,37 @@ BEGIN
         END;
 
         --------------------------------------------------------
-        -- Existing session
+        -- Existing session(s) - respects auth.clients.max_concurrent_sessions
+        -- (NULL = genuinely unlimited, per that column's own intent).
+        -- Previously a flat "any existing active session blocks" check
+        -- that never actually read this column at all - setting it had
+        -- no effect. An unregistered client_app falls back to a limit of
+        -- 1, matching the old behaviour exactly rather than silently
+        -- becoming unlimited.
         --------------------------------------------------------
-        IF EXISTS (
-            SELECT 1 FROM auth.user_sessions
+        DECLARE @client_registered BIT = CASE WHEN EXISTS (
+            SELECT 1 FROM auth.clients WHERE client_name = @client_app
+        ) THEN 1 ELSE 0 END;
+
+        DECLARE @client_max_sessions INT = (
+            SELECT max_concurrent_sessions
+            FROM auth.clients
+            WHERE client_name = @client_app
+        );
+
+        DECLARE @effective_session_limit INT =
+            CASE WHEN @client_registered = 1 THEN @client_max_sessions ELSE 1 END;
+
+        DECLARE @active_session_count INT = (
+            SELECT COUNT(*)
+            FROM auth.user_sessions
             WHERE user_id = @user_id
               AND client_app = @client_app
               AND is_active = 1
-        )
+        );
+
+        IF @effective_session_limit IS NOT NULL
+           AND @active_session_count >= @effective_session_limit
         BEGIN
             IF @force_login = 0
             BEGIN

@@ -18,12 +18,18 @@ namespace PeasyWare.CLI.Flows;
 ///   - General relocation: supervisor decision to move stock
 ///
 /// Flow:
-///   1. Scan SSCC → validate unit, lock to MOV state, create BIN_MOVE task
+///   1. Scan SSCC → validate the unit is free to move (state, status, no
+///      other open task) and the destination bin can take it, then create
+///      the MOVE task and reserve the destination bin
 ///   2. Operator enters destination bin, or presses S to request a suggestion
-///   3. Scan destination bin to confirm → write placement + movement log
+///   3. Scan destination bin to confirm → rules re-checked under lock,
+///      then write placement + movement log
 ///
-/// The unit is in MOV state (locked from allocation) from step 1 until
-/// the move is confirmed or the task expires / is cancelled.
+/// A move task does not change the unit's stock state. While it is open
+/// (one open task per unit) the unit cannot be picked, put away or moved
+/// again, and the destination bin is held by a reservation. Both lapse
+/// after the task TTL; starting a new move for an expired task replaces it.
+/// Cancelling at the confirm step releases both immediately.
 /// </summary>
 public sealed class BinToBinMoveFlow
 {
@@ -110,7 +116,7 @@ public sealed class BinToBinMoveFlow
             }
 
             // ------------------------------------------------
-            // Create task — locks unit to MOV state
+            // Create task — validates move rules, reserves the destination bin
             // ------------------------------------------------
             var createResult = commandRepo.CreateBinMoveTask(sscc, destinationBinCode);
 
@@ -152,9 +158,14 @@ public sealed class BinToBinMoveFlow
 
                 if (confirmRaw.Equals("C", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("Movement cancelled. Note: unit remains in MOV state until task expires.");
-                    Console.WriteLine("Contact a supervisor to release the unit if needed.");
-                    Thread.Sleep(2000);
+                    var cancelResult = commandRepo.CancelTask(
+                        createResult.TaskId, "Cancelled by operator at confirmation");
+
+                    Console.WriteLine(cancelResult.Success
+                        ? "Movement cancelled. The pallet stays where it is."
+                        : cancelResult.FriendlyMessage);
+
+                    Thread.Sleep(1500);
                     break;
                 }
 
@@ -171,11 +182,7 @@ public sealed class BinToBinMoveFlow
                     createResult.TaskId,
                     resolvedBin);
 
-                // ERRTASK08: wrong bin scanned — substitute the expected bin
-                // into the message rather than showing the raw {0} placeholder
-                var message = confirmResult.ResultCode == "ERRTASK08"
-                    ? $"Wrong location. Please move the stock to {createResult.DestinationBinCode}."
-                    : confirmResult.FriendlyMessage;
+                var message = confirmResult.FriendlyMessage;
 
                 Console.WriteLine(message);
 

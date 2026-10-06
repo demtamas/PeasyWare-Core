@@ -122,6 +122,12 @@ CREATE TABLE locations.bin_reservations
     reserved_at      DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     expires_at       DATETIME2(3) NOT NULL,
 
+    -- Task this hold was created for. NULL for PUTAWAY reservations, which
+    -- are still released by bin + type. Set for MOVE reservations so they
+    -- can be released exactly, without touching anyone else's hold on the
+    -- same bin. Plain column, no FK: warehouse_tasks is created later.
+    task_id          INT NULL,
+
     CONSTRAINT fk_bin_reservations_bin
         FOREIGN KEY (bin_id)
         REFERENCES locations.bins(bin_id)

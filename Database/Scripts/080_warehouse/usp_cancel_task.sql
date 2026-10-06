@@ -77,6 +77,14 @@ BEGIN
             WHERE bin_id = @dest_bin_id AND reservation_type = 'PUTAWAY' AND expires_at >= @now;
         END
 
+        -- A cancelled MOVE task's reservation is tied to it by task_id, so it
+        -- is released exactly - without touching anyone else's hold on the bin.
+        IF @task_type = 'MOVE'
+        BEGIN
+            DELETE FROM locations.bin_reservations
+            WHERE task_id = @task_id;
+        END
+
         COMMIT;
 
         SELECT CAST(1 AS BIT) AS success, N'SUCTASK03' AS result_code;

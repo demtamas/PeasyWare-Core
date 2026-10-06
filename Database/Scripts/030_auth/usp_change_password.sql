@@ -221,7 +221,7 @@ BEGIN
          password_last_changed, is_active, created_by)
     VALUES
         ('system', 'System Account', NULL, @hash, @salt,
-         SYSUTCDATETIME(), 1, NULL);
+         SYSUTCDATETIME(), 0, NULL);
 
     PRINT 'System user created.';
 END

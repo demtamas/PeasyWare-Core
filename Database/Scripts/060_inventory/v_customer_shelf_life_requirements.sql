@@ -9,6 +9,16 @@ GO
    ------------------------------------------------------------
    Flattened, browsable list of customer+SKU shelf-life overrides,
    for the management screen.
+
+   Lives here rather than 035_post_auth/ (where it originally sat)
+   because it directly joins core.parties and inventory.skus/
+   inventory.customer_shelf_life_requirements - none of which exist
+   yet when reset-db reaches 035_post_auth in its strict alphabetical
+   folder order. 060_inventory runs after 040_core and after this
+   same folder's own table-creation script, so both dependencies are
+   satisfied. Matches the existing v_skus.sql convention: a view
+   sitting directly alongside the table it depends on, not off in a
+   separate "post" folder.
    ============================================================ */
 CREATE OR ALTER VIEW inventory.v_customer_shelf_life_requirements
 AS

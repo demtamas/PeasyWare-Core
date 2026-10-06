@@ -149,6 +149,22 @@ public sealed class RepositoryFactory
     }
 
     // --------------------------------------------------
+    // STOCK COUNTING
+    // --------------------------------------------------
+
+    public ICountCommandRepository CreateCountCommand(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlCountCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
+    public ICountQueryRepository CreateCountQuery(SessionContext session)
+    {
+        BindSession(session);
+        return new SqlCountQueryRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
+
+    // --------------------------------------------------
     // SKU (API)
     // --------------------------------------------------
 

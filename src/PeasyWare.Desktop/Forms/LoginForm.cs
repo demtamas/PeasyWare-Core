@@ -166,7 +166,7 @@ public partial class LoginForm : Form
     {
         var confirm = MessageBox.Show(
             "You are already logged in from this application.\n\n" +
-            "Do you want to terminate the other session and continue?",
+            "Do you want to terminate all other active sessions and continue?",
             "Active session detected",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,

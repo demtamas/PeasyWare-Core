@@ -279,6 +279,11 @@ public partial class MainForm : Form
         ShowView(_views.CreateCustomerShelfLifeView(_session));
     }
 
+    private void countingToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ShowView(_views.CreateCountsView(_session));
+    }
+
     private void skuChangesToolStripMenuItem_Click(object sender, EventArgs e)
     {
         ShowView(_views.CreateSkuAuditView(_session));

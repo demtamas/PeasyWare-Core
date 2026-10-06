@@ -155,8 +155,9 @@ VALUES
 -- QC Hold
 ('PTW','QC',1,0,0,1,1),
 
--- Blocked
-('PTW','BL',0,0,0,0,1),
+-- Blocked - can still be moved (e.g. out to a quarantine area), but never
+-- allocated or shipped without an explicit override
+('PTW','BL',1,0,0,0,1),
 
 -- Expired - can still be moved (e.g. to a scrap area), never
 -- allocated or shipped without an explicit override

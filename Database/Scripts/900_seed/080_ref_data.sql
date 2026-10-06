@@ -67,6 +67,7 @@ DECLARE @SystemUserId INT = (SELECT id FROM auth.users WHERE username = 'system'
     SELECT 'putaway.execute',        'Confirm putaway tasks'                                UNION ALL
     SELECT 'pick.execute',           'Create/confirm picks'                                 UNION ALL
     SELECT 'pick.reallocate',        'Cancel allocation / reallocate line'                  UNION ALL
+    SELECT 'counts.review',          'Mark a stock count reviewed once its findings are dealt with' UNION ALL
     SELECT 'ship.execute',           'Confirm shipment'
 )
 INSERT INTO auth.permissions (permission_key, description, created_by)
@@ -103,6 +104,7 @@ GO
     SELECT 'manager',  'zones.manage'         UNION ALL
     SELECT 'manager',  'storage_types.manage' UNION ALL
     SELECT 'manager',  'bins.manage'          UNION ALL
+    SELECT 'manager',  'counts.review'        UNION ALL
 
     SELECT 'admin', permission_key FROM auth.permissions
 )

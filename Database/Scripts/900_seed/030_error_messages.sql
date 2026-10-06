@@ -172,7 +172,7 @@ FROM (VALUES
 
     (N'ERRMOVE02', N'MOVE', N'ERROR',
         N'This unit is not in a moveable state.',
-        N'usp_bin_to_bin_move_create: stock_state_code not PUT or RCD'),
+        N'warehouse.fn_unit_move_block_code: stock state has no transition to MOV in stock_state_transitions'),
 
     (N'ERRMOVE03', N'MOVE', N'ERROR',
         N'Unit has no current location. Cannot create a move task.',
@@ -192,7 +192,31 @@ FROM (VALUES
 
     (N'ERRMOVE07', N'MOVE', N'ERROR',
         N'Destination bin is inactive or blocked. Choose a different bin.',
-        N'usp_bin_to_bin_move_create: destination bin is_active = 0'),
+        N'warehouse.fn_bin_receive_block_code: destination bin is_active = 0 or is_locked = 1'),
+
+    (N'ERRMOVE08', N'MOVE', N'ERROR',
+        N'This unit''s stock status does not allow it to be moved.',
+        N'warehouse.fn_unit_move_block_code: inventory.stock_operation_rules can_move = 0 for state + status'),
+
+    (N'ERRMOVE09', N'MOVE', N'ERROR',
+        N'Destination bin is full. Choose a different bin.',
+        N'warehouse.fn_bin_receive_block_code: placements + unexpired reservations >= capacity'),
+
+    (N'ERRMOVE10', N'MOVE', N'ERROR',
+        N'This unit already has an open task (putaway, pick or move). Complete or cancel it first.',
+        N'warehouse.fn_unit_move_block_code: open OPN/CLM task exists for unit; or UX_tasks_open_unit hit on a concurrent create'),
+
+    (N'ERRMOVE11', N'MOVE', N'ERROR',
+        N'The unit is already in that bin.',
+        N'usp_bin_to_bin_move_create/confirm: destination bin = source bin'),
+
+    (N'ERRMOVE12', N'MOVE', N'ERROR',
+        N'The unit is no longer in the location this move was created for. Cancel and start the move again.',
+        N'usp_bin_to_bin_move_confirm: current placement bin <> task source_bin_id'),
+
+    (N'ERRMOVE99', N'MOVE', N'ERROR',
+        N'Unexpected error while processing the move.',
+        N'usp_bin_to_bin_move_create/confirm: unhandled exception'),
 
     (N'SUCMOVE01', N'MOVE', N'SUCCESS', N'Move task created.',       N'usp_bin_to_bin_move_create: success'),
     (N'SUCMOVE02', N'MOVE', N'SUCCESS', N'Unit moved successfully.', N'usp_bin_to_bin_move_confirm: success'),
@@ -266,7 +290,84 @@ FROM (VALUES
 
     (N'SUCCSL02', N'INV', N'INFO',
         N'Shelf-life requirement removed successfully.',
-        N'usp_delete_customer_shelf_life_requirement: delete complete')
+        N'usp_delete_customer_shelf_life_requirement: delete complete'),
+
+    -- ── Stock counting ─────────────────────────────────────────────────────
+    (N'ERRCNT01', N'COUNT', N'ERROR',
+        N'Storage type not found or inactive.',
+        N'usp_count_start_empty_bin: storage_type_code not found or is_active = 0'),
+
+    (N'ERRCNT02', N'COUNT', N'ERROR',
+        N'There are no empty bins in this storage type to count.',
+        N'usp_count_start_empty_bin: v_empty_bins returned no rows for the storage type'),
+
+    (N'ERRCNT03', N'COUNT', N'ERROR',
+        N'This count does not exist or is no longer open.',
+        N'usp_count_*: count_id not found or status_code <> OPEN'),
+
+    (N'ERRCNT04', N'COUNT', N'ERROR',
+        N'That bin is not part of this count.',
+        N'usp_count_confirm_empty/report_stock: no count_line for this bin in the count'),
+
+    (N'ERRCNT05', N'COUNT', N'ERROR',
+        N'This bin has already been counted.',
+        N'usp_count_confirm_empty/report_stock: line is CONFIRMED_EMPTY / OCCUPIED_SINCE (or not PENDING)'),
+
+    (N'ERRCNT06', N'COUNT', N'ERROR',
+        N'The system records this pallet as shipped. It may have been missed off a delivery.',
+        N'usp_count_report_stock: unit stock_state_code = SHP - recorded as NOT_CORRECTED, never reinstated by a count'),
+
+    (N'ERRCNT07', N'COUNT', N'ERROR',
+        N'The system records this pallet''s receipt as reversed.',
+        N'usp_count_report_stock: unit stock_state_code = REV - recorded as NOT_CORRECTED, never reinstated by a count'),
+
+    (N'ERRCNT08', N'COUNT', N'ERROR',
+        N'This count is not waiting for review.',
+        N'usp_count_review: count not found, or status_code <> REVIEW (already reviewed, or never needed review)'),
+
+    (N'ERRCNT09', N'COUNT', N'ERROR',
+        N'Enter a note saying what was done about the findings.',
+        N'usp_count_review: @note empty - a review without a record of what was done is not accepted'),
+
+    (N'SUCCNT06', N'COUNT', N'SUCCESS',
+        N'Count marked as reviewed.',
+        N'usp_count_review: status REVIEW -> COMPLETE / CLOSED, reviewer and note recorded'),
+
+    (N'ERRCNT99', N'COUNT', N'ERROR',
+        N'Unexpected error while processing the count.',
+        N'usp_count_*: unhandled exception'),
+
+    (N'SUCCNT01', N'COUNT', N'SUCCESS',
+        N'Count started.',
+        N'usp_count_start_empty_bin: success (new or resumed)'),
+
+    (N'SUCCNT02', N'COUNT', N'SUCCESS',
+        N'Bin confirmed empty.',
+        N'usp_count_confirm_empty: line set to CONFIRMED_EMPTY'),
+
+    (N'SUCCNT03', N'COUNT', N'SUCCESS',
+        N'Stock recorded in this bin. The system record has been corrected.',
+        N'usp_count_report_stock: RECORD_CORRECTED - placement moved via usp_apply_relocation'),
+
+    (N'SUCCNT04', N'COUNT', N'SUCCESS',
+        N'Count closed.',
+        N'usp_count_close: success (COMPLETE or CLOSED)'),
+
+    (N'SUCCNT05', N'COUNT', N'SUCCESS',
+        N'The system already shows this pallet in this bin.',
+        N'usp_count_report_stock: placement already in this bin - nothing recorded'),
+
+    (N'WARNCNT01', N'COUNT', N'WARN',
+        N'The system now shows stock in this bin. Please check it.',
+        N'usp_count_confirm_empty: placements exist since the snapshot - line set to OCCUPIED_SINCE'),
+
+    (N'WARNCNT02', N'COUNT', N'WARN',
+        N'This pallet is not known to the system. It has been recorded for supervisor review.',
+        N'usp_count_report_stock: UNKNOWN_UNIT - no unit created'),
+
+    (N'WARNCNT03', N'COUNT', N'WARN',
+        N'Pallet recorded for supervisor review - it cannot be moved automatically.',
+        N'usp_count_report_stock: NOT_CORRECTED - see count_findings.reason_code for the rule that applied')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (

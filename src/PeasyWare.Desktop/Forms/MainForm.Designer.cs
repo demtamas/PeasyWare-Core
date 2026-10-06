@@ -190,6 +190,7 @@
             countingToolStripMenuItem.Name = "countingToolStripMenuItem";
             countingToolStripMenuItem.Size = new Size(69, 20);
             countingToolStripMenuItem.Text = "&Counting";
+            countingToolStripMenuItem.Click += countingToolStripMenuItem_Click;
             // 
             // shipmentsToolStripMenuItem
             // 

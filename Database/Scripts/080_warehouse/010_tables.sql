@@ -104,6 +104,7 @@ CREATE TABLE warehouse.task_state_transitions
 INSERT INTO warehouse.task_state_transitions
 VALUES
 ('OPN','CLM',0,'Operator claims task'),
+('OPN','EXP',0,'Task expired due to TTL before being claimed'),
 ('OPN','CNL',1,'Task cancelled before claim'),
 
 ('CLM','CNF',0,'Task completed'),

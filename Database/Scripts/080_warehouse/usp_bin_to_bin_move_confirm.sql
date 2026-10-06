@@ -4,6 +4,30 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
+/* ============================================================
+   warehouse.usp_bin_to_bin_move_confirm
+   ------------------------------------------------------------
+   Confirms a MOVE task by scanning the destination bin.
+
+   Everything that was true at create time is re-checked here,
+   under lock, because the task can sit open for minutes:
+     - destination bin: active, unlocked, and under capacity
+       (this task's own reservation is released first so it does
+        not count against itself - rolled back with everything
+        else on any failure)
+     - unit: still free to be moved (e.g. not picked since), and
+       still in the bin the task was created from (a count
+       correction or another flow may have relocated it - writing
+       the stale source bin into the ledger would corrupt history)
+
+   The relocation itself (placement, RCD->PTW out of staging, ledger
+   row) is warehouse.usp_apply_relocation, shared with the count
+   correction.
+
+   Expiry is deliberately NOT enforced here: an operator who has
+   already carried the pallet across the warehouse should not be
+   rejected on a clock. The capacity re-check is the real guard.
+   ============================================================ */
 CREATE OR ALTER PROCEDURE warehouse.usp_bin_to_bin_move_confirm
 (
     @task_id          INT,
@@ -23,20 +47,24 @@ BEGIN
 
         DECLARE
             @inventory_unit_id  INT,
+            @locked_unit_id     INT,
             @source_bin_id      INT,
             @destination_bin_id INT,
             @dest_bin_code      NVARCHAR(100),
-            @task_state         VARCHAR(3),
-            @sku_id             INT,
+            @placement_bin_id   INT,
+            @block_code         NVARCHAR(20),
+            @movement_id        INT,
             @now                DATETIME2(3) = SYSUTCDATETIME();
 
+        ------------------------------------------------------------
+        -- 1. Load + lock the task
+        ------------------------------------------------------------
         SELECT
             @inventory_unit_id  = inventory_unit_id,
             @source_bin_id      = source_bin_id,
-            @destination_bin_id = destination_bin_id,
-            @task_state         = task_state_code
+            @destination_bin_id = destination_bin_id
         FROM warehouse.warehouse_tasks WITH (UPDLOCK, HOLDLOCK)
-        WHERE task_id       = @task_id
+        WHERE task_id        = @task_id
           AND task_type_code = 'MOVE'
           AND task_state_code IN ('OPN', 'CLM');
 
@@ -46,95 +74,102 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
-        -- Validate scanned bin against destination
-        SELECT @dest_bin_code = bin_code
-        FROM locations.bins
-        WHERE bin_id = @destination_bin_id;
-
-        IF @dest_bin_code IS NOT NULL
-           AND LTRIM(RTRIM(@scanned_bin_code)) <> LTRIM(RTRIM(@dest_bin_code))
+        ------------------------------------------------------------
+        -- 2. Destination: must match the scan (or, for a task created
+        --    with no destination, the scanned bin becomes it)
+        ------------------------------------------------------------
+        IF @destination_bin_id IS NOT NULL
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRMOVE06' AS result_code;
-            ROLLBACK; RETURN;
-        END
-
-        -- If no destination was set on the task, resolve the scanned bin
-        IF @destination_bin_id IS NULL
-        BEGIN
-            SELECT @destination_bin_id = bin_id
+            SELECT @dest_bin_code = bin_code
             FROM locations.bins
-            WHERE bin_code = @scanned_bin_code COLLATE Latin1_General_CS_AS AND is_active = 1;
+            WHERE bin_id = @destination_bin_id;
+
+            IF LTRIM(RTRIM(@scanned_bin_code)) <> LTRIM(RTRIM(@dest_bin_code))
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRMOVE06' AS result_code;
+                ROLLBACK; RETURN;
+            END
+        END
+        ELSE
+        BEGIN
+            SELECT
+                @destination_bin_id = bin_id,
+                @dest_bin_code      = bin_code
+            FROM locations.bins
+            WHERE bin_code = @scanned_bin_code COLLATE Latin1_General_CS_AS;
 
             IF @destination_bin_id IS NULL
             BEGIN
                 SELECT CAST(0 AS BIT) AS success, N'ERRMOVE04' AS result_code;
                 ROLLBACK; RETURN;
             END
-
-            SET @dest_bin_code = @scanned_bin_code COLLATE Latin1_General_CS_AS;
         END
 
-        SELECT @sku_id = sku_id FROM inventory.inventory_units WHERE inventory_unit_id = @inventory_unit_id;
-
-        -- Update placement
-        UPDATE inventory.inventory_placements
-        SET bin_id = @destination_bin_id
-        WHERE inventory_unit_id = @inventory_unit_id;
-
-        -- If the unit is RCD and is leaving a staging bin, transition to PTW.
-        -- A bin-to-bin move out of staging = manual putaway, regardless of destination.
-        IF EXISTS (
-            SELECT 1
-            FROM inventory.inventory_units iu
-            JOIN locations.bins b ON b.bin_id = @source_bin_id
-            JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
-            WHERE iu.inventory_unit_id = @inventory_unit_id
-              AND iu.stock_state_code  = 'RCD'
-              AND st.storage_type_code = 'STAGE'
-        )
+        IF @destination_bin_id = @source_bin_id
         BEGIN
-            UPDATE inventory.inventory_units
-            SET stock_state_code = 'PTW',
-                updated_at       = @now,
-                updated_by       = @user_id
-            WHERE inventory_unit_id = @inventory_unit_id;
+            SELECT CAST(0 AS BIT) AS success, N'ERRMOVE11' AS result_code;
+            ROLLBACK; RETURN;
         END
 
-        -- Record movement — capture actual from/to state (may differ if RCD->PTW transition occurred)
-        DECLARE @movement_id  INT;
-        DECLARE @from_state   VARCHAR(3);
-        DECLARE @to_state     VARCHAR(3);
+        ------------------------------------------------------------
+        -- 3. Lock the destination bin, release this task's own hold
+        --    on it, then check it can take the unit
+        ------------------------------------------------------------
+        SELECT @destination_bin_id = bin_id
+        FROM locations.bins WITH (UPDLOCK, HOLDLOCK)
+        WHERE bin_id = @destination_bin_id;
 
-        SELECT @to_state = stock_state_code FROM inventory.inventory_units WHERE inventory_unit_id = @inventory_unit_id;
+        DELETE FROM locations.bin_reservations
+        WHERE task_id = @task_id;
 
-        SELECT @from_state =
-            CASE
-                WHEN @to_state = 'PTW' AND EXISTS (
-                    SELECT 1 FROM locations.bins b
-                    JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
-                    WHERE b.bin_id = @source_bin_id AND st.storage_type_code = 'STAGE'
-                ) THEN 'RCD'
-                ELSE @to_state
-            END;
+        SET @block_code = warehouse.fn_bin_receive_block_code(@destination_bin_id);
 
-        INSERT INTO inventory.inventory_movements
-            (inventory_unit_id, sku_id, moved_qty,
-             from_bin_id, to_bin_id,
-             from_state_code, to_state_code,
-             from_status_code, to_status_code,
-             movement_type, reference_type, reference_id,
-             moved_at, moved_by_user_id, session_id)
-        SELECT
-            @inventory_unit_id, @sku_id, quantity,
-            @source_bin_id, @destination_bin_id,
-            @from_state, @to_state,
-            stock_status_code, stock_status_code,
-            'MOVE', 'TASK', @task_id,
-            @now, @user_id, @session_id
-        FROM inventory.inventory_units
+        IF @block_code IS NOT NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, @block_code AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        ------------------------------------------------------------
+        -- 4. Lock the unit; still where the task says, still movable?
+        ------------------------------------------------------------
+        SELECT @locked_unit_id = inventory_unit_id
+        FROM inventory.inventory_units WITH (UPDLOCK, HOLDLOCK)
         WHERE inventory_unit_id = @inventory_unit_id;
 
-        -- Complete task
+        SELECT @placement_bin_id = bin_id
+        FROM inventory.inventory_placements
+        WHERE inventory_unit_id = @inventory_unit_id;
+
+        IF @source_bin_id IS NOT NULL
+           AND @placement_bin_id IS NOT NULL
+           AND @placement_bin_id <> @source_bin_id
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRMOVE12' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        SET @block_code = warehouse.fn_unit_move_block_code(@inventory_unit_id, @task_id);
+
+        IF @block_code IS NOT NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, @block_code AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        ------------------------------------------------------------
+        -- 5. Apply (shared with the count correction)
+        ------------------------------------------------------------
+        EXEC warehouse.usp_apply_relocation
+            @inventory_unit_id  = @inventory_unit_id,
+            @destination_bin_id = @destination_bin_id,
+            @movement_type      = N'MOVE',
+            @reference_type     = N'TASK',
+            @reference_id       = @task_id,
+            @user_id            = @user_id,
+            @session_id         = @session_id,
+            @movement_id        = @movement_id OUTPUT;
+
         UPDATE warehouse.warehouse_tasks
         SET task_state_code      = 'CNF',
             completed_at         = @now,
@@ -153,4 +188,6 @@ BEGIN
         SELECT CAST(0 AS BIT) AS success, N'ERRMOVE99' AS result_code;
     END CATCH
 END;
+GO
+PRINT 'warehouse.usp_bin_to_bin_move_confirm created.';
 GO

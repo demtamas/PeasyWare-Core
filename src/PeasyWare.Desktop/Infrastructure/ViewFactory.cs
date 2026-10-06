@@ -194,4 +194,11 @@ public sealed class ViewFactory
         return new PeasyWare.Desktop.Views.Materials.CustomerShelfLifeView(session, queryRepo, commandRepo, partyRepo, skuRepo);
     }
 
+    public UserControl CreateCountsView(SessionContext session)
+    {
+        var queryRepo   = _runtime.Repositories.CreateCountQuery(session);
+        var commandRepo = _runtime.Repositories.CreateCountCommand(session);
+        return new PeasyWare.Desktop.Views.Counting.CountsView(session, queryRepo, commandRepo);
+    }
+
 }
