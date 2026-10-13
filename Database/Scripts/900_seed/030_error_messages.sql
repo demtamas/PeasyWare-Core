@@ -306,7 +306,7 @@ FROM (VALUES
         N'usp_count_*: count_id not found or status_code <> OPEN'),
 
     (N'ERRCNT04', N'COUNT', N'ERROR',
-        N'That bin is not part of this count.',
+        N'That bin is not part of this count. Enter the bin code exactly as shown on its label.',
         N'usp_count_confirm_empty/report_stock: no count_line for this bin in the count'),
 
     (N'ERRCNT05', N'COUNT', N'ERROR',

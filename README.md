@@ -61,12 +61,12 @@ CLI (RF-style terminal)        Desktop Application
 **Design principles:**
 - Every process has a Reversal Path
 - Every operation carries a Correlation ID
-- Every mutating stored procedure enforces RBAC via `auth.fn_has_permission`, checked first, inside the transaction
+- RBAC is enforced inside the stored procedure (`auth.fn_has_permission`, checked first, inside the transaction) for configuration and elevated actions; floor operations (receive, putaway, pick, load, ship, move, count) are open to any authenticated user by design
 - All SPs use `SET XACT_ABORT ON` + `BEGIN CATCH`
 - Error codes follow `ERRAUTH01` pattern (prefix ERR/WAR/SUC, no hyphens)
 - `UPDLOCK, HOLDLOCK` on concurrent reads
 - C# session identity (`UserId`, `SessionId`) is bound into SQL Server's `SESSION_CONTEXT` once per connection via `SqlConnectionFactory.CreateForCommand` — the mechanism `auth.fn_has_permission` and several SPs (settings, user management) rely on; most SPs take `@user_id`/`@session_id` as explicit parameters instead
-- Bin and reference lookups enforce case sensitivity (`COLLATE Latin1_General_CS_AS`)
+- Bin codes are canonical uppercase and matched exactly (`COLLATE Latin1_General_CS_AS`) — a wrong-case entry is refused, never silently corrected (`IdentifierPolicy`)
 
 ---
 
@@ -89,7 +89,7 @@ Putaway Task → Operator confirms → PTW state
 │  putaway, transitions RCD → PTW automatically
          │
          ▼
-Bin-to-Bin Movement (optional, supervisor-initiated)
+Bin-to-Bin Movement (optional, any operator)
          │
          ▼
 Outbound Order → Allocation Engine (FEFO / FIFO / LIFO / NONE)
@@ -115,6 +115,8 @@ Ship Confirmation → SHP state
 Full lifecycle audit trail complete
 ```
 
+Alongside the lifecycle, a **stock count** audits the warehouse floor: the system lists the bins it believes are empty, an operator walks them, and anything found where it shouldn't be is corrected under the same rules a bin-to-bin move uses — or flagged for a manager's review. See [Stock counting](#stock-counting).
+
 ---
 
 ## Quick Start
@@ -122,7 +124,7 @@ Full lifecycle audit trail complete
 ### 1 — Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- SQL Server (Express or Developer edition is fine)
+- SQL Server — Developer edition, or any edition with SQL Server Agent. The build creates two Agent jobs (session cleanup, daily expiry sweep); Express has no Agent, so the jobs cannot run there
 - `sqlcmd` on PATH — install via [SQL Server command-line tools](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility)
 
 ### 2 — Clone
@@ -185,7 +187,7 @@ Reset (or create fresh) the database schema:
 tools\PeasyWare.Tools\bin\Debug\net10.0\pwtools.exe reset-db --confirm
 ```
 
-This runs all 90+ scripts in `Database/Scripts/` in order against the database defined in `PEASYWARE_DB`. On a fresh install it creates the database from scratch. On an existing install it backs up and drops first.
+This runs every script in `Database/Scripts/` in folder order against the database defined in `PEASYWARE_DB`. On a fresh install it creates the database from scratch. On an existing install it backs up and drops first. Add `--no-demo` for a bare install without the demo parties and warehouse layout.
 
 ### 6 — Test data (optional)
 
@@ -223,7 +225,14 @@ Initial credentials: `admin` / `admin0` — password change required on first lo
 dotnet test --filter "Category!=Concurrency"
 ```
 
-This is the fast run — unit tests plus the DB test suite, no live locking scenarios.
+This is the fast run — the unit tests, no live locking scenarios.
+
+The SQL test suite (`Database/Tests/*.sql`) runs separately against `PEASYWARE_DB` and needs `sqlcmd` on PATH and a built database:
+
+```powershell
+.\run_db_tests.ps1                    # everything
+.\run_db_tests.ps1 -Filter "count"    # a subset, matched on file name
+```
 
 The concurrency proof harness (`tests/PeasyWare.ConcurrencyTests`) is excluded from
 the command above on purpose: it opens real concurrent connections against
@@ -262,7 +271,7 @@ dotnet test tests/PeasyWare.ConcurrencyTests
 
 ### Warehouse Tasks
 - Putaway — zone load balancing, bin reservation, TTL expiry
-- Bin-to-bin movement — operator or system initiated
+- Bin-to-bin movement — any operator. One shared definition of "free to be moved" (state, stock status, no open task) and of "bin can receive" (active, unlocked, capacity including reservations); the destination is held for the task and re-validated under lock at confirm; abandoned move tasks expire and are replaced
 - Pick tasks — allocation-driven, operator-specified staging bay
 - Supervisor Desktop view — cancel orphaned tasks, filter by type, creator and completer columns
 
@@ -280,6 +289,21 @@ dotnet test tests/PeasyWare.ConcurrencyTests
 - Create shipments from Desktop — haulier, vehicle, planned departure, add orders
 - Cancel shipments — OPEN / LOADING only, blocked if orders in progress
 - Delivery note — generated on ship, opens in browser or prints silently to named printer
+
+### Shelf life
+- Minimum remaining shelf life per SKU, with customer + SKU overrides for the exceptions — the effective requirement is override → SKU default → 0, applied live rather than copied
+- Allocation compares each candidate's best-before date with the order's delivery date plus the required days
+- The allocation trace records the delivery date, each unit's best-before date and the required days on every outcome, so a decision can be reconstructed from the log alone
+- Customer shelf-life screen in Desktop (Inventory menu), gated on `materials.manage`
+- A daily expiry sweep (SQL Server Agent) flags stock past its best-before date as expired
+
+### Stock counting
+- **Empty-bin check (CLI, Counts menu)** — pick a storage type; the system lists the bins it believes are empty; scan each bin to confirm it. Counts are resumable and close themselves when the last bin is done
+- A pallet found in an "empty" bin has its recorded location corrected under the same rules a bin-to-bin move uses, or is recorded for review. A count never creates or revives stock: shipped, reversed and unknown pallets are recorded and left alone
+- A shipped pallet found in the building says which delivery, vehicle, order and customer it left on
+- A count that found something it could not put right goes to **Needs review** — never "complete" — until a manager or admin marks it reviewed, with a note on what was done
+- Desktop Counting view — counts needing attention by default (history one click away), findings with their reasons, reviewer and note shown
+- Cycle counting (ABC frequency, blind counts, tolerances) is planned on the same tables
 
 ### Parties
 - Suppliers, customers, hauliers, owners, warehouse — multi-role per party
@@ -309,13 +333,15 @@ dotnet test tests/PeasyWare.ConcurrencyTests
 - Template auto-located by walking up from binary; inline fallback if not found
 
 ### Infrastructure
-- Role-based access control (RBAC) — verb-on-resource permissions (`auth.permissions` / `auth.role_permissions`), enforced in every mutating stored procedure via `auth.fn_has_permission`, mirrored in Desktop and CLI UI gating
+- Role-based access control (RBAC) — verb-on-resource permissions (`auth.permissions` / `auth.role_permissions`), enforced in the stored procedure via `auth.fn_has_permission` for configuration and elevated actions, mirrored in Desktop and CLI UI gating. Floor operations are deliberately open to any authenticated user — see [`docs/architecture.md`](docs/architecture.md)
 - Concurrency proof suite (`tests/PeasyWare.ConcurrencyTests`) — load-tests the highest-contention paths (allocation, putaway confirm, pick confirm) against a real database; found and fixed a destination-bin overfill race plus a related off-by-one
 - Role-based UiMode (Minimal / Standard / Trace) — system ceiling enforced
 - Session management — `SessionContext` (`SourceApp`, `SourceClient`, `CorrelationId`) carried through every operation, TTL, heartbeat, force login, concurrent session guard
 - Structured audit log with JSON payload (`audit.trace_logs`)
 - Error message resolver — all codes in DB, operator-facing message + tech note
 - Settings registry — all runtime config in `operations.settings`, editable from Desktop
+- Background jobs (SQL Server Agent), created by the build — session cleanup every 10 minutes, expiry sweep daily at 00:05
+- Concurrent session limit per client app (`auth.clients.max_concurrent_sessions`); force-login ends all of a user's other sessions for that app
 
 ---
 
@@ -333,18 +359,23 @@ Toggle via Settings view or directly in `operations.settings`.
 
 ## Project Status
 
-**v0.9 — Core warehouse lifecycle complete**
+**v0.9 — core complete; v1.0 hardening in progress**
 
 Full warehouse loop operational across both CLI and Desktop:
 Receive → Putaway → Move → Allocate (full/partial) → Pick → Load → Ship → Delivery note
+— with shelf-life-aware allocation, stock counting and a manager review step on top.
 
 **Role-based access control (RBAC) complete**
 
 Verb-on-resource permission model (`auth.permissions` / `auth.role_permissions`),
-enforced at the stored-procedure layer via `auth.fn_has_permission` across every
-mutating operation, with matching gating in both Desktop and CLI. Denial and
-grant coverage tested per permission category, including bootstrap and
-system-role edge cases.
+enforced at the stored-procedure layer via `auth.fn_has_permission` for
+configuration and elevated actions (users, sessions, settings, master data,
+warehouse layout, client apps, stock status changes, receipt reversal, count
+review), with matching gating in both Desktop and CLI. Floor operations —
+receive, putaway, pick, load, ship, move, count — are deliberately open to any
+authenticated user: only what should not be available to everyone is gated.
+Denial and grant coverage is tested per permission category, including
+bootstrap and system-role edge cases.
 
 **Concurrency proof complete**
 
@@ -370,8 +401,48 @@ removes the unit's placement immediately, mirroring the same pattern
 Reversal (`LDD → PKD`) has a transition-table entry ready but no SP yet —
 deliberately deferred to a later pass.
 
+**Shelf-life management complete**
+
+Minimum remaining shelf life lives on the SKU, with customer + SKU overrides for
+the exceptions; allocation honours it against the order's delivery date, and the
+allocation trace records the delivery date, each unit's best-before date and the
+required days on every outcome — a refused allocation can be explained from the
+log. A daily job flags stock that has passed its best-before date.
+
+**Bin-to-bin moves hardened**
+
+One definition of "free to be moved" and one of "bin can receive", shared by moves
+and count corrections so they cannot drift. The destination bin is locked,
+checked and reserved when a move is created; confirmation re-validates under
+lock; abandoned move tasks expire and are replaced; blocked stock can still be
+moved out to quarantine. A SQL test suite proves each refusal and each guard.
+
+**Stock counting — empty-bin check complete**
+
+An operator walks the bins the system believes are empty; anything found is
+corrected under the move rules or flagged. A shipped pallet found in the building
+is traced to the delivery and order it left on. A count with anything uncorrected
+goes to *Needs review* and stays there until a manager or admin signs it off with
+a note.
+
 **Next milestone: v1.0**
-- Production hardening and edge case test coverage
+
+Remaining:
+- Review which actions need elevated rights, and make the tests assert that boundary
+- One session-identity convention across all stored procedures
+- Disposal Order workflow
+- Cycle counting
+- Resolving a found shipped pallet (reverse the shipment line, or receive it back)
+- REST API beyond seeding
+- Datagrid polish
+
+Known gaps: abandoned putaway and pick tasks are not swept; putaway confirm does
+not check locked bins; the concurrency proof suite does not yet cover the move and
+count paths.
+
+After v1.0: schema migrations replace drop-and-recreate.
+
+Design notes and the decisions behind them: [`docs/architecture.md`](docs/architecture.md).
 
 ---
 

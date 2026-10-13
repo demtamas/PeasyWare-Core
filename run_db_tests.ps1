@@ -4,9 +4,12 @@
 # Runs all *.sql files in Database/Tests/ against the DB
 # defined in PEASYWARE_DB.
 #
-# Each script uses BEGIN TRAN / ROLLBACK -- tests are non-
-# destructive. RAISERROR inside a script causes sqlcmd -b
-# to return non-zero, which is treated as a failure.
+# Most scripts use BEGIN TRAN / ROLLBACK, so they leave nothing behind.
+# Scripts that exercise procedures which ROLLBACK internally on their refusal
+# paths (146, 150, 160) cannot sit inside an outer transaction: they build
+# prefixed fixtures and clean up explicitly in a final block that always runs.
+# RAISERROR inside a script causes sqlcmd -b to return non-zero, which is
+# treated as a failure.
 #
 # Usage:
 #   .\run_db_tests.ps1

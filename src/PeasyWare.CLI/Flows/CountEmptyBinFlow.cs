@@ -203,8 +203,9 @@ public sealed class CountEmptyBinFlow
             }
 
             // Anything else is a bin scan: confirm it empty
-            var result = command.ConfirmEmpty(countId, raw);
-            lastMessage = FormatBin(raw, result);
+            var binCode = IdentifierPolicy.NormaliseBinCode(raw) ?? raw;
+            var result  = command.ConfirmEmpty(countId, binCode);
+            lastMessage = FormatBin(binCode, result);
         }
     }
 
@@ -217,7 +218,7 @@ public sealed class CountEmptyBinFlow
         Console.WriteLine();
         Console.Write("Bin with stock (blank=cancel): ");
 
-        var bin = Console.ReadLine()?.Trim();
+        var bin = IdentifierPolicy.NormaliseBinCode(Console.ReadLine());
 
         if (string.IsNullOrWhiteSpace(bin))
             return "Cancelled.";

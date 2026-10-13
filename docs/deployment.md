@@ -122,6 +122,21 @@ Always use the `PEASYWARE_DB` environment variable.
 
 ---
 
+## Background jobs (SQL Server Agent)
+
+The normal database build (`pwtools reset-db`, or `DEV_AllInOneInOneGo.sql`) creates two SQL Server Agent jobs, dropping and recreating them each time so they are safe to re-run:
+
+| Job | Schedule | Runs |
+|---|---|---|
+| DEV PW Session Cleanup Job | every 10 minutes | `auth.usp_session_cleanup` — ends timed-out sessions |
+| DEV PW Expiry Sweep Job | daily at 00:05 | `inventory.usp_run_expiry_sweep` — flags stock past its best-before date as expired |
+
+- **SQL Server Agent must be installed and running** on the instance. SQL Server Express does not include it, so the jobs cannot run there. Sessions are still cleaned up when the next login's own cleanup pass runs, but nothing flags expired stock automatically unless `inventory.usp_run_expiry_sweep` is run by hand.
+- **The job names and the database name are DEV-specific.** The job steps name `PW_Core_DEV` literally; a deployment under another database name needs the two job scripts (`030_auth/usp_session_cleanup_job.sql`, `060_inventory/usp_run_expiry_sweep_job.sql`) adjusted.
+- **The job owner is left to the default.** Setting it from `ORIGINAL_LOGIN()` fails when the Windows session is a Microsoft Account (Agent cannot resolve the owner — error 0x54b).
+
+---
+
 ## Notes on informal environments
 
 PeasyWare's current deployment story is informal — there is no CI/CD pipeline, no automated packaging, and no environment provisioning tooling. This is acceptable for the current development stage.

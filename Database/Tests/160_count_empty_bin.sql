@@ -18,8 +18,8 @@
 --             confirmed empty takes no findings
 --             a pallet the system shows as SHIPPED or REVERSED is known, not
 --             unknown: recorded NOT_CORRECTED with its own reason (ERRCNT06 /
---             ERRCNT07) and never brought back into stock; bin codes match
---             in any case
+--             ERRCNT07) and never brought back into stock; bin codes are
+--             case-sensitive (wrong case is refused, never silently corrected)
 --   Close:    a count that found pallets it could not correct closes as REVIEW
 --             (not COMPLETE); COMPLETE when nothing is pending and nothing to
 --             review, CLOSED when bins remain and nothing to review
@@ -382,18 +382,25 @@ BEGIN TRY
        OR (SELECT bin_id FROM inventory.inventory_placements WHERE inventory_unit_id = @UTask) <> @Other
         RAISERROR('FAIL: a NOT_CORRECTED pallet was moved anyway.', 16, 1);
 
-    -- A shipped pallet and a reversed one are KNOWN to the system: found,
-    -- recorded with the reason, and never brought back into stock. The bin
-    -- code is typed in lowercase on purpose - it must still match.
+    -- Bin codes are matched exactly (IdentifierPolicy): the wrong case is refused
+    -- as "not in this count" and records nothing - never silently corrected
     EXEC warehouse.usp_count_report_stock
         @count_id = @CountId, @bin_code = 'cnttest-c5', @scanned_ref = 'CNTTEST-USHP', @user_id = @UserId;
+
+    IF EXISTS (SELECT 1 FROM warehouse.count_findings WHERE count_line_id = @L5 AND inventory_unit_id = @UShp)
+        RAISERROR('FAIL: a bin code in the wrong case was silently accepted (IdentifierPolicy: no silent correction).', 16, 1);
+
+    -- A shipped pallet and a reversed one are KNOWN to the system: found,
+    -- recorded with the reason, and never brought back into stock.
     EXEC warehouse.usp_count_report_stock
-        @count_id = @CountId, @bin_code = 'cnttest-c5', @scanned_ref = 'CNTTEST-UREV', @user_id = @UserId;
+        @count_id = @CountId, @bin_code = 'CNTTEST-C5', @scanned_ref = 'CNTTEST-USHP', @user_id = @UserId;
+    EXEC warehouse.usp_count_report_stock
+        @count_id = @CountId, @bin_code = 'CNTTEST-C5', @scanned_ref = 'CNTTEST-UREV', @user_id = @UserId;
 
     IF NOT EXISTS (SELECT 1 FROM warehouse.count_findings
                    WHERE count_line_id = @L5 AND inventory_unit_id = @UShp
                      AND finding_code = 'NOT_CORRECTED' AND reason_code = 'ERRCNT06')
-        RAISERROR('FAIL: a shipped pallet was not recorded NOT_CORRECTED / ERRCNT06 (or the lowercase bin code did not match).', 16, 1);
+        RAISERROR('FAIL: a shipped pallet was not recorded NOT_CORRECTED / ERRCNT06.', 16, 1);
 
     IF NOT EXISTS (SELECT 1 FROM warehouse.count_findings
                    WHERE count_line_id = @L5 AND inventory_unit_id = @URev

@@ -96,9 +96,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
-        -- Bin codes match case-insensitively: two bins cannot differ only by
-        -- case, so this is unambiguous, and a typed "bulk01" is not a different bin
-        SET @bin_code    = LTRIM(RTRIM(@bin_code));
+        -- Bin codes are matched exactly (IdentifierPolicy): a wrong-case entry is
+        -- "not in this count", never silently corrected
+        SET @bin_code    = LTRIM(RTRIM(@bin_code)) COLLATE Latin1_General_CS_AS;
         SET @scanned_ref = LTRIM(RTRIM(@scanned_ref));
 
         ------------------------------------------------------------
@@ -121,7 +121,7 @@ BEGIN
         FROM warehouse.count_lines cl
         JOIN locations.bins b ON b.bin_id = cl.bin_id
         WHERE cl.count_id = @count_id
-          AND b.bin_code  = @bin_code COLLATE Latin1_General_CI_AS;
+          AND b.bin_code  = @bin_code COLLATE Latin1_General_CS_AS;
 
         IF @line_id IS NULL
         BEGIN

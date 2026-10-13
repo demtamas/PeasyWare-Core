@@ -72,6 +72,7 @@ shipments
 | Code | Meaning |
 |------|---------|
 | PKD | Picked — in staging bay, awaiting load |
+| LDD | Loaded — on the vehicle; placement removed at load time, not ship time. Mandatory before ship |
 | SHP | Shipped — terminal, no placement |
 
 ---
@@ -116,6 +117,7 @@ shipments
 - Only `PUTAWAY` + `AVAILABLE` units eligible (no staging stock, no QC/blocked)
 - Full pallets only — unit quantity must satisfy line quantity
 - `requested_batch` and `requested_bbe` on the line filter candidates
+- Shelf life: each candidate's best-before date is checked against the order's delivery date plus the required minimum days (customer + SKU override → SKU default → 0); the trace entry records the delivery date, each unit's best-before date and the required days on every outcome
 - All lines must be satisfiable — partial allocation rolls back entirely
 
 **Outcome:** One `outbound_allocations` row per pallet per line, status `PENDING`.
@@ -151,12 +153,13 @@ If not specified, the SP auto-selects the first active staging bin alphabeticall
 **Outcome per unit:** Unit in `PKD`, in staging bin, `PICK` movement logged.
 When all lines picked, order → `PICKED`.
 
-**Re-allocation (TODO):**
+**Re-allocation:**
 When an operator cannot pick an allocated unit (damaged, inaccessible, missing),
-the current flow skips the unit. A future improvement will offer `R=request new
-allocation` at the skip prompt, which cancels the current allocation and re-runs
-the allocation engine for that line against the next eligible unit.
-Requires: `outbound.usp_cancel_allocation`, `outbound.usp_reallocate_line`.
+the skip prompt offers `R=request new allocation`: it cancels the current
+allocation (`outbound.usp_cancel_allocation`) and re-runs the allocation engine
+for that line against the next eligible unit (`outbound.usp_reallocate_line`),
+then restarts the pick for the order. If no substitute exists, the line is left
+for supervisor attention.
 
 ---
 
@@ -342,16 +345,13 @@ ORDER BY l.line_no, a.allocation_id;
 
 ---
 
-## What Comes Next
+## Since this was written
 
-The CLI pick flow is complete. The next outbound features are:
+Everything the first version of this document listed as "next" has been built:
 
-**Loading flow** — operator scans units from staging to confirm they are
-physically on the vehicle. Transitions order from `PICKED` to `LOADED`.
-Useful for sites that require load confirmation before departure.
+- **Load confirmation** — `outbound.usp_confirm_load`, per order, tied to its shipment. Picked units move to `LDD` and their placement is removed at load time rather than at ship time: a loaded pallet no longer occupies the floor, and a loading bay only has room for so many. It is mandatory before ship — a shipment with a picked-but-not-yet-loaded order is rejected (`ERRSHIP09`). A `LDD → PKD` reversal has a transition entry but no procedure yet.
+- **Load and ship from the CLI** — `LoadFlow` and `ShipFlow`, alongside the Desktop dispatch screens.
+- **Re-allocation** — see the pick step above.
+- **Shelf life** — see the allocation rules above, and [`architecture.md`](architecture.md).
 
-**Ship flow (CLI)** — call `usp_ship` from the terminal for sites that
-do not use the desktop app for despatch confirmation.
-
-**Re-allocation** — cancel a damaged/missing allocation and automatically
-find the next eligible unit. See TODO in `PickFlow.cs`.
+Where this document and the stored procedures disagree, the procedures win. The step-by-step sections for load and ship (guards, error codes, the traceability query's `LDD` step) have not been refreshed yet.
