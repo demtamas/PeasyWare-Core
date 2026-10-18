@@ -91,7 +91,7 @@ while (true)
                 for (int i = 0; i < 3; i++)
                 {
                     var newPassword = ReadConfirmedPassword();
-                    var change = loginFlow.ChangePassword(username, newPassword);
+                    var change = loginFlow.ChangePassword(username, newPassword, context.CorrelationId);
                     if (change.Success) { password = newPassword; changed = true; break; }
                     Console.WriteLine(change.FriendlyMessage);
                 }

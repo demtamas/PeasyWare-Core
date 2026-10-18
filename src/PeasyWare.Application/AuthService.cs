@@ -62,24 +62,32 @@ public sealed class AuthService
 
     // --------------------------------------------------
     // Password change
+    //
+    // correlationId is the correlation ID of the login attempt that demanded the
+    // change (ERRAUTH09). It goes into every log entry here so the change shows up
+    // on the same trace as that attempt - the logger fills its correlation column
+    // from a CorrelationId property in the payload. Guid.Empty = none supplied.
     // --------------------------------------------------
 
     public OperationResult ChangePassword(
         string username,
-        string newPassword)
+        string newPassword,
+        Guid   correlationId = default)
     {
         _logger.Info("AuthService.PasswordChange.Start", new
         {
-            Username = username
+            Username = username,
+            CorrelationId = correlationId
         });
 
-        var result = _security.ChangePassword(username, newPassword);
+        var result = _security.ChangePassword(username, newPassword, correlationId);
 
         _logger.Info("AuthService.PasswordChange.Result", new
         {
             Username = username,
             result.ResultCode,
-            result.Success
+            result.Success,
+            CorrelationId = correlationId
         });
 
         return result;

@@ -275,6 +275,6 @@ internal sealed class StubLoginRepository : ILoginRepository
 
 internal sealed class StubUserSecurityRepository : IUserSecurityRepository
 {
-    public OperationResult ChangePassword(string username, string newPassword)
+    public OperationResult ChangePassword(string username, string newPassword, Guid correlationId = default)
         => OperationResult.Create(true, "SUCAUTH10", "Password changed.");
 }

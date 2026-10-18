@@ -20,6 +20,8 @@ public sealed class InfrastructureLogger : ILogger
 
     public void SetSession(SessionContext session) => _session = session;
 
+    public void ClearSession() => _session = null;
+
     public void Info(string action, object? data)  => Log("INFO",  action, data);
     public void Warn(string action, object? data)  => Log("WARN",  action, data);
     public void Error(string action, object? data) => Log("ERROR", action, data);

@@ -72,7 +72,7 @@ public partial class LoginForm : Form
                 return;
 
             case LoginOutcome.PasswordChangeRequired:
-                HandlePasswordChange(username, password);
+                HandlePasswordChange(username, password, context.CorrelationId);
                 return;
 
             case LoginOutcome.AlreadyLoggedIn:
@@ -102,7 +102,9 @@ public partial class LoginForm : Form
             CorrelationId = Guid.NewGuid()
         };
 
-    private void HandlePasswordChange(string username, string oldPassword)
+    // correlationId is that of the login attempt that demanded the change, so the change
+    // is logged on the same trace as that attempt.
+    private void HandlePasswordChange(string username, string oldPassword, Guid correlationId)
     {
         using var pwdForm = new PasswordChangeForm(username);
 
@@ -119,7 +121,7 @@ public partial class LoginForm : Form
             return;
         }
 
-        var changeResult = _loginFlow.ChangePassword(username, pwdForm.NewPassword);
+        var changeResult = _loginFlow.ChangePassword(username, pwdForm.NewPassword, correlationId);
 
         if (!changeResult.Success)
         {

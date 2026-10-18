@@ -23,7 +23,7 @@ public sealed class SqlUserSecurityRepository : IUserSecurityRepository
         _logger = logger;
     }
 
-    public OperationResult ChangePassword(string username, string newPassword)
+    public OperationResult ChangePassword(string username, string newPassword, Guid correlationId = default)
     {
         using var connection = _factory.Create();
         connection.Open();
@@ -67,7 +67,8 @@ public sealed class SqlUserSecurityRepository : IUserSecurityRepository
             {
                 Username = username,
                 ResultCode = code,
-                Success = true
+                Success = true,
+                CorrelationId = correlationId
             });
         }
         else
@@ -76,7 +77,8 @@ public sealed class SqlUserSecurityRepository : IUserSecurityRepository
             {
                 Username = username,
                 ResultCode = code,
-                Success = false
+                Success = false,
+                CorrelationId = correlationId
             });
         }
 

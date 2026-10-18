@@ -37,6 +37,11 @@ try
 {
     while (true)
     {
+        // Between a logout and the next successful login nobody is signed in. Without
+        // this the logger keeps the previous user's session, and every login attempt
+        // (including failed ones by someone else) is logged under that user's identity.
+        runtime.Logger.ClearSession();
+
         using var loginForm =
             new LoginForm(loginFlow, diagnosticsEnabled: false);
 

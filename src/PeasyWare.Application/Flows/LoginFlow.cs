@@ -51,8 +51,9 @@ public sealed class LoginFlow
 
     public OperationResult ChangePassword(
         string username,
-        string newPassword)
-        => _authService.ChangePassword(username, newPassword);
+        string newPassword,
+        Guid   correlationId = default)
+        => _authService.ChangePassword(username, newPassword, correlationId);
 
     // --------------------------------------------------
     // Resolve UiMode from role, capped by system default
