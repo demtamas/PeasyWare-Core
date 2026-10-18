@@ -91,7 +91,7 @@ All SSCC values are stored and compared as 18-digit canonical strings without th
 
 This is deliberate: it enforces physical scanning discipline. Scanning a bin label always produces the right code, so the only way to hit a wrong-case mismatch is typing — and a typing mistake on a warehouse floor should be seen, not papered over. Entry points are meant to hand bin codes to `IdentifierPolicy` and no further.
 
-**Known inconsistency:** `PickFlow` upper-cases the scanned source bin (`ToUpperInvariant()`) before sending it, so a code typed in lowercase is accepted there and refused everywhere else (`BinQueryFlow` documents the strict behaviour as intentional). It is the one place the rule is not followed. Either align it with the policy or decide the policy is looser, and record that here.
+Every CLI flow follows this. `PickFlow` used to upper-case the scanned source bin before comparing it, so a lowercase code was accepted there and refused everywhere else; that was removed so the rule holds uniformly, and a wrong-case scan now gets the flow's normal "Wrong bin. Expected: X" instead of being quietly fixed. One harmless leniency remains: `PutawayFromInboundFlow` compares the scanned bin to the expected one with `OrdinalIgnoreCase` before sending it, but it sends what was typed and `usp_putaway_confirm_task` compares case-sensitively, so a wrong-case putaway scan is still refused (`ERRTASK08`).
 
 Bin codes are master data owned by PeasyWare — they are always created uppercase and never imported verbatim from external systems. If a future integration supplies location codes with other case semantics (3PL platform, conveyor system, customer WMS), those codes must be mapped to uppercase at the integration boundary before entering PeasyWare. The integration layer owns that mapping, not the WMS core.
 
@@ -259,7 +259,6 @@ Remaining before v1.0:
 - A way to resolve a found shipped pallet: reverse the shipment line, or receive the pallet back
 - REST API beyond seeding (for example, writing a customer's shelf-life requirement as an exception on order intake)
 - Datagrid polish: sorting, column counts, final touches
-- Make bin-code handling consistent across entry points (see Bin code policy)
 - The known task / reservation gaps listed under Tasks and reservations
 - Extend the concurrency proof suite to the move and count paths (they are SQL-tested, not yet load-tested)
 

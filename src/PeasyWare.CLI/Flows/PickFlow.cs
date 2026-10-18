@@ -248,9 +248,13 @@ public sealed class PickFlow
                     }
 
                     var binScan = GtinParser.Parse(rawBin);
-                    var resolvedBin = (binScan.IsValid && binScan.Sscc is not null
-                        ? binScan.Sscc
-                        : rawBin).ToUpperInvariant().Trim();
+
+                    // Bin codes are matched exactly (IdentifierPolicy): trimmed, never
+                    // case-corrected. A code typed in the wrong case is refused below
+                    // with the expected code shown - the same as every other flow.
+                    var resolvedBin = IdentifierPolicy.NormaliseBinCode(
+                        binScan.IsValid && binScan.Sscc is not null ? binScan.Sscc : rawBin)
+                        ?? rawBin;
 
                     if (binScan.IsValid && binScan.IsPalletScan && !binScan.IsProductScan)
                     {
