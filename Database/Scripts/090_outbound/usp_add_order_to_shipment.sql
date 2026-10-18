@@ -84,12 +84,12 @@ BEGIN
 
         COMMIT;
 
-        SELECT CAST(1 AS BIT) AS success, N'SUCORD01' AS result_code;
+        SELECT CAST(1 AS BIT) AS success, N'SUCSHIP03' AS result_code;
 
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
-        SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code;
+        SELECT CAST(0 AS BIT) AS success, N'ERRSHIP99' AS result_code;
     END CATCH
 END;
 

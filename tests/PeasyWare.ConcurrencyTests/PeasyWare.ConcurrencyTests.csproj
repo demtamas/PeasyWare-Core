@@ -16,6 +16,10 @@
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <!-- Same pin as PeasyWare.Application.csproj (see the comment there for the
+         CVEs): this project references SqlClient directly and does not go through
+         Application, so it has to carry the patched Pkcs itself. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>

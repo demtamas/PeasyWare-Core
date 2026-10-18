@@ -168,20 +168,34 @@ public sealed class RepositoryFactory
     // SKU (API)
     // --------------------------------------------------
 
+    // The SKU / audit creators bind the session like every other creator in this
+    // factory. Without BindSession the logger has no session, so entries such as
+    // Sku.Create were written with NULL user_id / session_id / correlation_id and no
+    // Session block (the inbound and outbound rows beside them were attributed only
+    // because their sessionless overloads route through CreateXxx(SystemSession)).
     public ISkuCommandRepository CreateSkuCommand()
-        => new SqlSkuCommandRepository(_factory, SystemSession, _resolver, _logger, _sessionGuard);
+        => CreateSkuCommand(SystemSession);
 
     public ISkuCommandRepository CreateSkuCommand(SessionContext session)
-        => new SqlSkuCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    {
+        BindSession(session);
+        return new SqlSkuCommandRepository(_factory, session, _resolver, _logger, _sessionGuard);
+    }
 
     public ISkuQueryRepository CreateSkuQuery()
-        => new SqlSkuQueryRepository(_factory, SystemSession);
+        => CreateSkuQuery(SystemSession);
 
     public ISkuQueryRepository CreateSkuQuery(SessionContext session)
-        => new SqlSkuQueryRepository(_factory, session);
+    {
+        BindSession(session);
+        return new SqlSkuQueryRepository(_factory, session);
+    }
 
     public IAuditQueryRepository CreateAuditQuery(SessionContext session)
-        => new SqlAuditQueryRepository(_factory, session);
+    {
+        BindSession(session);
+        return new SqlAuditQueryRepository(_factory, session);
+    }
 
     // --------------------------------------------------
     // CUSTOMER SHELF LIFE REQUIREMENTS
