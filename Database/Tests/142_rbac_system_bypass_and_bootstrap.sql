@@ -11,6 +11,12 @@
 --         its own guard/not-found paths, and SQL Server does not
 --         allow ROLLBACK inside an INSERT-EXEC target proc).
 --
+-- Part C: the bypass is not unconditional. A system role that has been
+--         DISABLED (auth.roles.is_active = 0) no longer bypasses, even for
+--         an active user. (The user's own is_active is deliberately NOT
+--         checked: the seeded 'system' user is inactive so it cannot log in,
+--         yet must still pass the guard for scheduled jobs.)
+--
 -- Part B: usp_create_user's bootstrap escape hatch - while no admin
 --         role assignment exists anywhere in the system, the guard is
 --         skipped so the very first admin can be created with no
@@ -76,6 +82,57 @@ DELETE FROM locations.storage_types WHERE storage_type_code = 'RBAC-TEST-STYPE-S
 DELETE FROM auth.user_roles WHERE user_id = @SysUserId OR role_id = @SysRoleId;
 DELETE FROM auth.users WHERE id = @SysUserId;
 DELETE FROM auth.roles WHERE id = @SysRoleId;
+
+------------------------------------------------------------------
+-- Part C - a DISABLED system role does not bypass
+------------------------------------------------------------------
+DECLARE @DisRoleId INT;
+DECLARE @DisUserId INT;
+
+BEGIN TRY
+
+    INSERT INTO auth.roles (role_name, description, is_active, is_system_role)
+    VALUES ('rbac_test_system_role_disabled', 'Temp DISABLED system role - bypass must not apply', 0, 1);
+    SET @DisRoleId = SCOPE_IDENTITY();
+
+    -- The USER is active; only the system role is disabled
+    INSERT INTO auth.users (username, display_name, email, salt, is_active)
+    VALUES ('rbac_test_system_disabled_user', 'RBAC Test Disabled System Role', 'rbac_test_system_disabled_user@pw.local', 0x00, 1);
+    SET @DisUserId = SCOPE_IDENTITY();
+
+    INSERT INTO auth.user_roles (user_id, role_id) VALUES (@DisUserId, @DisRoleId);
+
+    -- Same shape as Part A: a clean fixture a non-RBAC delete would remove.
+    -- If the guard wrongly let this account through, the row would be gone.
+    INSERT INTO locations.storage_types (storage_type_code, storage_type_name, created_by)
+    VALUES ('RBAC-TEST-STYPE-DIS', 'RBAC Test Type Dis', @DisUserId);
+
+    EXEC locations.usp_delete_storage_type
+        @storage_type_code = 'RBAC-TEST-STYPE-DIS', @user_id = @DisUserId;
+
+    IF NOT EXISTS (SELECT 1 FROM locations.storage_types WHERE storage_type_code = 'RBAC-TEST-STYPE-DIS')
+        RAISERROR('TEST FAILED: a DISABLED system role still bypassed the RBAC guard.', 16, 1);
+
+    IF auth.fn_has_permission(@DisUserId, 'storage_types.manage') <> 0
+        RAISERROR('TEST FAILED: auth.fn_has_permission approved a user whose only role is a disabled system role.', 16, 1);
+
+    PRINT 'PASS: a disabled system role no longer bypasses (Part C).';
+
+END TRY
+BEGIN CATCH
+    DECLARE @msgC NVARCHAR(2048) = ERROR_MESSAGE();
+    DELETE FROM locations.storage_types WHERE storage_type_code = 'RBAC-TEST-STYPE-DIS';
+    DELETE FROM auth.user_roles WHERE user_id = @DisUserId OR role_id = @DisRoleId;
+    DELETE FROM auth.users WHERE id = @DisUserId;
+    DELETE FROM auth.roles WHERE id = @DisRoleId;
+    RAISERROR(@msgC, 16, 1);
+    RETURN;
+END CATCH
+
+DELETE FROM locations.storage_types WHERE storage_type_code = 'RBAC-TEST-STYPE-DIS';
+DELETE FROM auth.user_roles WHERE user_id = @DisUserId OR role_id = @DisRoleId;
+DELETE FROM auth.users WHERE id = @DisUserId;
+DELETE FROM auth.roles WHERE id = @DisRoleId;
 
 ------------------------------------------------------------------
 -- Part B - bootstrap escape hatch (fully rolled back, pass or fail)

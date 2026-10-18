@@ -115,7 +115,7 @@ BBE and batch validation happens **before** a claim is written in `usp_validate_
 
 ## Authorization model
 
-RBAC is verb-on-resource (`auth.permissions` → `auth.role_permissions` → `auth.user_roles`). It is enforced **inside the stored procedure**: `auth.fn_has_permission(@user_id, '<key>')` is the first check inside the transaction, and a denial returns `ERRPERM01`. The Desktop and CLI grey out the matching controls from the same permission set (disable, not hide — `PermissionGating.GateBy`), but the UI is never the control: a client that skips it is still refused by the SP. System users (`is_system_role`) bypass the check (covered by test 142).
+RBAC is verb-on-resource (`auth.permissions` → `auth.role_permissions` → `auth.user_roles`). It is enforced **inside the stored procedure**: `auth.fn_has_permission(@user_id, '<key>')` is the first check inside the transaction, and a denial returns `ERRPERM01`. The Desktop and CLI grey out the matching controls from the same permission set (disable, not hide — `PermissionGating.GateBy`), but the UI is never the control: a client that skips it is still refused by the SP. System users hold a system role (`is_system_role`) that is **active**, and bypass the check (covered by test 142): disabling a system role switches its bypass off. The user's own `is_active` is deliberately not consulted — the seeded `system` user is inactive so nobody can log in as it, yet it must still pass the guard for scheduled jobs, so a user-active check there would lock it out.
 
 **Scope is a deliberate decision, not unfinished work.** Any authenticated user can do basic floor operations: receive, put away, pick, load, ship, move stock, carry out a count. Only what should not be available to everyone is gated:
 
