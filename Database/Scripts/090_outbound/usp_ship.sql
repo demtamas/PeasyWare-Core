@@ -85,6 +85,31 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
+        /* ── The order status is only a label; the units are the stock.
+               Every unit the ship cursor below is about to ship must
+               actually be LDD. An order marked LOADED while one of its
+               units never transitioned would otherwise ship that unit
+               straight from PKD and bury the discrepancy. Same selection
+               as the cursor, so nothing it would ship escapes the check. ── */
+        IF EXISTS (
+            SELECT 1
+            FROM outbound.outbound_orders o
+            JOIN outbound.outbound_lines ol
+                ON ol.outbound_order_id = o.outbound_order_id
+            JOIN outbound.outbound_allocations a
+                ON a.outbound_line_id = ol.outbound_line_id
+               AND a.allocation_status = 'PICKED'
+            JOIN inventory.inventory_units iu
+                ON iu.inventory_unit_id = a.inventory_unit_id
+            WHERE o.shipment_id = @shipment_id
+              AND iu.stock_state_code <> 'LDD'
+        )
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRSHIP10' AS result_code,
+                   @shipment_id AS shipment_id, 0 AS units_shipped;
+            ROLLBACK; RETURN;
+        END
+
         /* ── Ship each allocated unit ── */
         DECLARE
             @unit_id           INT,
@@ -119,9 +144,8 @@ BEGIN
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            /* Transition unit → SHP (from whichever state it's actually in -
-               LDD if load was confirmed, PKD in the (now blocked-by-default)
-               case load was somehow skipped) */
+            /* Transition unit → SHP. Every unit reaching here was asserted
+               LDD above, so @from_state is LDD by construction. */
             UPDATE inventory.inventory_units
             SET stock_state_code = 'SHP',
                 updated_at       = @now,
@@ -197,7 +221,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
         IF CURSOR_STATUS('local','ship_cursor') >= 0 BEGIN CLOSE ship_cursor; DEALLOCATE ship_cursor; END
-        SELECT CAST(0 AS BIT) AS success, N'ERRSHIP01' AS result_code,
+        SELECT CAST(0 AS BIT) AS success, N'ERRSHIP99' AS result_code,
                NULL AS shipment_id, 0 AS units_shipped;
     END CATCH
 END;

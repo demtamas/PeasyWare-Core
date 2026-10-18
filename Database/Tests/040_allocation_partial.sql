@@ -62,17 +62,15 @@ BEGIN TRY
     INSERT INTO outbound.outbound_lines (outbound_order_id, line_no, sku_id, ordered_qty, line_status_code)
     VALUES (@OrderId, 1, @SkuId, 120, 'NEW');
 
-    DECLARE @success BIT, @code NVARCHAR(20);
-
-    -- allow_partial = 1
-    CREATE TABLE #result (success BIT, result_code NVARCHAR(20), outbound_order_id INT);
-    INSERT INTO #result
+    -- allow_partial = 1. A plain EXEC on purpose: the procedure's result has grown
+    -- (delivery_date, then a second set listing the allocated units), so capturing
+    -- it with INSERT...EXEC into a fixed-shape table breaks every time that shape
+    -- changes. The outcome is asserted in the tables below, which is what matters.
     EXEC outbound.usp_allocate_order @outbound_order_id = @OrderId, @allow_partial = 1, @user_id = 1;
 
-    SELECT @success = success, @code = result_code FROM #result;
-
-    IF @success = 0
-        RAISERROR('PARTIAL TEST FAILED: SP returned failure with allow_partial=1. Code: %s', 16, 1, @code);
+    -- Success shows as the order reaching ALLOCATED (a failure rolls everything back)
+    IF ISNULL((SELECT order_status_code FROM outbound.outbound_orders WHERE outbound_order_id = @OrderId), '') <> 'ALLOCATED'
+        RAISERROR('PARTIAL TEST FAILED: order was not moved to ALLOCATED with allow_partial=1.', 16, 1);
 
     -- The one available pallet must be allocated
     IF NOT EXISTS (

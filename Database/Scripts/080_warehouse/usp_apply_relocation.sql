@@ -23,6 +23,12 @@ GO
    the whole transaction rolls back together.
 
    Returns the new ledger row id through @movement_id.
+
+   Refuses by itself, too: it THROWs if the unit does not exist or has
+   no placement row to move. Callers check this first
+   (fn_unit_move_block_code), but a ledger row claiming a unit moved
+   when nothing did is worse than an error, so the invariant does not
+   rest on every future caller remembering.
    ============================================================ */
 CREATE OR ALTER PROCEDURE warehouse.usp_apply_relocation
 (
@@ -60,11 +66,18 @@ BEGIN
     FROM inventory.inventory_units
     WHERE inventory_unit_id = @inventory_unit_id;
 
+    IF @from_state IS NULL
+        THROW 50021, 'usp_apply_relocation: unit not found.', 1;
+
     UPDATE inventory.inventory_placements
     SET bin_id    = @destination_bin_id,
         placed_at = @now,
         placed_by = @user_id
     WHERE inventory_unit_id = @inventory_unit_id;
+
+    -- Read straight after the UPDATE: exactly one placement row must have moved
+    IF @@ROWCOUNT <> 1
+        THROW 50020, 'usp_apply_relocation: unit has no placement to relocate.', 1;
 
     SET @to_state = @from_state;
 

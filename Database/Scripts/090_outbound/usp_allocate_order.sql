@@ -251,7 +251,11 @@ BEGIN
                     ROLLBACK; RETURN;
                 END
                 /* Partial mode: record what was allocated on this line, move to next */
-                IF @allocated_total - @remaining > 0 OR @newly_allocated_qty > 0
+                -- Only touch the line if this pass actually allocated something to it.
+                -- @allocated_total is THIS line's gain in this pass; @newly_allocated_qty is
+                -- the running total for the whole call and says nothing about this line
+                -- (using it here stamped updated_at on lines that gained nothing).
+                IF @allocated_total > 0
                 BEGIN
                     UPDATE outbound.outbound_lines
                     SET allocated_qty    = @ordered_qty - @remaining,
@@ -312,7 +316,7 @@ BEGIN
         IF @@TRANCOUNT > 0 ROLLBACK;
         IF CURSOR_STATUS('local','line_cursor') >= 0 BEGIN CLOSE line_cursor; DEALLOCATE line_cursor; END
         IF CURSOR_STATUS('local','unit_cursor') >= 0 BEGIN CLOSE unit_cursor; DEALLOCATE unit_cursor; END
-        SELECT CAST(0 AS BIT) AS success, N'ERRORD01' AS result_code, NULL AS outbound_order_id, @delivery_date AS delivery_date;
+        SELECT CAST(0 AS BIT) AS success, N'ERRALLOC99' AS result_code, NULL AS outbound_order_id, @delivery_date AS delivery_date;
     END CATCH
 END;
 

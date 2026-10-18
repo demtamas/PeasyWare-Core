@@ -52,13 +52,16 @@ BEGIN TRY
 
     -- ── 3. Two inventory units — PTW / AV ──────────────────────────
     --    Force created_at via explicit insert to control ordering.
+    --    Both pallets get the same BBE, a year out from today - relative, not a
+    --    fixed date, so the shelf-life rule never expires the fixture.
     DECLARE @UnitA INT, @UnitB INT;
+    DECLARE @Bbe DATE = DATEADD(YEAR, 1, CAST(GETDATE() AS DATE));
 
     -- Pallet A: older — should be picked by FIFO
     INSERT INTO inventory.inventory_units
         (sku_id, external_ref, best_before_date, quantity, stock_state_code, stock_status_code, created_at)
     VALUES
-        (@SkuId, 'TEST-SSCC-FIFO-A', '2026-12-01', 60, 'PTW', 'AV', '2026-01-01T06:00:00');
+        (@SkuId, 'TEST-SSCC-FIFO-A', @Bbe, 60, 'PTW', 'AV', '2026-01-01T06:00:00');
     SET @UnitA = SCOPE_IDENTITY();
 
     INSERT INTO inventory.inventory_placements (inventory_unit_id, bin_id)
@@ -68,7 +71,7 @@ BEGIN TRY
     INSERT INTO inventory.inventory_units
         (sku_id, external_ref, best_before_date, quantity, stock_state_code, stock_status_code, created_at)
     VALUES
-        (@SkuId, 'TEST-SSCC-FIFO-B', '2026-12-01', 60, 'PTW', 'AV', '2026-05-01T06:00:00');
+        (@SkuId, 'TEST-SSCC-FIFO-B', @Bbe, 60, 'PTW', 'AV', '2026-05-01T06:00:00');
     SET @UnitB = SCOPE_IDENTITY();
 
     INSERT INTO inventory.inventory_placements (inventory_unit_id, bin_id)

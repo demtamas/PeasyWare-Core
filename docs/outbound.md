@@ -350,6 +350,7 @@ ORDER BY l.line_no, a.allocation_id;
 Everything the first version of this document listed as "next" has been built:
 
 - **Load confirmation** — `outbound.usp_confirm_load`, per order, tied to its shipment. Picked units move to `LDD` and their placement is removed at load time rather than at ship time: a loaded pallet no longer occupies the floor, and a loading bay only has room for so many. It is mandatory before ship — a shipment with a picked-but-not-yet-loaded order is rejected (`ERRSHIP09`). A `LDD → PKD` reversal has a transition entry but no procedure yet.
+  Both procedures check the stock, not just the order's status label. `usp_confirm_load` refuses an order that is not on the shipment — including one on no shipment at all (`ERRLOAD01`) — rolls back unless every picked unit actually moved (`ERRLOAD02`), and reports a repeat as `SUCLOAD02` without touching anything. `usp_ship` refuses unless every picked unit is `LDD` (`ERRSHIP10`). `Database/Tests/170_lifecycle_integrity.sql` builds each contradiction and proves the refusal.
 - **Load and ship from the CLI** — `LoadFlow` and `ShipFlow`, alongside the Desktop dispatch screens.
 - **Re-allocation** — see the pick step above.
 - **Shelf life** — see the allocation rules above, and [`architecture.md`](architecture.md).

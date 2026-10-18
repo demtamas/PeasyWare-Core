@@ -4,6 +4,44 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
+/* ============================================================
+   outbound.usp_confirm_load
+   ------------------------------------------------------------
+   Order-level load confirmation: the operator confirms an order
+   is physically on the vehicle. No SSCC scanning - the pick
+   already confirmed which units are where.
+
+   On the first confirmation, every picked unit on the order goes
+   PKD -> LDD, its placement is removed (a loaded pallet no longer
+   occupies the floor), and a LOAD movement is written. The order
+   becomes LOADED and the shipment LOADING.
+
+   Guards, in order:
+     ERRORD01   order not found
+     ERRLOAD01  order is not on THIS shipment - including an order
+                that is on no shipment at all. (A plain
+                "order_shipment <> @shipment_id" is UNKNOWN when
+                order_shipment is NULL and lets an unlinked order
+                through: its units would go LDD with no placement
+                and the ship cursor, which filters on the order's
+                shipment, would never ship them.)
+     ERRSHIP01/02  shipment not found / not OPEN or LOADING
+     ERRORD02   order not PICKED or LOADED
+
+   Repeating the call on an order that is already LOADED changes
+   nothing and says so (SUCLOAD02) instead of reporting a fresh
+   load - provided every picked unit really is LDD. If one is not,
+   the order is inconsistent and is refused (ERRLOAD02) rather than
+   reported clean.
+
+   Reconciliation: the number of units moved to LDD must equal the
+   number of PICKED allocations on the order. If any picked unit
+   was not in PKD (and so was silently skipped by the cursor), the
+   whole confirmation rolls back (ERRLOAD02): an order is never
+   declared LOADED while stock behind it is not.
+
+   Contract: success BIT | result_code NVARCHAR(20)
+   ============================================================ */
 CREATE OR ALTER PROCEDURE outbound.usp_confirm_load
 (
     @outbound_order_id  INT,
@@ -22,12 +60,15 @@ BEGIN
     DECLARE
         @order_status    VARCHAR(10),
         @order_shipment  INT,
+        @shipment_status VARCHAR(10),
+        @expected_units  INT,
+        @units_loaded    INT = 0,
         @now             DATETIME2(3) = SYSUTCDATETIME();
 
     BEGIN TRY
         BEGIN TRAN;
 
-        /* ── 1. Validate order exists and belongs to this shipment ── */
+        /* ── 1. Order exists ── */
         SELECT
             @order_status   = order_status_code,
             @order_shipment = shipment_id
@@ -40,32 +81,81 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
-        IF @order_shipment <> @shipment_id
+        /* ── 2. Order belongs to THIS shipment (NULL-safe) ── */
+        IF @order_shipment IS NULL OR @order_shipment <> @shipment_id
         BEGIN
-            SELECT CAST(0 AS BIT) AS success, N'ERRORD02' AS result_code;
+            SELECT CAST(0 AS BIT) AS success, N'ERRLOAD01' AS result_code;
             ROLLBACK; RETURN;
         END
 
+        /* ── 3. Shipment can still be loaded ── */
+        SELECT @shipment_status = shipment_status
+        FROM outbound.shipments WITH (UPDLOCK, HOLDLOCK)
+        WHERE shipment_id = @shipment_id;
+
+        IF @shipment_status IS NULL
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRSHIP01' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        IF @shipment_status NOT IN ('OPEN', 'LOADING')
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRSHIP02' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        /* ── 4. Order is in a loadable status ── */
         IF @order_status NOT IN ('PICKED', 'LOADED')
         BEGIN
             SELECT CAST(0 AS BIT) AS success, N'ERRORD02' AS result_code;
             ROLLBACK; RETURN;
         END
 
-        /* ── 2. Transition order → LOADED ── */
+        /* ── 5. Already loaded: change nothing, say so - but only if the
+               stock behind the order really is loaded ── */
+        IF @order_status = 'LOADED'
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM outbound.outbound_lines ol
+                JOIN outbound.outbound_allocations a
+                    ON a.outbound_line_id = ol.outbound_line_id
+                   AND a.allocation_status = 'PICKED'
+                JOIN inventory.inventory_units iu
+                    ON iu.inventory_unit_id = a.inventory_unit_id
+                WHERE ol.outbound_order_id = @outbound_order_id
+                  AND iu.stock_state_code <> 'LDD'
+            )
+            BEGIN
+                SELECT CAST(0 AS BIT) AS success, N'ERRLOAD02' AS result_code;
+                ROLLBACK; RETURN;
+            END
+
+            COMMIT;
+            SELECT CAST(1 AS BIT) AS success, N'SUCLOAD02' AS result_code;
+            RETURN;
+        END
+
+        /* ── 6. First load. How many units should move? ── */
+        SELECT @expected_units = COUNT(*)
+        FROM outbound.outbound_lines ol
+        JOIN outbound.outbound_allocations a
+            ON a.outbound_line_id = ol.outbound_line_id
+           AND a.allocation_status = 'PICKED'
+        WHERE ol.outbound_order_id = @outbound_order_id;
+
         UPDATE outbound.outbound_orders
         SET order_status_code = 'LOADED',
             updated_at        = @now,
             updated_by        = @user_id
         WHERE outbound_order_id = @outbound_order_id;
 
-        /* ── 3. Transition every picked unit on this order: PKD → LDD,
+        /* ── 7. Transition every picked unit on this order: PKD -> LDD,
                remove its placement (physically leaving the warehouse
                floor the moment it's loaded, same convention usp_ship
-               already uses at SHP), and log a LOAD movement. Mirrors
-               usp_ship's own ship_cursor almost exactly, just scoped to
-               one order instead of a whole shipment, and one step earlier
-               in the lifecycle. ── */
+               uses at SHP), and log a LOAD movement. Mirrors usp_ship's
+               own ship_cursor, scoped to one order and one step earlier. ── */
         DECLARE
             @unit_id      INT,
             @sku_id       INT,
@@ -124,13 +214,24 @@ BEGIN
                 @now, @user_id, @session_id
             );
 
+            SET @units_loaded += 1;
+
             FETCH NEXT FROM load_cursor INTO @unit_id, @sku_id, @qty, @status_code, @from_bin_id;
         END
 
         CLOSE load_cursor;
         DEALLOCATE load_cursor;
 
-        /* ── 4. Transition shipment → LOADING if still OPEN ── */
+        /* ── 8. Reconcile: every picked allocation must have moved a unit.
+               Otherwise nothing is loaded - the rollback undoes the order
+               status, the unit moves and the ledger rows together. ── */
+        IF @units_loaded <> @expected_units
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRLOAD02' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
+        /* ── 9. Shipment -> LOADING if still OPEN ── */
         UPDATE outbound.shipments
         SET shipment_status = 'LOADING',
             updated_at      = @now,
@@ -146,12 +247,9 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK;
         IF CURSOR_STATUS('local','load_cursor') >= 0 BEGIN CLOSE load_cursor; DEALLOCATE load_cursor; END
-        SELECT CAST(0 AS BIT) AS success, N'ERRTASK99' AS result_code;
+        SELECT CAST(0 AS BIT) AS success, N'ERRLOAD99' AS result_code;
     END CATCH
 END;
 GO
-PRINT 'outbound.usp_confirm_load redesigned.';
-GO
-
--- Add SUCLOAD01 message
+PRINT 'outbound.usp_confirm_load created.';
 GO

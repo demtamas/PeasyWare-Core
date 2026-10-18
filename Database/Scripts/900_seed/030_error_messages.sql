@@ -18,6 +18,22 @@ FROM (VALUES
         N'Order loaded onto vehicle successfully.',
         N'Load.Confirm: order status LOADED, shipment LOADING'),
 
+    (N'SUCLOAD02', N'LOAD', N'INFO',
+        N'This order was already loaded. Nothing was changed.',
+        N'usp_confirm_load: order already LOADED and every picked unit is LDD - no-op'),
+
+    (N'ERRLOAD01', N'LOAD', N'ERROR',
+        N'This order is not on the shipment being loaded.',
+        N'usp_confirm_load: order.shipment_id is NULL or <> @shipment_id'),
+
+    (N'ERRLOAD02', N'LOAD', N'ERROR',
+        N'Not every picked pallet on this order could be loaded, so nothing was loaded. Contact a supervisor.',
+        N'usp_confirm_load: units moved to LDD <> PICKED allocations on the order (a picked unit was not PKD), or an already-LOADED order has a unit not LDD - rolled back'),
+
+    (N'ERRLOAD99', N'LOAD', N'ERROR',
+        N'Load confirmation failed unexpectedly. Nothing was changed.',
+        N'usp_confirm_load: unhandled exception'),
+
     -- ── Order ──────────────────────────────────────────────────────────────
     (N'ERRORD01', N'ORD', N'ERROR',
         N'Order not found.',
@@ -106,6 +122,14 @@ FROM (VALUES
         N'One or more orders on this shipment have been picked but not yet loaded. Confirm loading for all orders before shipping.',
         N'outbound.usp_ship: order_status_code = PICKED (load not confirmed) for at least one order'),
 
+    (N'ERRSHIP10', N'SHIP', N'ERROR',
+        N'A pallet on this shipment has not been loaded, so nothing was shipped. Contact a supervisor.',
+        N'outbound.usp_ship: a PICKED allocation on the shipment has a unit whose stock_state_code <> LDD'),
+
+    (N'ERRSHIP99', N'SHIP', N'ERROR',
+        N'Shipping failed unexpectedly. Nothing was shipped.',
+        N'outbound.usp_ship: unhandled exception'),
+
     (N'SUCSHIP01', N'SHIP', N'INFO', N'Shipment created successfully.',   N'Shipment.Create: success'),
     (N'SUCSHIP02', N'SHIP', N'INFO', N'Shipment departed. All units shipped.', N'Shipment.Ship: success'),
     (N'SUCSHIP03', N'SHIP', N'INFO', N'Order added to shipment.',          N'usp_add_order_to_shipment: success'),
@@ -139,6 +163,10 @@ FROM (VALUES
     (N'ERRALLOC07', N'ALLOC', N'ERROR',
         N'Line is not in a re-allocatable state.',
         N'ReallocateLine: line_status_code not in (ALLOCATED, PICKING)'),
+
+    (N'ERRALLOC99', N'ALLOC', N'ERROR',
+        N'Unexpected error during allocation. Nothing was changed.',
+        N'usp_allocate_order / usp_cancel_allocation / usp_reallocate_line: unhandled exception'),
 
     (N'SUCALLOC01', N'ALLOC', N'INFO', N'Stock allocated successfully.',          N'Allocate: allocation rows created'),
     (N'SUCALLOC02', N'ALLOC', N'INFO', N'Allocation cancelled successfully.',     N'CancelAllocation: status set to CANCELLED'),

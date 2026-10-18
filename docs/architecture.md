@@ -219,6 +219,7 @@ The SQL suite is `Database/Tests/*.sql`, run with `run_db_tests.ps1` (`sqlcmd -b
 - Scripts that exercise procedures which `ROLLBACK` internally on their refusal paths (146, 150, 160) cannot sit in an outer transaction — the procedure's rollback would end it. They build fixtures with a distinctive prefix (`MVTEST-`, `CNTTEST-`), assert on side effects, and clean up in a final block that always runs, with the failure message re-raised after cleanup.
 - Refusals are asserted by their side effects (no task, no reservation, placement unchanged) and by calling the shared rule functions directly, which return the exact code. A result set cannot be captured with `INSERT … EXEC` from a procedure that rolls back.
 - Permission tests create temporary users with real roles and assert both directions: the gated role is refused, the permitted roles are allowed.
+- **Fixture dates are relative to today.** Anything the shelf-life rule compares against the delivery date (best-before dates above all) must be `DATEADD` from today, never a literal. A fixed date rots: allocation tests 010 and 020 started failing when their hard-coded best-before dates passed, because the rule was correctly refusing expired stock. Dates that are only recorded, never compared against now, can stay fixed.
 
 ---
 

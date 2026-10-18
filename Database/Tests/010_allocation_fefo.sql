@@ -5,8 +5,11 @@
 --
 -- Setup:
 --   Two pallets of the same SKU in rack bins, both PTW/AV.
---   Pallet A — BBE 2026-06-01 (earlier)
---   Pallet B — BBE 2026-12-01 (later)
+--   Pallet A — BBE today + 3 months (earlier)
+--   Pallet B — BBE today + 9 months (later)
+--   (Relative to today on purpose. Fixed dates rot: once a BBE is in the past the
+--    shelf-life rule correctly refuses the pallet, which is exactly how this test
+--    started failing when 2026-06-01 went by.)
 --   Order line requests 1 pallet.
 --
 -- Expected: Pallet A (earlier BBE) is allocated.
@@ -52,12 +55,13 @@ BEGIN TRY
 
     -- ── 3. Two inventory units — PTW / AV ──────────────────────────
     DECLARE @UnitA INT, @UnitB INT;
+    DECLARE @Today DATE = CAST(GETDATE() AS DATE);
 
     -- Pallet A: earlier BBE — should be picked by FEFO
     INSERT INTO inventory.inventory_units
         (sku_id, external_ref, batch_number, best_before_date, quantity, stock_state_code, stock_status_code)
     VALUES
-        (@SkuId, 'TEST-SSCC-FEFO-A', 'BATCH-A', '2026-06-01', 60, 'PTW', 'AV');
+        (@SkuId, 'TEST-SSCC-FEFO-A', 'BATCH-A', DATEADD(MONTH, 3, @Today), 60, 'PTW', 'AV');
     SET @UnitA = SCOPE_IDENTITY();
 
     INSERT INTO inventory.inventory_placements (inventory_unit_id, bin_id)
@@ -67,7 +71,7 @@ BEGIN TRY
     INSERT INTO inventory.inventory_units
         (sku_id, external_ref, batch_number, best_before_date, quantity, stock_state_code, stock_status_code)
     VALUES
-        (@SkuId, 'TEST-SSCC-FEFO-B', 'BATCH-B', '2026-12-01', 60, 'PTW', 'AV');
+        (@SkuId, 'TEST-SSCC-FEFO-B', 'BATCH-B', DATEADD(MONTH, 9, @Today), 60, 'PTW', 'AV');
     SET @UnitB = SCOPE_IDENTITY();
 
     INSERT INTO inventory.inventory_placements (inventory_unit_id, bin_id)
@@ -105,7 +109,7 @@ BEGIN TRY
           AND a.allocation_status = 'PENDING'
     )
     BEGIN
-        RAISERROR('FEFO TEST FAILED: Pallet A (early BBE 2026-06-01) was not allocated.', 16, 1);
+        RAISERROR('FEFO TEST FAILED: Pallet A (earlier BBE) was not allocated.', 16, 1);
     END
 
     -- Assert: Pallet B (late BBE) must NOT be allocated
@@ -116,7 +120,7 @@ BEGIN TRY
           AND a.allocation_status = 'PENDING'
     )
     BEGIN
-        RAISERROR('FEFO TEST FAILED: Pallet B (late BBE 2026-12-01) was incorrectly allocated.', 16, 1);
+        RAISERROR('FEFO TEST FAILED: Pallet B (later BBE) was incorrectly allocated.', 16, 1);
     END
 
     PRINT 'TEST PASSED: Allocation FEFO — correct pallet selected.';
