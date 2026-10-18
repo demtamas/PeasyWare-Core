@@ -15,7 +15,11 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <!-- Pinned to 7.2.0, the last Apache-2.0 release. From 8.0 Fluent Assertions is under the
+         Xceed licence (free for non-commercial use only; commercial use needs a paid
+         subscription), which is stricter than this repository's MIT licence promises to
+         anyone who clones it and runs the tests. Do not bump to 8.x without revisiting that. -->
+    <PackageReference Include="FluentAssertions" Version="7.2.0" />
   </ItemGroup>
 
   <ItemGroup>
