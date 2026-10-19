@@ -27,7 +27,8 @@ GO
      success BIT | result_code NVARCHAR(20) | count_id INT
      | final_status VARCHAR(10)
    Codes: SUCCNT06 reviewed | ERRPERM01 not permitted
-          ERRCNT08 not awaiting review | ERRCNT09 note required | ERRCNT99
+          ERRCNT08 not awaiting review | ERRCNT09 note required
+          ERRCNT30 findings still to apply or decline | ERRCNT99
    ============================================================ */
 CREATE OR ALTER PROCEDURE warehouse.usp_count_review
 (
@@ -76,6 +77,22 @@ BEGIN
         IF @note IS NULL OR @note = N''
         BEGIN
             SET @result_code = N'ERRCNT09';
+            GOTO Finish;
+        END
+
+        -- A bin count's quantity / missing / misplaced findings each need a
+        -- decision (applied or declined) first. Unknown and shipped / reversed
+        -- pallets have nothing to apply: the reviewer's note covers them.
+        IF EXISTS (
+            SELECT 1
+            FROM warehouse.count_findings f
+            JOIN warehouse.count_lines l ON l.count_line_id = f.count_line_id
+            WHERE l.count_id = @count_id
+              AND f.finding_code IN ('QTY_DIFFERENCE', 'MISSING', 'MISPLACED')
+              AND f.resolution_code IS NULL
+        )
+        BEGIN
+            SET @result_code = N'ERRCNT30';
             GOTO Finish;
         END
 

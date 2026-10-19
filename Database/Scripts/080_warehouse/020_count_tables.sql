@@ -10,8 +10,10 @@ GO
    count_sessions  one count of one kind over one scope.
                    EMPTY_BIN  scope = a storage type; bins the system
                               believes are empty
-                   BIN_COUNT  scope = a storage type, or NULL = every
-                              storage type (a sweep); bins that hold stock
+                   BIN_COUNT  scope = a storage type, every storage type
+                              (a sweep), or a hand-picked list of bins (ad
+                              hoc); bins that hold stock - an ad hoc count
+                              may also name an empty bin
    count_lines     one row per bin in the count, snapshotted at
                    start so the walk list is stable and "bins not
                    yet counted" is reportable.
@@ -46,7 +48,14 @@ CREATE TABLE warehouse.count_sessions
     count_id         INT IDENTITY(1,1) PRIMARY KEY,
 
     count_type_code  VARCHAR(20)  NOT NULL,          -- EMPTY_BIN | BIN_COUNT
-    storage_type_id  INT          NULL,              -- scope; NULL = all (BIN_COUNT sweep)
+    storage_type_id  INT          NULL,              -- the storage type, for scope STORAGE_TYPE
+
+    -- What the count covers:
+    --   STORAGE_TYPE  one storage type (storage_type_id set). EMPTY_BIN counts
+    --                 and bin counts of a single storage type.
+    --   ALL           every storage type - a BIN_COUNT sweep (storage_type_id NULL)
+    --   ADHOC         a hand-picked list of bins - BIN_COUNT only (storage_type_id NULL)
+    scope_code       VARCHAR(12)  NOT NULL DEFAULT 'STORAGE_TYPE',
 
     status_code      VARCHAR(10)  NOT NULL DEFAULT 'OPEN',
         -- OPEN      in progress / resumable
@@ -72,16 +81,22 @@ CREATE TABLE warehouse.count_sessions
     CONSTRAINT CK_count_sessions_status
         CHECK (status_code IN ('OPEN', 'REVIEW', 'COMPLETE', 'CLOSED')),
 
+    CONSTRAINT CK_count_sessions_scope
+        CHECK (   (scope_code = 'STORAGE_TYPE' AND storage_type_id IS NOT NULL)
+               OR (scope_code IN ('ALL', 'ADHOC') AND storage_type_id IS NULL)),
+
     CONSTRAINT FK_count_sessions_storage_type
         FOREIGN KEY (storage_type_id)
         REFERENCES locations.storage_types(storage_type_id)
 );
 
--- NULL scope (a sweep) is one scope like any other here: SQL Server treats
--- NULLs as equal in a unique index, so there is at most one OPEN sweep.
+-- A storage type, or the whole warehouse (a sweep), is one scope like any other
+-- here: SQL Server treats NULLs as equal in a unique index, so there is at most
+-- one OPEN sweep. Ad hoc counts are deliberately exempt: each is its own
+-- hand-picked list, several can be open at once, and none of them is a sweep.
 CREATE UNIQUE INDEX UX_count_sessions_open_scope
 ON warehouse.count_sessions (count_type_code, storage_type_id)
-WHERE status_code = 'OPEN';
+WHERE status_code = 'OPEN' AND scope_code <> 'ADHOC';
 
 CREATE TABLE warehouse.count_lines
 (

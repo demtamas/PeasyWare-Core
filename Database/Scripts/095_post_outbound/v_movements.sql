@@ -14,6 +14,9 @@ SELECT
     s.sku_code,
     s.sku_description,
     m.moved_qty,
+    -- Quantity adjustments only (NULL otherwise): what it was and what it became
+    m.qty_before,
+    m.qty_after,
     -- Location transition
     fb.bin_code                             AS from_bin,
     tb.bin_code                             AS to_bin,

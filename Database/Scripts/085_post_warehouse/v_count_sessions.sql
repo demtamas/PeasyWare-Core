@@ -10,7 +10,9 @@ GO
    One row per count with its progress, for the Desktop Counting
    view and the CLI "resume" check.
 
-   storage_type_code   NULL for a BIN_COUNT sweep (every storage type)
+   scope_code          STORAGE_TYPE (one storage type), ALL (a BIN_COUNT sweep:
+                       every storage type) or ADHOC (a hand-picked list of bins)
+   storage_type_code   NULL for a sweep and for an ad hoc count
 
    Bin outcomes (EMPTY_BIN counts):
      confirmed_empty / stock_found / occupied_since
@@ -33,6 +35,7 @@ AS
 SELECT
     cs.count_id,
     cs.count_type_code,
+    cs.scope_code,
     st.storage_type_code,
     cs.status_code,
     cs.started_at,
@@ -66,7 +69,7 @@ LEFT JOIN auth.users su              ON su.id = cs.started_by
 LEFT JOIN auth.users cu              ON cu.id = cs.completed_by
 LEFT JOIN auth.users ru              ON ru.id = cs.reviewed_by
 GROUP BY
-    cs.count_id, cs.count_type_code, st.storage_type_code, cs.status_code,
+    cs.count_id, cs.count_type_code, cs.scope_code, st.storage_type_code, cs.status_code,
     cs.started_at, su.username, cs.completed_at, cu.username,
     cs.reviewed_at, ru.username, cs.review_note;
 GO

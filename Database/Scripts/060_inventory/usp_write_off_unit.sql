@@ -83,37 +83,17 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
-        SELECT @from_bin_id = bin_id
-        FROM inventory.inventory_placements
-        WHERE inventory_unit_id = @inventory_unit_id;
+        -- The effect itself (placement removed, state to SCR, ledger row) lives in
+        -- one place, shared with the stock-count adjustment.
+        DECLARE @movement_id INT;
 
-        DELETE FROM inventory.inventory_placements
-        WHERE inventory_unit_id = @inventory_unit_id;
-
-        UPDATE inventory.inventory_units
-        SET stock_state_code = 'SCR',
-            updated_at       = @now,
-            updated_by       = @user_id
-        WHERE inventory_unit_id = @inventory_unit_id;
-
-        INSERT INTO inventory.inventory_movements
-        (
-            inventory_unit_id, sku_id, moved_qty,
-            from_bin_id, to_bin_id,
-            from_state_code, to_state_code,
-            from_status_code, to_status_code,
-            movement_type, reference_type, reference_id,
-            moved_at, moved_by_user_id, session_id
-        )
-        VALUES
-        (
-            @inventory_unit_id, @sku_id, @quantity,
-            @from_bin_id, NULL,
-            @current_state, 'SCR',
-            @current_status, @current_status,
-            'ADJUSTMENT', 'MANUAL', NULL,
-            @now, @user_id, @session_id
-        );
+        EXEC inventory.usp_apply_scrap
+            @inventory_unit_id = @inventory_unit_id,
+            @reference_type    = N'MANUAL',
+            @reference_id      = NULL,
+            @user_id           = @user_id,
+            @session_id        = @session_id,
+            @movement_id       = @movement_id OUTPUT;
 
         COMMIT;
 

@@ -460,7 +460,69 @@ FROM (VALUES
 
     (N'SUCCNT13', N'COUNT', N'SUCCESS',
         N'Bin count cancelled. The bin can be counted again.',
-        N'usp_count_cancel_bin: scans discarded, line back to PENDING, COUNT reservation released')
+        N'usp_count_cancel_bin: scans discarded, line back to PENDING, COUNT reservation released'),
+
+    -- ── Bin count: the supervisor's decision (counts.adjust) ────────────────────────────
+    (N'ERRCNT20', N'COUNT', N'ERROR',
+        N'That finding does not exist.',
+        N'usp_count_apply_finding: finding_id not found'),
+
+    (N'ERRCNT21', N'COUNT', N'ERROR',
+        N'This count is not waiting for review, so its findings cannot be applied or declined.',
+        N'usp_count_apply_finding: the count is not a BIN_COUNT in status REVIEW (still open, or already reviewed)'),
+
+    (N'ERRCNT22', N'COUNT', N'ERROR',
+        N'This finding has already been applied or declined.',
+        N'usp_count_apply_finding: resolution_code is not NULL'),
+
+    (N'ERRCNT23', N'COUNT', N'ERROR',
+        N'There is nothing to apply for this finding - decline it with a note once it has been dealt with.',
+        N'usp_count_apply_finding: finding_code is UNKNOWN_UNIT or NOT_CORRECTED; only QTY_DIFFERENCE, MISSING and MISPLACED can be applied'),
+
+    (N'ERRCNT24', N'COUNT', N'ERROR',
+        N'Enter a note saying why this finding is being declined.',
+        N'usp_count_apply_finding: @action = DECLINE with an empty @note'),
+
+    (N'ERRCNT25', N'COUNT', N'ERROR',
+        N'The action must be Apply or Decline.',
+        N'usp_count_apply_finding: @action not APPLY / DECLINE'),
+
+    (N'ERRCNT26', N'COUNT', N'ERROR',
+        N'The stock record has changed since this was counted, so it cannot be applied. Count the bin again.',
+        N'usp_count_apply_finding: the unit no longer sits where, or holds what, the count recorded (placement bin or quantity differs from the finding)'),
+
+    (N'ERRCNT27', N'COUNT', N'ERROR',
+        N'This stock''s status does not allow its quantity to be adjusted. Change its status first.',
+        N'usp_count_apply_finding: inventory.stock_operation_rules can_adjust = 0 for the unit''s state + status'),
+
+    (N'ERRCNT28', N'COUNT', N'ERROR',
+        N'This pallet is allocated to an order. Deallocate the order before changing it.',
+        N'usp_count_apply_finding: the unit has an outbound allocation in PENDING / CONFIRMED / PICKED'),
+
+    (N'ERRCNT29', N'COUNT', N'ERROR',
+        N'This pallet is mid-flow (picked, loaded or moving) and cannot be changed from a count. Deal with it in its own process.',
+        N'usp_count_apply_finding: unit stock_state_code is not PTW / RCD'),
+
+    (N'ERRCNT30', N'COUNT', N'ERROR',
+        N'Apply or decline every quantity, missing and misplaced finding before marking the count reviewed.',
+        N'usp_count_review: unresolved QTY_DIFFERENCE / MISSING / MISPLACED findings remain'),
+
+    (N'SUCCNT20', N'COUNT', N'SUCCESS',
+        N'Finding applied. The stock record now matches the count.',
+        N'usp_count_apply_finding: resolution APPLIED, ledger row in resolution_movement_id'),
+
+    (N'SUCCNT21', N'COUNT', N'SUCCESS',
+        N'Finding declined. The stock record was left as it is.',
+        N'usp_count_apply_finding: resolution DECLINED, note recorded'),
+
+    -- ── Bin count: ad hoc (a hand-picked list of bins) ─────────────────────────────────────
+    (N'ERRCNT40', N'COUNT', N'ERROR',
+        N'A bin you chose is not an active bin, so it cannot be counted.',
+        N'usp_count_start_adhoc: a bin code is not matched exactly to an active bin in an active storage type; the first such code is returned in invalid_bin_code'),
+
+    (N'ERRCNT41', N'COUNT', N'ERROR',
+        N'Choose at least one bin to count.',
+        N'usp_count_start_adhoc: the list of bin codes is empty')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (

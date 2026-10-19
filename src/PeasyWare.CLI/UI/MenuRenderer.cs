@@ -88,6 +88,7 @@ public static class MenuRenderer
         Console.WriteLine("Counts");
         Console.WriteLine("──────────────────────────");
         Console.WriteLine("1. Empty bin check");
+        Console.WriteLine("2. Bin count (blind)");
         Console.WriteLine("0. Back");
         Console.WriteLine();
 

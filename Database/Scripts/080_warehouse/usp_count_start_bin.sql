@@ -23,10 +23,12 @@ GO
    - An OPEN bin count of exactly that scope is resumed, not duplicated
      (the filtered unique index UX_count_sessions_open_scope backs this up).
    - A sweep and a single-storage-type count cannot be open together: they
-     would cover the same bins twice. ERRCNT11.
-   - Otherwise a session is created and every active bin that holds at least
-     one pallet is snapshotted into count_lines as PENDING. No such bin =
-     no session (ERRCNT13).
+     would cover the same bins twice. ERRCNT11. (An ad hoc count - a hand-picked
+     list of bins, usp_count_start_adhoc - is neither, and never conflicts.)
+   - Otherwise a session is created and every bin in warehouse.v_occupied_bins
+     (the one definition of a bin to count, shared with the CLI picker) for the
+     scope is snapshotted into count_lines as PENDING. No such bin = no session
+     (ERRCNT13).
 
    Contract (one row, always):
      success BIT | result_code NVARCHAR(20) | count_id INT
@@ -83,6 +85,7 @@ BEGIN
         FROM warehouse.count_sessions WITH (UPDLOCK, HOLDLOCK)
         WHERE count_type_code = 'BIN_COUNT'
           AND status_code     = 'OPEN'
+          AND scope_code     <> 'ADHOC'
           AND (   storage_type_id = @storage_type_id
                OR (storage_type_id IS NULL AND @storage_type_id IS NULL));
 
@@ -99,6 +102,7 @@ BEGIN
                 FROM warehouse.count_sessions WITH (UPDLOCK, HOLDLOCK)
                 WHERE count_type_code = 'BIN_COUNT'
                   AND status_code     = 'OPEN'
+                  AND scope_code     <> 'ADHOC'      -- a hand-picked list overlaps nothing
                   AND (@storage_type_id IS NULL OR storage_type_id IS NULL)
             )
             BEGIN
@@ -107,24 +111,19 @@ BEGIN
             END
 
             INSERT INTO warehouse.count_sessions
-                (count_type_code, storage_type_id, started_at, started_by)
+                (count_type_code, storage_type_id, scope_code, started_at, started_by)
             VALUES
-                ('BIN_COUNT', @storage_type_id, @now, @user_id);
+                ('BIN_COUNT', @storage_type_id,
+                 CASE WHEN @storage_type_id IS NULL THEN 'ALL' ELSE 'STORAGE_TYPE' END,
+                 @now, @user_id);
 
             SET @count_id = SCOPE_IDENTITY();
 
             INSERT INTO warehouse.count_lines (count_id, bin_id)
-            SELECT @count_id, b.bin_id
-            FROM locations.bins b
-            JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
-            WHERE b.is_active  = 1
-              AND st.is_active = 1
-              AND (@storage_type_id IS NULL OR b.storage_type_id = @storage_type_id)
-              AND EXISTS (
-                    SELECT 1
-                    FROM inventory.inventory_placements ip
-                    WHERE ip.bin_id = b.bin_id
-              );
+            SELECT @count_id, ob.bin_id
+            FROM warehouse.v_occupied_bins ob
+            WHERE @storage_type_id IS NULL
+               OR ob.storage_type_id = @storage_type_id;
 
             IF @@ROWCOUNT = 0
             BEGIN

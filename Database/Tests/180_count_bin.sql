@@ -35,6 +35,11 @@
 --   Sweep:    no storage type = every storage type; resumes; refuses a
 --             single-storage-type count beside it
 --   Guards:   the empty-bin procedures refuse a bin count and vice versa
+--   Ad hoc:   a hand-picked list of bins (any active bin, empty or occupied) is a
+--             count of its own: an empty / inactive / unknown / wrong-case list
+--             starts nothing; a bin named twice is one line; it runs beside a
+--             sweep and beside another ad hoc count; an empty bin counted with
+--             nothing scanned is MATCHED, and a pallet found in one is a finding
 --   Anyone:   every counting call is made by an OPERATOR-role user
 --
 -- No outer transaction: the procedures roll back internally on their
@@ -787,6 +792,109 @@ BEGIN TRY
         RAISERROR('FAIL: closing an untouched sweep should give CLOSED.', 16, 1);
 
     PRINT 'PASS: a sweep covers every storage type, resumes, refuses overlaps; the two count families refuse each other.';
+
+    ----------------------------------------------------------------
+    -- 11. Ad hoc: a hand-picked list of bins
+    ----------------------------------------------------------------
+    DECLARE @sep  NCHAR(1) = NCHAR(30);
+    DECLARE @list NVARCHAR(MAX);
+
+    -- An empty list, an inactive bin, a bin that does not exist and a wrong-case
+    -- bin each start NOTHING
+    SET @list = N'';
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    SET @list = N'BINTEST-A1' + @sep + N'BINTEST-A5';          -- A5 is inactive
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    SET @list = N'BINTEST-A1' + @sep + N'BINTEST-NOPE';        -- no such bin
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    SET @list = N'BINTEST-A1' + @sep + N'bintest-a2';          -- wrong case
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    IF EXISTS (SELECT 1 FROM warehouse.count_sessions WHERE scope_code = 'ADHOC')
+        RAISERROR('FAIL: an ad hoc count with an empty or invalid list was started.', 16, 1);
+
+    -- A good list: an occupied bin and an EMPTY bin; A1 named twice is one line
+    SET @list = N'BINTEST-A1' + @sep + N'BINTEST-A4' + @sep + N'BINTEST-A1';
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    DECLARE @AdhocX INT = (SELECT TOP (1) count_id FROM warehouse.count_sessions
+                           WHERE scope_code = 'ADHOC' AND status_code = 'OPEN' ORDER BY count_id);
+    IF @AdhocX IS NULL
+        RAISERROR('FAIL: an ad hoc count could not be started.', 16, 1);
+
+    IF NOT EXISTS (SELECT 1 FROM warehouse.count_sessions
+                   WHERE count_id = @AdhocX AND count_type_code = 'BIN_COUNT'
+                     AND storage_type_id IS NULL AND scope_code = 'ADHOC')
+        RAISERROR('FAIL: an ad hoc count is not a BIN_COUNT with scope ADHOC and no storage type.', 16, 1);
+
+    IF (SELECT COUNT(*) FROM warehouse.count_lines WHERE count_id = @AdhocX) <> 2
+        RAISERROR('FAIL: the ad hoc list (A1, A4, A1) should give exactly two lines.', 16, 1);
+
+    IF NOT EXISTS (SELECT 1 FROM warehouse.v_count_sessions WHERE count_id = @AdhocX AND scope_code = 'ADHOC' AND storage_type_code IS NULL)
+        RAISERROR('FAIL: the count view does not show an ad hoc count as ADHOC with no storage type.', 16, 1);
+
+    -- A sweep can run beside an open ad hoc count (it is neither a sweep nor a storage type) ...
+    EXEC warehouse.usp_count_start_bin @storage_type_code = NULL, @user_id = @OpId;
+
+    DECLARE @Sweep2 INT = (SELECT count_id FROM warehouse.count_sessions
+                           WHERE scope_code = 'ALL' AND status_code = 'OPEN');
+    IF @Sweep2 IS NULL
+        RAISERROR('FAIL: a sweep could not be started beside an open ad hoc count.', 16, 1);
+
+    EXEC warehouse.usp_count_close @count_id = @Sweep2, @user_id = @OpId;
+
+    -- ... and so can a second ad hoc count, even over a bin the first one names
+    SET @list = N'BINTEST-A4' + @sep + N'BINTEST-A2';
+    EXEC warehouse.usp_count_start_adhoc @bin_codes = @list, @user_id = @OpId;
+
+    DECLARE @AdhocY INT = (SELECT TOP (1) count_id FROM warehouse.count_sessions
+                           WHERE scope_code = 'ADHOC' AND status_code = 'OPEN' AND count_id <> @AdhocX
+                           ORDER BY count_id);
+    IF @AdhocY IS NULL
+        RAISERROR('FAIL: a second ad hoc count could not be open beside the first.', 16, 1);
+
+    -- A bin that is not in an ad hoc count's list cannot be opened in it
+    EXEC warehouse.usp_count_open_bin @count_id = @AdhocY, @bin_code = 'BINTEST-A1', @user_id = @OpId;
+
+    IF EXISTS (SELECT 1 FROM locations.bin_reservations WHERE bin_id = @A1 AND reservation_type = 'COUNT')
+        RAISERROR('FAIL: a bin outside an ad hoc count''s list was opened in it.', 16, 1);
+
+    -- An EMPTY bin counted with nothing scanned: confirmed empty, MATCHED, no findings
+    EXEC warehouse.usp_count_open_bin   @count_id = @AdhocX, @bin_code = 'BINTEST-A4', @user_id = @OpId;
+    EXEC warehouse.usp_count_finish_bin @count_id = @AdhocX, @bin_code = 'BINTEST-A4', @user_id = @OpId;
+
+    IF (SELECT l.line_status_code FROM warehouse.count_lines l WHERE l.count_id = @AdhocX AND l.bin_id = @A4) <> 'MATCHED'
+       OR EXISTS (SELECT 1 FROM warehouse.count_findings f JOIN warehouse.count_lines l ON l.count_line_id = f.count_line_id
+                  WHERE l.count_id = @AdhocX)
+        RAISERROR('FAIL: an empty bin counted with nothing scanned was not MATCHED with no findings.', 16, 1);
+
+    -- The same empty bin, in the other ad hoc count, with a pallet found in it
+    EXEC warehouse.usp_count_open_bin   @count_id = @AdhocY, @bin_code = 'BINTEST-A4', @user_id = @OpId;
+    EXEC warehouse.usp_count_scan_unit  @count_id = @AdhocY, @bin_code = 'BINTEST-A4', @scanned_ref = 'BINTEST-U6', @counted_qty = 60, @user_id = @OpId;
+    EXEC warehouse.usp_count_finish_bin @count_id = @AdhocY, @bin_code = 'BINTEST-A4', @user_id = @OpId;
+
+    IF NOT EXISTS (SELECT 1 FROM warehouse.count_findings f
+                   JOIN warehouse.count_lines l ON l.count_line_id = f.count_line_id
+                   WHERE l.count_id = @AdhocY AND f.inventory_unit_id = @U6
+                     AND f.finding_code = 'MISPLACED' AND f.previous_bin_id = @A6)
+        RAISERROR('FAIL: a pallet found in an "empty" bin was not recorded as MISPLACED (previous bin A6).', 16, 1);
+
+    IF (SELECT bin_id FROM inventory.inventory_placements WHERE inventory_unit_id = @U6) <> @A6
+        RAISERROR('FAIL: an ad hoc count relocated a pallet (it must only record).', 16, 1);
+
+    -- Close them: X leaves a bin uncounted with nothing to review (CLOSED);
+    -- Y has an undecided finding (REVIEW)
+    EXEC warehouse.usp_count_close @count_id = @AdhocX, @user_id = @OpId;
+    EXEC warehouse.usp_count_close @count_id = @AdhocY, @user_id = @OpId;
+
+    IF (SELECT status_code FROM warehouse.count_sessions WHERE count_id = @AdhocX) <> 'CLOSED'
+       OR (SELECT status_code FROM warehouse.count_sessions WHERE count_id = @AdhocY) <> 'REVIEW'
+        RAISERROR('FAIL: the ad hoc counts should close as CLOSED (bin left, nothing to review) and REVIEW (a finding).', 16, 1);
+
+    PRINT 'PASS: ad hoc counts take a hand-picked list (empty bins included), run beside sweeps and each other, and record like any bin count.';
 
     PRINT 'TEST PASSED: bin count.';
 

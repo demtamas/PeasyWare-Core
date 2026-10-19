@@ -336,6 +336,14 @@ CREATE TABLE inventory.inventory_movements
     moved_qty              INT NOT NULL
                            CHECK (moved_qty > 0),
 
+    -- ADJUSTMENT movements that change a quantity (a stock count applied by
+    -- a supervisor): what it was and what it became. moved_qty is then the SIZE
+    -- of the change and is always positive, so the direction is readable only
+    -- from these two - and a reversal knows exactly what to put back.
+    -- NULL for every other movement.
+    qty_before             INT NULL,
+    qty_after              INT NULL,
+
     /* --------------------------------------------------------
        Location transition
        -------------------------------------------------------- */

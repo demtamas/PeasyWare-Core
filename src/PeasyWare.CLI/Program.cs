@@ -367,6 +367,7 @@ static void RunCounts(AppRuntime runtime, SessionContext session)
         switch (input)
         {
             case "1": new CountEmptyBinFlow(runtime, session).Run(); break;
+            case "2": new CountBinFlow(runtime, session).Run();      break;
             case "0": return;
             default: Console.WriteLine("Invalid option."); break;
         }

@@ -14,15 +14,17 @@ public sealed class SqlCountQueryRepository
     : RepositoryBase, ICountQueryRepository
 {
     private const string SessionColumns = """
-        count_id, count_type_code, storage_type_code, status_code,
+        count_id, count_type_code, scope_code, storage_type_code, status_code,
         started_at, started_by, completed_at, completed_by,
         total_bins, pending_bins, confirmed_empty, stock_found, occupied_since,
+        counting_bins, matched_bins, difference_bins,
         findings_to_review, reviewed_at, reviewed_by, review_note
         """;
 
     private const string LineColumns = """
         count_line_id, count_id, bin_code, zone_code, storage_type_code,
-        line_status_code, counted_at, counted_by, finding_count
+        line_status_code, opened_at, counted_at, counted_by,
+        pallets_scanned, finding_count
         """;
 
     // Walk order: by zone (numerically where the code is a number, unzoned
@@ -104,6 +106,92 @@ public sealed class SqlCountQueryRepository
         }
 
         return results;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Picker: storage types with bins to bin-count (or an open bin count)
+    // ────────────────────────────────────────────────────────
+
+    public IReadOnlyList<BinCountSummaryDto> GetBinCountSummary()
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        // One definition of "a bin to count" (warehouse.v_occupied_bins), the same
+        // one the count snapshot uses. A storage type with an open bin count is
+        // listed even if nothing holds stock right now, so it can be resumed. A
+        // sweep (no storage type) is not here: it belongs to no storage type.
+        command.CommandText = """
+            SELECT *
+            FROM (
+                SELECT
+                    st.storage_type_code,
+                    st.storage_type_name,
+                    (SELECT COUNT(*)
+                     FROM warehouse.v_occupied_bins ob
+                     WHERE ob.storage_type_id = st.storage_type_id)   AS bins_with_stock,
+                    cs.count_id                                       AS open_count_id,
+                    cs.pending_bins + cs.counting_bins                AS open_pending_bins
+                FROM locations.storage_types st
+                LEFT JOIN warehouse.v_count_sessions cs
+                       ON cs.storage_type_code = st.storage_type_code
+                      AND cs.count_type_code   = 'BIN_COUNT'
+                      AND cs.status_code       = 'OPEN'
+                WHERE st.is_active = 1
+            ) x
+            WHERE x.bins_with_stock > 0 OR x.open_count_id IS NOT NULL
+            ORDER BY x.storage_type_code
+            """;
+
+        command.CommandType = CommandType.Text;
+
+        using var reader = command.ExecuteReader();
+        var results = new List<BinCountSummaryDto>();
+
+        while (reader.Read())
+        {
+            results.Add(new BinCountSummaryDto
+            {
+                StorageTypeCode = reader.GetString(reader.GetOrdinal("storage_type_code")),
+                StorageTypeName = reader.GetString(reader.GetOrdinal("storage_type_name")),
+                BinsWithStock   = reader.GetInt32(reader.GetOrdinal("bins_with_stock")),
+                OpenCountId     = Int(reader, "open_count_id"),
+                OpenPendingBins = Int(reader, "open_pending_bins")
+            });
+        }
+
+        return results;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Ad hoc: is this a bin that can be named in a hand-picked list?
+    // ────────────────────────────────────────────────────────
+
+    public bool IsCountableBin(string binCode)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        // Bin codes are matched exactly: a wrong-case entry is not that bin
+        command.CommandText = """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM locations.bins b
+                JOIN locations.storage_types st ON st.storage_type_id = b.storage_type_id
+                WHERE b.bin_code  = @bin_code COLLATE Latin1_General_CS_AS
+                  AND b.is_active  = 1
+                  AND st.is_active = 1
+            ) THEN 1 ELSE 0 END
+            """;
+
+        command.CommandType = CommandType.Text;
+        command.Parameters.Add(new SqlParameter("@bin_code", SqlDbType.NVarChar, 100) { Value = (binCode ?? string.Empty).Trim() });
+
+        return Convert.ToInt32(command.ExecuteScalar()) == 1;
     }
 
     // ────────────────────────────────────────────────────────
@@ -218,6 +306,9 @@ public sealed class SqlCountQueryRepository
                 finding_id, count_id, bin_code, scanned_ref, inventory_unit_id,
                 sku_code, finding_code, reason_code, reason_message,
                 previous_bin_code, movement_id, found_at, found_by,
+                counted_qty, system_qty,
+                resolution_code, resolved_at, resolved_by, resolution_note,
+                resolution_movement_id,
                 shipment_ref, vehicle_ref, shipped_at, order_ref, customer_name
             FROM warehouse.v_count_findings
             WHERE count_id = @count_id
@@ -247,10 +338,16 @@ public sealed class SqlCountQueryRepository
                 MovementId      = Int(reader, "movement_id"),
                 FoundAt         = reader.GetDateTime(reader.GetOrdinal("found_at")),
                 FoundBy         = Str(reader, "found_by"),
+                CountedQty      = Int(reader, "counted_qty"),
+                SystemQty       = Int(reader, "system_qty"),
+                ResolutionCode  = Str(reader, "resolution_code"),
+                ResolvedAt      = Date(reader, "resolved_at"),
+                ResolvedBy      = Str(reader, "resolved_by"),
+                ResolutionNote  = Str(reader, "resolution_note"),
+                ResolutionMovementId = Int(reader, "resolution_movement_id"),
                 ShipmentRef     = Str(reader, "shipment_ref"),
                 VehicleRef      = Str(reader, "vehicle_ref"),
-                ShippedAt       = reader.IsDBNull(reader.GetOrdinal("shipped_at"))
-                                    ? null : reader.GetDateTime(reader.GetOrdinal("shipped_at")),
+                ShippedAt       = Date(reader, "shipped_at"),
                 OrderRef        = Str(reader, "order_ref"),
                 CustomerName    = Str(reader, "customer_name")
             });
@@ -271,9 +368,10 @@ public sealed class SqlCountQueryRepository
         ZoneCode        = Str(r, "zone_code"),
         StorageTypeCode = Str(r, "storage_type_code"),
         LineStatusCode  = r.GetString(r.GetOrdinal("line_status_code")),
-        CountedAt       = r.IsDBNull(r.GetOrdinal("counted_at"))
-                            ? null : r.GetDateTime(r.GetOrdinal("counted_at")),
+        OpenedAt        = Date(r, "opened_at"),
+        CountedAt       = Date(r, "counted_at"),
         CountedBy       = Str(r, "counted_by"),
+        PalletsScanned  = r.GetInt32(r.GetOrdinal("pallets_scanned")),
         FindingCount    = r.GetInt32(r.GetOrdinal("finding_count"))
     };
 
@@ -281,21 +379,23 @@ public sealed class SqlCountQueryRepository
     {
         CountId         = r.GetInt32(r.GetOrdinal("count_id")),
         CountTypeCode   = r.GetString(r.GetOrdinal("count_type_code")),
+        ScopeCode       = r.GetString(r.GetOrdinal("scope_code")),
         StorageTypeCode = Str(r, "storage_type_code"),
         StatusCode      = r.GetString(r.GetOrdinal("status_code")),
         StartedAt       = r.GetDateTime(r.GetOrdinal("started_at")),
         StartedBy       = Str(r, "started_by"),
-        CompletedAt     = r.IsDBNull(r.GetOrdinal("completed_at"))
-                            ? null : r.GetDateTime(r.GetOrdinal("completed_at")),
+        CompletedAt     = Date(r, "completed_at"),
         CompletedBy     = Str(r, "completed_by"),
         TotalBins       = r.GetInt32(r.GetOrdinal("total_bins")),
         PendingBins     = r.GetInt32(r.GetOrdinal("pending_bins")),
         ConfirmedEmpty  = r.GetInt32(r.GetOrdinal("confirmed_empty")),
         StockFound      = r.GetInt32(r.GetOrdinal("stock_found")),
         OccupiedSince   = r.GetInt32(r.GetOrdinal("occupied_since")),
+        CountingBins    = r.GetInt32(r.GetOrdinal("counting_bins")),
+        MatchedBins     = r.GetInt32(r.GetOrdinal("matched_bins")),
+        DifferenceBins  = r.GetInt32(r.GetOrdinal("difference_bins")),
         FindingsToReview = r.GetInt32(r.GetOrdinal("findings_to_review")),
-        ReviewedAt      = r.IsDBNull(r.GetOrdinal("reviewed_at"))
-                            ? null : r.GetDateTime(r.GetOrdinal("reviewed_at")),
+        ReviewedAt      = Date(r, "reviewed_at"),
         ReviewedBy      = Str(r, "reviewed_by"),
         ReviewNote      = Str(r, "review_note")
     };
@@ -310,5 +410,11 @@ public sealed class SqlCountQueryRepository
     {
         var o = r.GetOrdinal(column);
         return r.IsDBNull(o) ? null : r.GetInt32(o);
+    }
+
+    private static DateTime? Date(SqlDataReader r, string column)
+    {
+        var o = r.GetOrdinal(column);
+        return r.IsDBNull(o) ? null : r.GetDateTime(o);
     }
 }

@@ -6,12 +6,14 @@ using PeasyWare.Application.Interfaces;
 using PeasyWare.Application.Security;
 using PeasyWare.Infrastructure.Sql;
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 
 namespace PeasyWare.Infrastructure.Repositories;
 
 /// <summary>
-/// Command repository for stock counting (empty-bin check today).
+/// Command repository for stock counting: the empty-bin check and the bin count.
 ///
 /// Each method calls one stored procedure that always returns exactly one
 /// row. Rich-DTO results mean each method does its own logging: the
@@ -40,51 +42,16 @@ public sealed class SqlCountCommandRepository
         _logger   = logger   ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    // ════════════════════════════════════════════════════════
+    // EMPTY-BIN CHECK
+    // ════════════════════════════════════════════════════════
+
     // ────────────────────────────────────────────────────────
     // Start / resume
     // ────────────────────────────────────────────────────────
 
     public CountStartResult StartEmptyBinCount(string storageTypeCode)
-    {
-        EnsureSession();
-
-        using var connection = _factory.CreateForCommand(_session);
-        using var command    = connection.CreateCommand();
-
-        command.CommandText = "warehouse.usp_count_start_empty_bin";
-        command.CommandType = CommandType.StoredProcedure;
-
-        command.Parameters.Add("@storage_type_code", SqlDbType.NVarChar, 50).Value = storageTypeCode.Trim();
-        command.Parameters.Add("@user_id",           SqlDbType.Int).Value               = _session.UserId;
-        command.Parameters.Add("@session_id",        SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
-
-        using var reader = command.ExecuteReader();
-
-        if (!reader.Read())
-            throw new InvalidOperationException("Unexpected empty response from count start.");
-
-        var success = reader.GetBoolean(reader.GetOrdinal("success"));
-        var code    = reader.GetString(reader.GetOrdinal("result_code"));
-
-        var result = new CountStartResult
-        {
-            Success         = success,
-            ResultCode      = code,
-            FriendlyMessage = _resolver.Resolve(code),
-            CountId         = Int(reader, "count_id") ?? 0,
-            TotalBins       = Int(reader, "total_bins") ?? 0,
-            PendingBins     = Int(reader, "pending_bins") ?? 0,
-            Resumed         = reader.GetBoolean(reader.GetOrdinal("resumed"))
-        };
-
-        Log("Count.Start", code, success, new
-        {
-            StorageTypeCode = storageTypeCode,
-            result.CountId, result.TotalBins, result.PendingBins, result.Resumed
-        });
-
-        return result;
-    }
+        => ExecuteStart("warehouse.usp_count_start_empty_bin", "Count.Start", storageTypeCode);
 
     // ────────────────────────────────────────────────────────
     // Confirm a bin empty
@@ -190,6 +157,275 @@ public sealed class SqlCountCommandRepository
         return result;
     }
 
+    // ════════════════════════════════════════════════════════
+    // BIN COUNT (blind)
+    // ════════════════════════════════════════════════════════
+
+    // ────────────────────────────────────────────────────────
+    // Start / resume (a null / blank storage type is a sweep)
+    // ────────────────────────────────────────────────────────
+
+    public CountStartResult StartBinCount(string? storageTypeCode)
+        => ExecuteStart("warehouse.usp_count_start_bin", "Count.StartBin", storageTypeCode);
+
+    // ────────────────────────────────────────────────────────
+    // Start an ad hoc count: a hand-picked list of bins
+    // ────────────────────────────────────────────────────────
+
+    public CountStartResult StartAdHocCount(IReadOnlyCollection<string> binCodes)
+    {
+        EnsureSession();
+
+        var codes = (binCodes ?? Array.Empty<string>())
+            .Select(c => (c ?? string.Empty).Trim())
+            .Where(c => c.Length > 0)
+            .ToList();
+
+        // The list travels as one string, separated by the ASCII record separator
+        // (NCHAR(30)) - a character that cannot appear in a bin code
+        var joined = string.Join('\u001e', codes);
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_start_adhoc";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@bin_codes",  SqlDbType.NVarChar, -1).Value      = joined;
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from ad hoc count start.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new CountStartResult
+        {
+            Success         = success,
+            ResultCode      = code,
+            FriendlyMessage = _resolver.Resolve(code),
+            CountId         = Int(reader, "count_id") ?? 0,
+            TotalBins       = Int(reader, "total_bins") ?? 0,
+            PendingBins     = Int(reader, "pending_bins") ?? 0,
+            Resumed         = reader.GetBoolean(reader.GetOrdinal("resumed")),
+            InvalidBinCode  = Str(reader, "invalid_bin_code")
+        };
+
+        Log("Count.StartAdHoc", code, success, new
+        {
+            BinCodes = codes, result.InvalidBinCode,
+            result.CountId, result.TotalBins, result.PendingBins
+        });
+
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Open a bin: the operator scanned its label
+    // ────────────────────────────────────────────────────────
+
+    public BinCountOpenResult OpenBin(int countId, string binCode)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_open_bin";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@count_id",   SqlDbType.Int).Value               = countId;
+        command.Parameters.Add("@bin_code",   SqlDbType.NVarChar, 100).Value     = binCode.Trim();
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count open bin.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new BinCountOpenResult
+        {
+            Success         = success,
+            ResultCode      = code,
+            FriendlyMessage = _resolver.Resolve(code),
+            CountId         = Int(reader, "count_id") ?? countId,
+            BinCode         = Str(reader, "bin_code") ?? binCode.Trim(),
+            PalletsScanned  = Int(reader, "pallets_scanned") ?? 0,
+            PendingBins     = Int(reader, "pending_bins") ?? 0,
+            Resumed         = reader.GetBoolean(reader.GetOrdinal("resumed"))
+        };
+
+        Log("Count.OpenBin", code, success, new
+        {
+            CountId = countId, BinCode = binCode, result.PalletsScanned,
+            result.PendingBins, result.Resumed
+        });
+
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Scan one pallet (SSCC + counted quantity) in an open bin
+    // ────────────────────────────────────────────────────────
+
+    public BinCountScanResult ScanUnit(
+        int    countId,
+        string binCode,
+        string scannedRef,
+        int    countedQty,
+        bool   confirmDifference = false)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_scan_unit";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@count_id",           SqlDbType.Int).Value               = countId;
+        command.Parameters.Add("@bin_code",           SqlDbType.NVarChar, 100).Value     = binCode.Trim();
+        command.Parameters.Add("@scanned_ref",        SqlDbType.NVarChar, 100).Value     = scannedRef.Trim();
+        command.Parameters.Add("@counted_qty",        SqlDbType.Int).Value               = countedQty;
+        command.Parameters.Add("@confirm_difference", SqlDbType.Bit).Value               = confirmDifference;
+        command.Parameters.Add("@user_id",            SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id",         SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count scan.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new BinCountScanResult
+        {
+            Success           = success,
+            ResultCode        = code,
+            FriendlyMessage   = _resolver.Resolve(code),
+            CountId           = Int(reader, "count_id") ?? countId,
+            PalletsScanned    = Int(reader, "pallets_scanned") ?? 0,
+            Replaced          = reader.GetBoolean(reader.GetOrdinal("replaced")),
+            NeedsConfirmation = reader.GetBoolean(reader.GetOrdinal("needs_confirmation"))
+        };
+
+        // Asking the operator to confirm a quantity is part of the normal flow,
+        // not something that needs a human look - so it logs at INFO, not WARN
+        Log("Count.ScanUnit", code, success, new
+        {
+            CountId = countId, BinCode = binCode, ScannedRef = scannedRef,
+            CountedQty = countedQty, ConfirmDifference = confirmDifference,
+            result.NeedsConfirmation, result.Replaced, result.PalletsScanned
+        }, routine: result.NeedsConfirmation);
+
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Finish a bin: compare, record the findings
+    // ────────────────────────────────────────────────────────
+
+    public BinCountFinishResult FinishBin(int countId, string binCode)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_finish_bin";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@count_id",   SqlDbType.Int).Value               = countId;
+        command.Parameters.Add("@bin_code",   SqlDbType.NVarChar, 100).Value     = binCode.Trim();
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count finish bin.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new BinCountFinishResult
+        {
+            Success         = success,
+            ResultCode      = code,
+            FriendlyMessage = _resolver.Resolve(code),
+            CountId         = Int(reader, "count_id") ?? countId,
+            PalletsScanned  = Int(reader, "pallets_scanned") ?? 0,
+            Differences     = Int(reader, "differences") ?? 0,
+            PendingBins     = Int(reader, "pending_bins") ?? 0,
+            RecountRequired = reader.GetBoolean(reader.GetOrdinal("recount_required"))
+        };
+
+        Log("Count.FinishBin", code, success, new
+        {
+            CountId = countId, BinCode = binCode, result.PalletsScanned,
+            result.Differences, result.PendingBins, result.RecountRequired
+        });
+
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Cancel an open bin
+    // ────────────────────────────────────────────────────────
+
+    public CountBinResult CancelBin(int countId, string binCode)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_cancel_bin";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@count_id",   SqlDbType.Int).Value               = countId;
+        command.Parameters.Add("@bin_code",   SqlDbType.NVarChar, 100).Value     = binCode.Trim();
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count cancel bin.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new CountBinResult
+        {
+            Success         = success,
+            ResultCode      = code,
+            FriendlyMessage = _resolver.Resolve(code),
+            CountId         = Int(reader, "count_id") ?? countId,
+            PendingBins     = Int(reader, "pending_bins") ?? 0
+        };
+
+        Log("Count.CancelBin", code, success, new
+        {
+            CountId = countId, BinCode = binCode, result.PendingBins
+        });
+
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════
+    // CLOSE / DECIDE / REVIEW (both kinds of count)
+    // ════════════════════════════════════════════════════════
+
     // ────────────────────────────────────────────────────────
     // Close
     // ────────────────────────────────────────────────────────
@@ -230,6 +466,64 @@ public sealed class SqlCountCommandRepository
         Log("Count.Close", code, success, new
         {
             CountId = countId, result.FinalStatus, result.PendingBins, result.FindingsToReview
+        });
+
+        return result;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Apply / decline one finding of a bin count (counts.adjust)
+    // ────────────────────────────────────────────────────────
+
+    public CountApplyResult ApplyFinding(int findingId)
+        => ExecuteDecision(findingId, "APPLY", note: null);
+
+    public CountApplyResult DeclineFinding(int findingId, string note)
+        => ExecuteDecision(findingId, "DECLINE", (note ?? string.Empty).Trim());
+
+    private CountApplyResult ExecuteDecision(int findingId, string action, string? note)
+    {
+        EnsureSession();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = "warehouse.usp_count_apply_finding";
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@finding_id", SqlDbType.Int).Value               = findingId;
+        command.Parameters.Add("@action",     SqlDbType.VarChar, 10).Value       = action;
+        command.Parameters.Add("@note",       SqlDbType.NVarChar, 500).Value     = (object?)note ?? DBNull.Value;
+        command.Parameters.Add("@user_id",    SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id", SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count apply finding.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new CountApplyResult
+        {
+            Success            = success,
+            ResultCode         = code,
+            FriendlyMessage    = _resolver.Resolve(code),
+            FindingId          = Int(reader, "finding_id") ?? findingId,
+            FindingCode        = Str(reader, "finding_code"),
+            CountId            = Int(reader, "count_id") ?? 0,
+            MovementId         = Int(reader, "movement_id"),
+            UnresolvedFindings = Int(reader, "unresolved_findings") ?? 0
+        };
+
+        // The decision, and the ledger row that carried it out, go in the trace
+        // log as well as on the finding: this is the record of who changed (or
+        // chose not to change) a stock record because of a count, and why.
+        Log(action == "APPLY" ? "Count.ApplyFinding" : "Count.DeclineFinding", code, success, new
+        {
+            FindingId = findingId, result.FindingCode, result.CountId,
+            result.MovementId, Note = note, result.UnresolvedFindings
         });
 
         return result;
@@ -283,16 +577,67 @@ public sealed class SqlCountCommandRepository
         return result;
     }
 
-    // ────────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════
     // Helpers
-    // ────────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Start / resume, shared by the empty-bin check and the bin count: the same
+    /// procedure contract, the same result. A null / blank storage type is sent as
+    /// NULL (a bin-count sweep); the empty-bin procedure answers ERRCNT01 to it.
+    /// </summary>
+    private CountStartResult ExecuteStart(string procedure, string action, string? storageTypeCode)
+    {
+        EnsureSession();
+
+        var scope = string.IsNullOrWhiteSpace(storageTypeCode) ? null : storageTypeCode.Trim();
+
+        using var connection = _factory.CreateForCommand(_session);
+        using var command    = connection.CreateCommand();
+
+        command.CommandText = procedure;
+        command.CommandType = CommandType.StoredProcedure;
+
+        command.Parameters.Add("@storage_type_code", SqlDbType.NVarChar, 50).Value = (object?)scope ?? DBNull.Value;
+        command.Parameters.Add("@user_id",           SqlDbType.Int).Value               = _session.UserId;
+        command.Parameters.Add("@session_id",        SqlDbType.UniqueIdentifier).Value  = _session.SessionId;
+
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+            throw new InvalidOperationException("Unexpected empty response from count start.");
+
+        var success = reader.GetBoolean(reader.GetOrdinal("success"));
+        var code    = reader.GetString(reader.GetOrdinal("result_code"));
+
+        var result = new CountStartResult
+        {
+            Success         = success,
+            ResultCode      = code,
+            FriendlyMessage = _resolver.Resolve(code),
+            CountId         = Int(reader, "count_id") ?? 0,
+            TotalBins       = Int(reader, "total_bins") ?? 0,
+            PendingBins     = Int(reader, "pending_bins") ?? 0,
+            Resumed         = reader.GetBoolean(reader.GetOrdinal("resumed"))
+        };
+
+        Log(action, code, success, new
+        {
+            StorageTypeCode = scope ?? "(all - sweep)",
+            result.CountId, result.TotalBins, result.PendingBins, result.Resumed
+        });
+
+        return result;
+    }
 
     /// <summary>
     /// SUC codes log at INFO. WARN codes (unknown pallet, not corrected,
-    /// stock appeared since the snapshot) and failures log at WARN, so the
-    /// outcomes that need a human look stand out in the trace log.
+    /// stock appeared since the snapshot, a bin that changed under the count)
+    /// and failures log at WARN, so the outcomes that need a human look stand
+    /// out in the trace log. <paramref name="routine"/> keeps a step that is a
+    /// normal part of the flow (asking the operator to confirm a quantity) at INFO.
     /// </summary>
-    private void Log(string action, string code, bool success, object outcome)
+    private void Log(string action, string code, bool success, object outcome, bool routine = false)
     {
         var payload = new
         {
@@ -304,7 +649,7 @@ public sealed class SqlCountCommandRepository
             Outcome    = outcome
         };
 
-        if (success && code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase))
+        if (routine || (success && code.StartsWith("SUC", StringComparison.OrdinalIgnoreCase)))
             _logger.Info(action, payload);
         else
             _logger.Warn(action, payload);

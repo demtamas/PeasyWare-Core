@@ -59,16 +59,7 @@ public partial class LoginForm : Form
         switch (result.Outcome)
         {
             case LoginOutcome.Success:
-                SessionId = result.SessionId;
-                UserId = result.UserId;
-                Username = username;
-                DisplayName = result.DisplayName ?? username;
-                RoleName = result.RoleName;
-                UiMode = result.UiMode;
-                SessionTimeoutMinutes = result.SessionTimeoutMinutes;
-                Permissions = result.Permissions;
-                DialogResult = DialogResult.OK;
-                Close();
+                CompleteLogin(username, result);
                 return;
 
             case LoginOutcome.PasswordChangeRequired:
@@ -101,6 +92,27 @@ public partial class LoginForm : Form
             ForceLogin = forceLogin,
             CorrelationId = Guid.NewGuid()
         };
+
+    /// <summary>
+    /// Every successful login ends here - first try, after a forced password change, or
+    /// after terminating other sessions - so the session is described identically
+    /// whichever route led to it. (The two retry routes used to set only the ID, user,
+    /// role, mode and permissions: the username and display name came out blank and the
+    /// timeout 0, so a new user's first session showed no name and "expires in 0 min".)
+    /// </summary>
+    private void CompleteLogin(string username, LoginFlowResult result)
+    {
+        SessionId             = result.SessionId;
+        UserId                = result.UserId;
+        Username              = username;
+        DisplayName           = result.DisplayName ?? username;
+        RoleName              = result.RoleName;
+        UiMode                = result.UiMode;
+        SessionTimeoutMinutes = result.SessionTimeoutMinutes;
+        Permissions           = result.Permissions;
+        DialogResult          = DialogResult.OK;
+        Close();
+    }
 
     // correlationId is that of the login attempt that demanded the change, so the change
     // is logged on the same trace as that attempt.
@@ -155,13 +167,7 @@ public partial class LoginForm : Form
             return;
         }
 
-        SessionId = retryResult.SessionId;
-        UserId = retryResult.UserId;
-        RoleName = retryResult.RoleName;
-        UiMode = retryResult.UiMode;
-        Permissions = retryResult.Permissions;
-        DialogResult = DialogResult.OK;
-        Close();
+        CompleteLogin(username, retryResult);
     }
 
     private void HandleAlreadyLoggedIn(string username, string password)
@@ -201,13 +207,7 @@ public partial class LoginForm : Form
             return;
         }
 
-        SessionId = retryResult.SessionId;
-        UserId = retryResult.UserId;
-        RoleName = retryResult.RoleName;
-        UiMode = retryResult.UiMode;
-        Permissions = retryResult.Permissions;
-        DialogResult = DialogResult.OK;
-        Close();
+        CompleteLogin(username, retryResult);
     }
 
     private void btnClear_Click(object sender, EventArgs e)
