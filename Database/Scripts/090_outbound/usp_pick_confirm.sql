@@ -68,6 +68,13 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
+        /* ── 2b. Nothing is picked from a bin that is being counted ── */
+        IF locations.fn_bin_is_being_counted(@source_bin_id) = 1
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRCNT12' AS result_code;
+            ROLLBACK; RETURN;
+        END
+
         /* ── 3. Validate scanned SSCC ── */
         SELECT
             @unit_external_ref = iu.external_ref,

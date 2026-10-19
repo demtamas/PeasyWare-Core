@@ -116,7 +116,9 @@ CREATE TABLE locations.bin_reservations
 
     bin_id           INT NOT NULL,
 
-    reservation_type NVARCHAR(50) NOT NULL, -- PUTAWAY, MOVE, PICK
+    reservation_type NVARCHAR(50) NOT NULL, -- PUTAWAY, MOVE, PICK, COUNT
+                                            -- (a COUNT hold is a hard lock on the bin, not
+                                            --  just a capacity slot: see locations.fn_bin_is_being_counted)
 
     reserved_by      INT NOT NULL,
     reserved_at      DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -127,6 +129,11 @@ CREATE TABLE locations.bin_reservations
     -- can be released exactly, without touching anyone else's hold on the
     -- same bin. Plain column, no FK: warehouse_tasks is created later.
     task_id          INT NULL,
+
+    -- Count line this COUNT hold was taken for, so it is released exactly
+    -- (and a resumed count can replace its own hold). NULL for every other
+    -- type. Plain column, no FK: warehouse.count_lines is created later.
+    count_line_id    INT NULL,
 
     CONSTRAINT fk_bin_reservations_bin
         FOREIGN KEY (bin_id)

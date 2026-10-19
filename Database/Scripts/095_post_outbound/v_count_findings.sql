@@ -7,10 +7,13 @@ GO
 /* ============================================================
    warehouse.v_count_findings
    ------------------------------------------------------------
-   Every pallet found in a bin the system believed was empty,
-   with what was done about it. NOT_CORRECTED rows carry the rule
-   that stopped the correction (reason_code, and its plain-English
-   reason_message) - the supervisor review list.
+   Every finding a count recorded, with what was done about it.
+   EMPTY_BIN counts: a pallet found in a bin the system believed was empty.
+   BIN_COUNT counts: a difference between what was counted and what the
+   system holds (QTY_DIFFERENCE / MISSING / MISPLACED / UNKNOWN_UNIT /
+   NOT_CORRECTED), with counted_qty / system_qty and the resolution.
+   NOT_CORRECTED rows carry the rule that stopped the correction (reason_code,
+   and its plain-English reason_message) - the supervisor review list.
 
    For a pallet the system knows left the building, the finding
    also says WHERE it went - the question a supervisor asks first:
@@ -40,6 +43,16 @@ SELECT
     f.found_at,
     u.username                                                    AS found_by,
 
+    -- BIN_COUNT: what was counted against what the system held, and what
+    -- a person with counts.adjust decided about it (NULL = undecided)
+    f.counted_qty,
+    f.system_qty,
+    f.resolution_code,
+    f.resolved_at,
+    ru.username                                                   AS resolved_by,
+    f.resolution_note,
+    f.resolution_movement_id,
+
     ship.shipment_ref,
     ship.vehicle_ref,
     ship.shipped_at,
@@ -53,6 +66,7 @@ LEFT JOIN inventory.inventory_units iu  ON iu.inventory_unit_id = f.inventory_un
 LEFT JOIN inventory.skus s              ON s.sku_id = iu.sku_id
 LEFT JOIN operations.error_messages em  ON em.error_code = f.reason_code
 LEFT JOIN auth.users u                  ON u.id = f.found_by
+LEFT JOIN auth.users ru                 ON ru.id = f.resolved_by
 OUTER APPLY (
     SELECT TOP (1)
         sh.shipment_ref,

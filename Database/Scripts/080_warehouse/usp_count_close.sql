@@ -31,7 +31,8 @@ GO
      success BIT | result_code NVARCHAR(20) | count_id INT
      | pending_bins INT | final_status VARCHAR(10)
      | findings_to_review INT
-   Codes: SUCCNT04 closed | ERRCNT03 not open | ERRCNT99
+   Codes: SUCCNT04 closed | ERRCNT03 not open
+          ERRCNT18 a bin is still being counted | ERRCNT99
    ============================================================ */
 CREATE OR ALTER PROCEDURE warehouse.usp_count_close
 (
@@ -69,18 +70,32 @@ BEGIN
             GOTO Finish;
         END
 
+        -- A bin that is open (held) cannot be left behind by closing the count
+        IF EXISTS (
+            SELECT 1
+            FROM warehouse.count_lines
+            WHERE count_id = @count_id
+              AND line_status_code = 'COUNTING'
+        )
+        BEGIN
+            SET @result_code = N'ERRCNT18';
+            GOTO Finish;
+        END
+
         SELECT @pending = COUNT(*)
         FROM warehouse.count_lines
         WHERE count_id = @count_id
           AND line_status_code = 'PENDING';
 
         -- Findings a person still has to look at: everything except a
-        -- record the count itself corrected
+        -- record the count itself corrected, and anything already resolved
+        -- (applied or declined by someone with counts.adjust)
         SELECT @to_review = COUNT(*)
         FROM warehouse.count_findings f
         JOIN warehouse.count_lines l ON l.count_line_id = f.count_line_id
         WHERE l.count_id = @count_id
-          AND f.finding_code <> 'RECORD_CORRECTED';
+          AND f.finding_code <> 'RECORD_CORRECTED'
+          AND f.resolution_code IS NULL;
 
         SET @final_status =
             CASE

@@ -395,7 +395,72 @@ FROM (VALUES
 
     (N'WARNCNT03', N'COUNT', N'WARN',
         N'Pallet recorded for supervisor review - it cannot be moved automatically.',
-        N'usp_count_report_stock: NOT_CORRECTED - see count_findings.reason_code for the rule that applied')
+        N'usp_count_report_stock: NOT_CORRECTED - see count_findings.reason_code for the rule that applied'),
+
+    -- ── Bin count (BIN_COUNT) ──────────────────────────────────────────────
+    (N'ERRCNT10', N'COUNT', N'ERROR',
+        N'This is not a bin count.',
+        N'usp_count_open/scan/finish/cancel_bin given an EMPTY_BIN count, or the empty-bin procedures given a BIN_COUNT: count_type_code mismatch'),
+
+    (N'ERRCNT11', N'COUNT', N'ERROR',
+        N'A count covering this scope is already open - a sweep and a single-storage-type count cannot run together. Resume or close it first.',
+        N'usp_count_start_bin: an OPEN BIN_COUNT overlaps (a sweep overlaps every open count; a single storage type overlaps only an open sweep)'),
+
+    (N'ERRCNT12', N'COUNT', N'ERROR',
+        N'This bin is being counted. Try again in a few minutes.',
+        N'locations.fn_bin_is_being_counted = 1: an unexpired COUNT reservation holds the bin (hard lock). Refused by move/putaway/pick rules, or by usp_count_open_bin for a bin held by another count line'),
+
+    (N'ERRCNT13', N'COUNT', N'ERROR',
+        N'There are no bins holding stock to count here.',
+        N'usp_count_start_bin: no active bin in scope has a placement'),
+
+    (N'ERRCNT14', N'COUNT', N'ERROR',
+        N'This bin has work in progress (a putaway, move or pick). Try again once it is done.',
+        N'usp_count_open_bin: an open OPN/CLM task has this bin as source or destination, or another unexpired reservation holds it'),
+
+    (N'ERRCNT15', N'COUNT', N'ERROR',
+        N'Open the bin first - scan its label to start counting it.',
+        N'usp_count_scan_unit/finish_bin/cancel_bin: count line is PENDING (not COUNTING)'),
+
+    (N'ERRCNT16', N'COUNT', N'ERROR',
+        N'The hold on this bin has run out. Scan the bin again to carry on counting it.',
+        N'usp_count_scan_unit: the COUNT reservation for this line has expired (warehouse.count_bin_ttl_seconds); re-opening resumes with the scans kept'),
+
+    (N'ERRCNT17', N'COUNT', N'ERROR',
+        N'Enter a quantity of at least 1. If a pallet is empty or gone, do not scan it.',
+        N'usp_count_scan_unit: counted_qty NULL or < 1'),
+
+    (N'ERRCNT18', N'COUNT', N'ERROR',
+        N'A bin in this count is still open. Finish or cancel it before closing the count.',
+        N'usp_count_close: a count line is COUNTING'),
+
+    (N'ERRCNT19', N'COUNT', N'ERROR',
+        N'Scan or enter the pallet''s SSCC.',
+        N'usp_count_scan_unit: scanned_ref empty'),
+
+    (N'WARNCNT10', N'COUNT', N'WARN',
+        N'The quantity differs from the system record. Confirm it, or enter it again.',
+        N'usp_count_scan_unit: counted_qty <> system quantity for a pallet recorded in this bin and @confirm_difference = 0 - nothing recorded, system quantity not disclosed (blind count)'),
+
+    (N'WARNCNT11', N'COUNT', N'WARN',
+        N'Stock in this bin changed while it was being counted. Count it again.',
+        N'usp_count_finish_bin: the movement ledger shows a movement to or from the bin since the count opened it - scans cleared, line back to PENDING'),
+
+    (N'SUCCNT10', N'COUNT', N'SUCCESS',
+        N'Bin opened. Scan each pallet and enter its quantity.',
+        N'usp_count_open_bin: line COUNTING, COUNT reservation taken'),
+
+    (N'SUCCNT11', N'COUNT', N'SUCCESS',
+        N'Recorded.',
+        N'usp_count_scan_unit: scan recorded (or replaced)'),
+
+    (N'SUCCNT12', N'COUNT', N'SUCCESS',
+        N'Bin counted.',
+        N'usp_count_finish_bin: line MATCHED or DIFFERENCES, COUNT reservation released'),
+
+    (N'SUCCNT13', N'COUNT', N'SUCCESS',
+        N'Bin count cancelled. The bin can be counted again.',
+        N'usp_count_cancel_bin: scans discarded, line back to PENDING, COUNT reservation released')
 
 ) AS v (error_code, module_code, severity, message_template, tech_messege)
 WHERE NOT EXISTS (

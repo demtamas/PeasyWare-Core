@@ -105,6 +105,7 @@ BEGIN
             b.is_active = 1
             AND b.is_locked = 0
             AND b.storage_type_id = @type_id
+            AND locations.fn_bin_is_being_counted(b.bin_id) = 0   -- never offer a bin that is being counted
             AND (@section_id IS NULL OR b.storage_section_id = @section_id)
     )
 

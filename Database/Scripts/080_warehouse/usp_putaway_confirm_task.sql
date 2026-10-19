@@ -55,6 +55,13 @@ BEGIN
         IF @bin_active = 0
         BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRTASK09' AS result_code; ROLLBACK; RETURN; END
 
+        -- A bin being counted takes nothing in (a COUNT hold is a hard lock). A
+        -- putaway task cannot normally exist for such a bin - the count refuses to
+        -- open a bin with open tasks - so this is the backstop for a task created
+        -- after the hold was taken.
+        IF locations.fn_bin_is_being_counted(@dest_bin_id) = 1
+        BEGIN SELECT CAST(0 AS BIT) AS success, N'ERRCNT12' AS result_code; ROLLBACK; RETURN; END
+
         -- Release this task's own reservation on the destination bin BEFORE
         -- checking capacity. It was created (usp_putaway_create_task_for_unit)
         -- purely to hold the bin open until THIS confirmation happens - it is

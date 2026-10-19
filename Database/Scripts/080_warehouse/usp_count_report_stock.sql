@@ -74,6 +74,7 @@ BEGIN
         @finding_code  VARCHAR(20),
         @reason_code   NVARCHAR(20),
         @count_status  VARCHAR(10),
+        @count_type    VARCHAR(20),
         @line_id       INT,
         @line_status   VARCHAR(16),
         @bin_id        INT,
@@ -104,13 +105,22 @@ BEGIN
         ------------------------------------------------------------
         -- Count open, bin in it, bin not already counted empty
         ------------------------------------------------------------
-        SELECT @count_status = status_code
+        SELECT
+            @count_status = status_code,
+            @count_type   = count_type_code
         FROM warehouse.count_sessions WITH (UPDLOCK, HOLDLOCK)
         WHERE count_id = @count_id;
 
         IF @count_status IS NULL OR @count_status <> 'OPEN'
         BEGIN
             SET @result_code = N'ERRCNT03';
+            GOTO Finish;
+        END
+
+        -- A bin count has its own procedures (usp_count_scan_unit ...)
+        IF @count_type <> 'EMPTY_BIN'
+        BEGIN
+            SET @result_code = N'ERRCNT10';
             GOTO Finish;
         END
 

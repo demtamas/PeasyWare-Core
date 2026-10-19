@@ -27,6 +27,8 @@ GO
      ERRMOVE03  unit has no current placement
      ERRMOVE10  unit has an open (OPN/CLM) task of any type, other
                 than @ignore_task_id (the caller's own MOVE task)
+     ERRCNT12   the bin the unit sits in is being counted (a COUNT hold -
+                a hard lock, see locations.fn_bin_is_being_counted)
    ============================================================ */
 CREATE OR ALTER FUNCTION warehouse.fn_unit_move_block_code
 (
@@ -81,6 +83,15 @@ BEGIN
           AND (@ignore_task_id IS NULL OR task_id <> @ignore_task_id)
     )
         RETURN N'ERRMOVE10';
+
+    -- Nothing leaves a bin while it is being counted
+    IF EXISTS (
+        SELECT 1
+        FROM inventory.inventory_placements ip
+        WHERE ip.inventory_unit_id = @inventory_unit_id
+          AND locations.fn_bin_is_being_counted(ip.bin_id) = 1
+    )
+        RETURN N'ERRCNT12';
 
     RETURN NULL;
 END;

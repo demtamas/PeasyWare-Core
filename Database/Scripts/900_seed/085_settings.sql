@@ -92,6 +92,10 @@ IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'warehouse
     INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
     VALUES ('warehouse.putaway_task_ttl_seconds', 'Putaway task TTL (seconds)', 'warehouse', 10, '600', 'int', '{"type":"range","min":60,"max":3600}', 'Seconds a putaway task reservation remains valid before expiring');
 
+IF NOT EXISTS (SELECT 1 FROM operations.settings WHERE setting_name = 'warehouse.count_bin_ttl_seconds')
+    INSERT INTO operations.settings (setting_name, display_name, category, display_order, setting_value, data_type, validation_rule, description)
+    VALUES ('warehouse.count_bin_ttl_seconds', 'Bin count hold (seconds)', 'warehouse', 20, '900', 'int', '{"type":"range","min":60,"max":7200}', 'Seconds a bin stays locked for counting after the last scan, so an abandoned count cannot pin a bin');
+
 GO
 
 -- ── Logging ────────────────────────────────────────────────────────────

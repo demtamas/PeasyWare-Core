@@ -81,6 +81,15 @@ BEGIN
             ROLLBACK; RETURN;
         END
 
+        /* ── 3b. Nothing is picked from a bin that is being counted ── */
+        IF locations.fn_bin_is_being_counted(@source_bin_id) = 1
+        BEGIN
+            SELECT CAST(0 AS BIT) AS success, N'ERRCNT12' AS result_code,
+                   NULL AS task_id, @inventory_unit_id AS inventory_unit_id,
+                   @source_bin_code AS source_bin_code, NULL AS destination_bin_code;
+            ROLLBACK; RETURN;
+        END
+
         /* ── 4. Resolve destination staging bin ── */
         IF @destination_bin_code IS NOT NULL
         BEGIN

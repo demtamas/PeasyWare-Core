@@ -13,6 +13,8 @@ GO
    Rules, in order:
      ERRMOVE04  bin does not exist
      ERRMOVE07  bin is inactive or locked
+     ERRCNT12   bin is being counted (a COUNT hold - a hard lock, see
+                locations.fn_bin_is_being_counted)
      ERRMOVE09  placements + unexpired reservations >= capacity
 
    Same occupancy calculation locations.usp_suggest_putaway_bin
@@ -49,6 +51,10 @@ BEGIN
 
     IF @is_active = 0 OR @is_locked = 1
         RETURN N'ERRMOVE07';
+
+    -- A bin being counted takes nothing in, however much room it has
+    IF locations.fn_bin_is_being_counted(@bin_id) = 1
+        RETURN N'ERRCNT12';
 
     SET @occupied =
         (SELECT COUNT(*)

@@ -47,6 +47,7 @@ BEGIN
         @success      BIT = 0,
         @result_code  NVARCHAR(20),
         @count_status VARCHAR(10),
+        @count_type   VARCHAR(20),
         @line_id      INT,
         @line_status  VARCHAR(16),
         @bin_id       INT,
@@ -60,13 +61,22 @@ BEGIN
         -- "not in this count", never silently corrected
         SET @bin_code = LTRIM(RTRIM(@bin_code)) COLLATE Latin1_General_CS_AS;
 
-        SELECT @count_status = status_code
+        SELECT
+            @count_status = status_code,
+            @count_type   = count_type_code
         FROM warehouse.count_sessions WITH (UPDLOCK, HOLDLOCK)
         WHERE count_id = @count_id;
 
         IF @count_status IS NULL OR @count_status <> 'OPEN'
         BEGIN
             SET @result_code = N'ERRCNT03';
+            GOTO Finish;
+        END
+
+        -- A bin count has its own procedures (usp_count_open_bin ...)
+        IF @count_type <> 'EMPTY_BIN'
+        BEGIN
+            SET @result_code = N'ERRCNT10';
             GOTO Finish;
         END
 

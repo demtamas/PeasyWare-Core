@@ -68,6 +68,16 @@ try
             permissions: loginForm.Permissions
         );
 
+        // Same Session.Start entry the CLI writes after login. SetSession first, so the
+        // entry itself carries the Session block; without it every Desktop session had
+        // a Session.Logout in the trace with no matching start.
+        runtime.Logger.SetSession(session);
+        runtime.Logger.Info("Session.Start", new
+        {
+            session.UserId, session.Username, session.RoleName,
+            UiMode = session.UiMode.ToString(), session.SourceApp, session.SourceClient
+        });
+
         using var mainForm = new MainForm(
             session,
             runtime,
